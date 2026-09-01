@@ -6,6 +6,8 @@ $backend = Join-Path $projectRoot "backend"
 $python = Join-Path $backend ".runtime\windows\python\python.exe"
 $wheelhouse = Join-Path $projectRoot "offline\assets\python\wheelhouse"
 $lock = Join-Path $projectRoot "offline\assets\python\requirements.lock"
+$env:PYTHONPATH = $null
+$env:PYTHONNOUSERSITE = "1"
 
 if (-not (Test-Path -LiteralPath $python)) { throw "Offline Python is missing. Run scripts\bootstrap_offline.ps1." }
 if (-not (Test-Path -LiteralPath $lock)) { throw "Python lock file is missing from the offline assets." }

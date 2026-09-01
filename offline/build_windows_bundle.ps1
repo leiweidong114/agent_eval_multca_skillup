@@ -74,6 +74,8 @@ try {
     git -C $packageRoot remote remove origin
     New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "offline\assets\git") | Out-Null
     Copy-Item $bundle (Join-Path $packageRoot "offline\assets\git\agent_eval_multca_skillup.bundle")
+    & tar.exe -czf (Join-Path $packageRoot "offline\assets\git\repository-metadata.tar.gz") -C $packageRoot ".git"
+    if ($LASTEXITCODE -ne 0) { throw "Standalone Git metadata archive failed." }
 
     $pythonDistribution = Get-Asset $lock.python "python"
     $goArchive = Get-Asset $lock.go "go"

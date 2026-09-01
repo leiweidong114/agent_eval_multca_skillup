@@ -1,6 +1,8 @@
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $toolchains = Join-Path $projectRoot ".runtime\toolchains"
+$env:PYTHONPATH = $null
+$env:PYTHONNOUSERSITE = "1"
 $paths = @(
     (Join-Path $projectRoot "backend\.runtime\windows\python"),
     (Join-Path $projectRoot "backend\.runtime\windows\python\Scripts"),

@@ -41,6 +41,15 @@ if ($portableGit -and ($Force -or -not (Test-Path -LiteralPath (Join-Path $gitTa
     & $portableGit.FullName -y -o"$gitTarget" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "PortableGit extraction failed." }
 }
+$gitMetadata = Join-Path $assets "git\repository-metadata.tar.gz"
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot ".git"))) {
+    if (-not (Test-Path -LiteralPath $gitMetadata)) { throw "Standalone Git metadata archive is missing." }
+    & tar.exe -xzf $gitMetadata -C $projectRoot
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $projectRoot ".git"))) {
+        throw "Standalone Git repository restoration failed."
+    }
+    Write-Host "OFFLINE_GIT_REPOSITORY_RESTORED"
+}
 
 $pythonArchive = Join-Path $assets "python\python-runtime.zip"
 if (-not (Test-Path -LiteralPath $pythonArchive)) { throw "Offline Python runtime archive is missing." }
