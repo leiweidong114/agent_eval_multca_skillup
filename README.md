@@ -87,16 +87,16 @@ Agent CLI 自身可能需要厂商账号、API Key 或本地配置；这属于 A
 
 ```powershell
 Set-Location D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup
-.\scripts\setup_windows.ps1
+.\backend\scripts\setup_windows.ps1
 ```
 
-安装内容都保存在项目的 `.runtime/windows` 和 `.tools/windows` 下，不修改系统 Go。脚本固定使用：
+安装内容都保存在项目的 `backend/.runtime/windows` 和 `backend/.tools/windows` 下，不修改系统 Go。脚本固定使用：
 
 - Multica `v0.4.36` / commit `c1a61e1e863eb62ddd7b5fd5ab5ff85391f212fd`
 - Skill-Up `v0.9.1` / commit `80c3147101f81017c66f882b767bdc532de5e74f`
 - Go `1.26.7`
 
-Skill-Up 0.9.1 的自定义本地引擎硬编码了 POSIX 命令语法。本项目构建时自动应用 [`patches/skill-up-v0.9.1-windows-custom-engine.patch`](patches/skill-up-v0.9.1-windows-custom-engine.patch)，仅修复 Windows `cmd.exe` 的路径引用和旧输出清理，不改变评分逻辑。
+Skill-Up 0.9.1 的自定义本地引擎硬编码了 POSIX 命令语法。本项目构建时自动应用 [`backend/patches/skill-up-v0.9.1-windows-custom-engine.patch`](backend/patches/skill-up-v0.9.1-windows-custom-engine.patch)，仅修复 Windows `cmd.exe` 的路径引用和旧输出清理，不改变评分逻辑。
 
 ## Linux 安装
 
@@ -104,28 +104,28 @@ Skill-Up 0.9.1 的自定义本地引擎硬编码了 POSIX 命令语法。本项�
 
 ```sh
 cd /path/to/agent_eval_multca_skillup
-sh scripts/setup_linux.sh
+sh backend/scripts/setup_linux.sh
 ```
 
-Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `.runtime/linux`、`.tools/linux`。整个项目目录可迁移，但 Windows 与 Linux 的本地二进制目录彼此独立；在目标系统首次运行对应的 setup 脚本即可。
+Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `backend/.runtime/linux`、`backend/.tools/linux`。整个项目目录可迁移，但 Windows 与 Linux 的本地二进制目录彼此独立；在目标系统首次运行对应的 setup 脚本即可。
 
 ## CLI 使用
 
 检查运行层：
 
 ```powershell
-.\.runtime\windows\python\Scripts\agent-eval.exe doctor
-.\.runtime\windows\python\Scripts\agent-eval.exe agents
+.\backend\.runtime\windows\python\Scripts\agent-eval.exe doctor
+.\backend\.runtime\windows\python\Scripts\agent-eval.exe agents
 ```
 
 指定 Agent、模型、Skill 和已有用例：
 
 ```powershell
-.\.runtime\windows\python\Scripts\agent-eval.exe run `
-  --skill .\skills\example-marker `
+.\backend\.runtime\windows\python\Scripts\agent-eval.exe run `
+  --skill .\backend\skills\example-marker `
   --agent codex `
   --model gpt-5.4 `
-  --case .\skills\example-marker\evals\cases\marker.yaml `
+  --case .\backend\skills\example-marker\evals\cases\marker.yaml `
   --agent-executable C:\path\to\codex.exe `
   --parallelism 2 `
   --iterations 1 `
@@ -135,7 +135,7 @@ Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `.runtime/linu
 直接用 Prompt 和确定性字符串约束生成临时用例：
 
 ```powershell
-.\.runtime\windows\python\Scripts\agent-eval.exe run `
+.\backend\.runtime\windows\python\Scripts\agent-eval.exe run `
   --skill C:\skills\my-skill `
   --agent claude `
   --model claude-sonnet-4-5 `
@@ -145,7 +145,7 @@ Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `.runtime/linu
   --agent-executable C:\path\to\claude.exe
 ```
 
-Linux 将入口替换为 `.runtime/linux/python/bin/agent-eval`，参数完全相同。`--agent-executable` 可省略，此时从 `PATH` 查找该 Agent 的默认命令。模型字符串直接传给所选 Agent；模型是否可用由该 Agent 的本地配置和服务端权限决定。
+Linux 将入口替换为 `backend/.runtime/linux/python/bin/agent-eval`，参数完全相同。`--agent-executable` 可省略，此时从 `PATH` 查找该 Agent 的默认命令。模型字符串直接传给所选 Agent；模型是否可用由该 Agent 的本地配置和服务端权限决定。
 
 当前 Multica 版本可选 backend：`antigravity`、`claude`、`codebuddy`、`codex`、`copilot`、`cursor`、`deveco`、`dim`、`dsh`、`grok`、`hermes`、`kimi`、`kiro`、`mcode`、`omp`、`openclaw`、`opencode`、`pi`、`qoder`、`qoderclicn`、`qwen`、`qwenpaw`、`reasonix`、`traecli`、`zeroclaw`。
 
@@ -164,12 +164,12 @@ npm run multica:dev-agent
 npm run electron:dev:openclaw
 
 Set-Location D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup
-.\.runtime\windows\python\Scripts\agent-eval.exe run `
-  --skill .\skills\example-marker `
+.\backend\.runtime\windows\python\Scripts\agent-eval.exe run `
+  --skill .\backend\skills\example-marker `
   --agent openclaw `
   --model main `
   --agent-executable "$env:APPDATA\JustDo\multica\development\JustDo-agent.exe" `
-  --case .\skills\example-marker\evals\cases\marker.yaml `
+  --case .\backend\skills\example-marker\evals\cases\marker.yaml `
   --parallelism 1 `
   --iterations 1 `
   --benchmark
@@ -178,12 +178,12 @@ Set-Location D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skil
 Linux：
 
 ```sh
-./.runtime/linux/python/bin/agent-eval run \
-  --skill ./skills/example-marker \
+./backend/.runtime/linux/python/bin/agent-eval run \
+  --skill ./backend/skills/example-marker \
   --agent openclaw \
   --model main \
   --agent-executable "$HOME/.local/bin/JustDo-agent" \
-  --case ./skills/example-marker/evals/cases/marker.yaml \
+  --case ./backend/skills/example-marker/evals/cases/marker.yaml \
   --parallelism 1 \
   --iterations 1 \
   --benchmark

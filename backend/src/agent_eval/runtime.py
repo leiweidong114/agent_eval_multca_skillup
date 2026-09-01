@@ -95,11 +95,18 @@ def skill_target(agent: str, skill_name: str) -> str:
 
 
 def find_skill_up(project_root: Path) -> Path:
-    candidates = (
-        [project_root / ".tools" / "windows" / "skill-up.exe"]
-        if os.name == "nt"
-        else [project_root / ".tools" / "linux" / "skill-up"]
-    )
+    roots = [project_root]
+    if project_root.name == "backend":
+        # Keep existing developer installations working during the backend/
+        # directory migration. Fresh setup scripts install under backend/.
+        roots.append(project_root.parent)
+    candidates = [
+        root
+        / ".tools"
+        / ("windows" if os.name == "nt" else "linux")
+        / ("skill-up.exe" if os.name == "nt" else "skill-up")
+        for root in roots
+    ]
     discovered = shutil.which("skill-up")
     if discovered:
         candidates.append(Path(discovered))
@@ -110,13 +117,20 @@ def find_skill_up(project_root: Path) -> Path:
 
 
 def find_multica_runtime(project_root: Path) -> Path:
-    path = (
-        project_root / ".runtime" / "windows" / "bin" / "multica-eval-runtime.exe"
-        if os.name == "nt"
-        else project_root / ".runtime" / "linux" / "bin" / "multica-eval-runtime"
+    roots = [project_root]
+    if project_root.name == "backend":
+        roots.append(project_root.parent)
+    paths = [
+        root
+        / ".runtime"
+        / ("windows" if os.name == "nt" else "linux")
+        / "bin"
+        / ("multica-eval-runtime.exe" if os.name == "nt" else "multica-eval-runtime")
+        for root in roots
+    ]
+    for path in paths:
+        if path.is_file():
+            return path.resolve()
+    raise FileNotFoundError(
+        f"Local Multica evaluation runtime was not found: {paths[0]}; run setup first"
     )
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"Local Multica evaluation runtime was not found: {path}; run setup first"
-        )
-    return path.resolve()

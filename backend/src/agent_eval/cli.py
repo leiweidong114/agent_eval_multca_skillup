@@ -14,8 +14,8 @@ from agent_eval.runtime import (
 )
 
 
-# backend/ 目录：迁移后层级为 backend/src/agent_eval/cli.py -> parents[3] = backend
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+# backend/src/agent_eval/cli.py -> parents[2] = backend
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _parser() -> argparse.ArgumentParser:
