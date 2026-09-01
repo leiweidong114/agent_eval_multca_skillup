@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from maeval.adapters import _run_process, get_adapter, resolve_executable
 from maeval.models import Candidate, ScorerSpec, Task
+from agent_eval.model_config import resolve_model_profile
 
 from .benchmarks import install_benchmark, seed_catalog
 from .auth import (
@@ -46,6 +47,13 @@ class ProviderIn(BaseModel):
     api_key: str | None = None
     settings: dict[str, Any] = Field(default_factory=dict)
     shared: bool = False
+
+
+class AutoProviderIn(BaseModel):
+    agent: str = Field(pattern=r"^(direct|codex)$")
+    model: str = Field(min_length=1)
+    profile: str = Field(min_length=1)
+    task_kind: str = Field(default="direct", pattern=r"^(direct|repo)$")
 
 
 class ExperimentIn(BaseModel):
@@ -627,6 +635,66 @@ def create_app(
             provider_id,
             {"name": body.name, "kind": body.kind, "model": body.model},
             owner_user_id=user["id"],
+        )
+        return public_provider(db.row("SELECT * FROM providers WHERE id=?", (provider_id,)))
+
+    @app.post("/api/providers/auto")
+    def ensure_auto_provider(request: Request, body: AutoProviderIn) -> dict[str, Any]:
+        """Create or reuse a server-configured LiteLLM provider for unified UI runs."""
+        user = require_write(request)
+        runtime_agent = "codex" if body.agent == "codex" else None
+        try:
+            resolved = resolve_model_profile(
+                root,
+                profile_name=body.profile,
+                model_override=body.model,
+                agent=runtime_agent,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if not resolved.api_base or not resolved.environment.get("LITELLM_API_KEY"):
+            raise HTTPException(400, "Question-bank evaluation requires a LiteLLM profile")
+        kind = (
+            "openai"
+            if body.agent == "direct"
+            else ("codex_cli_agent" if body.task_kind == "repo" else "codex_cli_direct")
+        )
+        provider_model = resolved.model_for_agent("codex") if body.agent == "codex" else resolved.model
+        openai_base = resolved.environment["OPENAI_BASE_URL"]
+        name = f"Unified · {body.agent} · {resolved.model}"
+        existing = db.row(
+            """SELECT * FROM providers WHERE owner_user_id=? AND kind=? AND model=?
+            AND COALESCE(base_url,'')=? ORDER BY id DESC LIMIT 1""",
+            (user["id"], kind, provider_model, openai_base),
+        )
+        if existing:
+            return public_provider(existing)
+        now = utcnow()
+        provider_id = db.execute(
+            """INSERT INTO providers(
+            name,kind,model,base_url,api_key_cipher,settings_json,owner_user_id,shared,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (
+                name,
+                kind,
+                provider_model,
+                openai_base,
+                secrets.encrypt(resolved.environment["LITELLM_API_KEY"]),
+                json.dumps(
+                    {
+                        "extra_args": list(resolved.agent_args),
+                        "timeout_seconds": 300,
+                        "max_tokens": 4096,
+                        "auto_managed": True,
+                        "requested_model": resolved.model,
+                        "profile": resolved.name,
+                    }
+                ),
+                user["id"],
+                0,
+                now,
+                now,
+            ),
         )
         return public_provider(db.row("SELECT * FROM providers WHERE id=?", (provider_id,)))
 

@@ -9,7 +9,11 @@ from pydantic import BaseModel
 
 from agent_eval.database import database_health
 from agent_eval.agent_contract import describe_agent_contract
-from agent_eval.model_config import describe_model_config, resolve_config_secret
+from agent_eval.model_config import (
+    describe_model_config,
+    discover_available_models,
+    resolve_config_secret,
+)
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
     agent_capabilities,
@@ -72,6 +76,12 @@ def list_agents() -> list[dict[str, Any]]:
 def get_model_config() -> dict[str, object]:
     """Return non-secret model defaults used by the CLI and Web UI."""
     return describe_model_config(BACKEND_ROOT)
+
+
+@router.get("/models")
+def list_models() -> dict[str, object]:
+    """Return models discovered from LiteLLM plus configured native fallbacks."""
+    return discover_available_models(BACKEND_ROOT)
 
 
 @router.get("/database/health")
@@ -154,4 +164,24 @@ def list_skill_cases(skill_name: str) -> dict[str, object]:
         "skill": skill_name,
         "skill_dir": str(skill_dir),
         "cases": cases,
+    }
+
+
+@router.get("/skills/{skill_name}")
+def get_skill(skill_name: str) -> dict[str, object]:
+    skill_dir = resolve_skill(skill_name)
+    if skill_dir is None:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_name}")
+    content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    cases_dir = skill_dir / "evals" / "cases"
+    return {
+        "name": skill_name,
+        "path": str(skill_dir),
+        "content": content,
+        "case_count": len(list(cases_dir.glob("*.yaml"))) if cases_dir.is_dir() else 0,
+        "files": sorted(
+            str(path.relative_to(skill_dir)).replace("\\", "/")
+            for path in skill_dir.rglob("*")
+            if path.is_file()
+        )[:500],
     }

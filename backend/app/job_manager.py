@@ -51,7 +51,8 @@ class EvaluationJobManager:
             "client_task_id": request.get("client_task_id"),
             "status": "queued", "phase": "queued", "progress": 0,
             "message": "Waiting for a worker", "created_at": now, "updated_at": now,
-            "skill": skill_dir.name, "agent": request.get("agent"),
+            "skill": skill_dir.name, "skills": request.get("skills") or [skill_dir.name],
+            "evaluation_type": request.get("evaluation_type", "skill"), "agent": request.get("agent"),
             "user_id": request.get("user_id", "local"),
             "task_name": request.get("task_name") or skill_dir.name,
             "model": request.get("model"), "profile": request.get("profile"),
@@ -97,6 +98,8 @@ class EvaluationJobManager:
                 task_name=request.get("task_name") or skill_dir.name,
                 client_task_id=request.get("client_task_id"),
                 run_llm_judge_enabled=request.get("llm_judge", True),
+                evaluation_type=request.get("evaluation_type", "skill"),
+                selected_skills=request.get("skills") or [skill_dir.name],
             )
             status = "completed" if result.get("status", "completed") == "completed" else "failed"
             self._update(

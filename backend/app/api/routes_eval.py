@@ -3,13 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from agent_eval.runner import run_evaluation
 from agent_eval.runtime import validate_evaluation_capabilities
 from app.config import BACKEND_ROOT, RUNS_ROOT
 from app.job_manager import job_manager
-from app.skill_registry import resolve_skill
+from app.skill_registry import compose_skills, resolve_skill
 
 router = APIRouter(prefix="/api", tags=["eval"])
 
@@ -18,7 +18,9 @@ class RunRequest(BaseModel):
     user_id: str = Field(default="local", pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$")
     task_name: str | None = Field(default=None, max_length=200)
     client_task_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$")
-    skill: str = Field(..., description="Skill name under backend/skills")
+    evaluation_type: str = Field(default="skill", pattern=r"^(skill|schematic)$")
+    skill: str | None = Field(default=None, description="Backward-compatible primary Skill")
+    skills: list[str] = Field(default_factory=list, max_length=8)
     agent: str = Field(..., description="Multica Agent backend name")
     model: str | None = Field(default=None, description="Optional profile model override")
     profile: str | None = Field(default=None, description="Profile from config/models.yaml")
@@ -40,6 +42,17 @@ class RunRequest(BaseModel):
     )
     llm_judge: bool = Field(default=True)
 
+    @model_validator(mode="after")
+    def normalize_skills(self) -> "RunRequest":
+        selected = list(dict.fromkeys(self.skills or ([self.skill] if self.skill else [])))
+        if not selected:
+            raise ValueError("Select at least one Skill")
+        if len(selected) > 8:
+            raise ValueError("At most 8 Skills can be evaluated together")
+        self.skills = selected
+        self.skill = selected[0]
+        return self
+
 
 def _resolve_skill(name: str) -> Path:
     skill_dir = resolve_skill(name)
@@ -48,8 +61,17 @@ def _resolve_skill(name: str) -> Path:
     return skill_dir
 
 
+def _resolve_request_skill(request: RunRequest) -> Path:
+    if len(request.skills) == 1:
+        return _resolve_skill(request.skills[0])
+    try:
+        return compose_skills(request.skills)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
-    skill_dir = _resolve_skill(request.skill)
+    skill_dir = _resolve_request_skill(request)
     result = run_evaluation(
         project_root=BACKEND_ROOT,
         skill_dir=str(skill_dir),
@@ -75,6 +97,8 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         task_name=request.task_name,
         client_task_id=request.client_task_id,
         run_llm_judge_enabled=request.llm_judge,
+        evaluation_type=request.evaluation_type,
+        selected_skills=request.skills,
     )
     return result
 
@@ -83,7 +107,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
 def create_run(request: RunRequest) -> dict[str, object]:
     """Queue an evaluation and return immediately with a job id."""
     try:
-        skill_dir = _resolve_skill(request.skill)
+        skill_dir = _resolve_request_skill(request)
         validate_evaluation_capabilities(
             request.agent,
             require_model_selection=request.require_model_verification,

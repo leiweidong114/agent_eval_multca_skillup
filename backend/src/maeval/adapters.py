@@ -357,12 +357,22 @@ class CodexCliAdapter(Adapter):
                 *candidate.extra_args,
                 prompt,
             ]
+            env = os.environ.copy()
+            if candidate.api_key:
+                env.update(
+                    {
+                        "LITELLM_API_KEY": candidate.api_key,
+                        "OPENAI_API_KEY": candidate.api_key,
+                    }
+                )
+            if candidate.base_url:
+                env["OPENAI_BASE_URL"] = candidate.base_url.rstrip("/")
             try:
                 code, stdout, stderr, duration_ms = _run_process(
                     command,
                     cwd=cwd,
                     timeout_seconds=candidate.timeout_seconds,
-                    env=os.environ.copy(),
+                    env=env,
                 )
             except (OSError, TimeoutError) as exc:
                 return AdapterResult(ok=False, error=str(exc))

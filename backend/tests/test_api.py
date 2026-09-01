@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.api.routes_eval import RunRequest
 
 
 client = TestClient(app)
@@ -42,3 +43,16 @@ def test_run_rejects_an_unsupported_model_or_skill_contract_before_queueing():
     skill_response = client.post("/api/run", json={**base, "agent": "dim"})
     assert skill_response.status_code == 400
     assert "specified Skill" in skill_response.json()["detail"]
+
+
+def test_run_request_supports_single_and_joint_skill_payloads():
+    legacy = RunRequest(agent="codex", skill="example-marker", prompt="test")
+    joint = RunRequest(
+        agent="codex",
+        skills=["example-marker", "schematic-generation"],
+        prompt="test",
+    )
+
+    assert legacy.skills == ["example-marker"]
+    assert joint.skill == "example-marker"
+    assert joint.skills == ["example-marker", "schematic-generation"]

@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from maeval.webapp.api import create_app
+from agent_eval.model_config import ResolvedModelProfile
 from maeval.webapp.benchmarks import seed_catalog
 from maeval.webapp.db import Database
 from scripts.import_model_eval_benchmarks import import_installed_official_benchmarks
@@ -77,3 +78,33 @@ def test_public_benchmark_migration_excludes_platform_data(tmp_path: Path) -> No
     assert target.row("SELECT item_count FROM benchmarks WHERE id='gsm8k'")["item_count"] == 1
     assert target.row("SELECT COUNT(*) n FROM providers")["n"] == 0
     assert target.row("SELECT COUNT(*) n FROM experiments")["n"] == 0
+
+
+def test_unified_ui_can_create_server_managed_litellm_provider(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "maeval.webapp.api.resolve_model_profile",
+        lambda *args, **kwargs: ResolvedModelProfile(
+            name="test-profile",
+            model="gateway/model-a",
+            api_base="http://litellm.local/v1",
+            environment={
+                "LITELLM_API_KEY": "secret",
+                "OPENAI_BASE_URL": "http://litellm.local/v1",
+            },
+            agent_args=("-c", "test=true"),
+        ),
+    )
+    app = create_app(data_dir=tmp_path / "model-eval", trusted_local=True)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/providers/auto",
+            json={
+                "agent": "codex",
+                "model": "gateway/model-a",
+                "profile": "test-profile",
+                "task_kind": "direct",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["kind"] == "codex_cli_direct"
+        assert response.json()["model"] == "gateway/model-a"

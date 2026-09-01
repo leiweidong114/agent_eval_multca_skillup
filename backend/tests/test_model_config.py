@@ -1,9 +1,11 @@
 from pathlib import Path
 
+import httpx
 import pytest
 
 from agent_eval.model_config import (
     describe_model_config,
+    discover_available_models,
     resolve_model_profile,
     write_codebuddy_profile_config,
     write_openclaw_profile_config,
@@ -183,3 +185,20 @@ def test_openclaw_profile_config_uses_litellm_without_embedding_the_key(tmp_path
     assert '"apiKey": "${LITELLM_API_KEY}"' in content
     assert f'"workspace": "{str(workspace).replace(chr(92), chr(92) * 2)}"' in content
     assert "virtual-key" not in content
+
+
+def test_discovers_litellm_models_and_keeps_profile_mapping(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    monkeypatch.setenv("TEST_LITELLM_KEY", "virtual-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/models"
+        assert request.headers["Authorization"] == "Bearer virtual-key"
+        return httpx.Response(200, json={"data": [{"id": "gateway/model-a", "owned_by": "test"}]})
+
+    result = discover_available_models(tmp_path, transport=httpx.MockTransport(handler))
+
+    assert result["litellm_available"] is True
+    discovered = next(item for item in result["models"] if item["id"] == "gateway/model-a")
+    assert discovered["profile"] == "minimax"
+    assert discovered["owned_by"] == "test"

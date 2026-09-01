@@ -31,7 +31,7 @@ agent_eval_multca_skillup/
 │   └── requirements.txt     # Web 后端依赖（fastapi/uvicorn）
 ├── frontend/                # 前端（Vue 3 + Vite + Element Plus）
 │   ├── src/
-│   │   ├── views/           # 评测运行/评测结果/Skill管理 页面
+│   │   ├── views/           # 首页、新建评测、题库/Skill/结果/运行环境六类页面
 │   │   ├── components/      # 评分卡片等组件
 │   │   └── api/             # axios 封装
 │   ├── vite.config.js       # dev 代理 /api -> http://127.0.0.1:8000
@@ -47,8 +47,10 @@ agent_eval_multca_skillup/
 | GET | /api/health | 健康检查 |
 | GET | /api/agents | 支持的 Agent 列表 |
 | GET | /api/skills | 可用 Skill 列表 |
+| GET | /api/skills/{name} | Skill 指令内容、文件和用例数 |
 | GET | /api/skills/{name}/cases | 某 Skill 的用例列表 |
 | GET | /api/model-config | 非敏感模型配置 |
+| GET | /api/models | 从 LiteLLM 发现模型并合并本地回退配置 |
 | GET | /api/database/health | PostgreSQL 直连状态与交互记录数 |
 | POST | /api/run | 创建后台评测任务，立即返回 job_id |
 | GET/POST | /api/jobs、/api/jobs/{id}/cancel | 进度查询与取消 |
@@ -63,11 +65,14 @@ agent_eval_multca_skillup/
 | GET | /api/schematic/projects/{id} | 读取可在网页打开的原理图工程 |
 | GET/POST | /prism/api/benchmarks、/prism/api/benchmarks/import | Prism 题库目录与离线导入 |
 | GET/POST | /prism/api/providers、/prism/api/experiments | 模型/Agent 接入与题库实验 |
+| POST | /prism/api/providers/auto | 按模型 Profile 和 Agent 自动创建题库 Provider |
 | GET | /prism/api/experiments/{id}/results、/comparison | 逐题证据与统计比较 |
 
-### 模型与题库评测
+### 统一评测前端
 
-网页导航中的“模型与题库评测”会打开内嵌 Prism Eval。该模块与 Skill 评测共享同一个 FastAPI 服务，但使用独立的 SQLite 数据、加密密钥、题库快照和结果证据目录：
+网页提供首页、新建评测、题库管理、Skill 管理、评测结果、模型与 Agent 六个一级页面。新建评测可选择原理图评测、题库评测或 Skill 评测；Skill 评测支持一次选择 1–8 个 Skill，并通过 Prompt 组织联合任务。评测结果按三种类型进入各自的详情子页。
+
+题库能力由内嵌 Prism Eval 引擎提供，与 Skill 评测共享同一个 FastAPI 服务，但使用独立的 SQLite 数据、加密密钥、题库快照和结果证据目录：
 
 ```text
 backend/model_eval_data/
@@ -76,7 +81,7 @@ backend/model_eval_data/
   evaluation-results/
 ```
 
-本地集成模式继承当前项目的无登录边界，并以本地管理员身份运行。可在题库管理页导入 JSON/JSONL 题库，在“模型与 Agent”中配置接入，然后从“新建评测”选择题库、模型、赛道、抽样与预算发起实验。可通过 `MODEL_AGENT_EVAL_DATA_DIR` 把数据目录迁移到其他受控位置。
+本地集成模式继承当前项目的无登录边界，并以本地管理员身份运行。题库管理页可查看所有题库和题目内容，也可导入 JSON 题库；统一“新建评测”页会根据所选 Agent、模型 Profile 和题库类型自动创建或复用加密 Provider。可通过 `MODEL_AGENT_EVAL_DATA_DIR` 把数据目录迁移到其他受控位置。
 
 从旧 `model-agent-eval` 数据库迁移已安装的公开题库时，可以运行下面的脚本。它只复制公开题库、题目与版本指纹，不复制用户、密码、API Key、模型配置、实验或历史结果：
 
