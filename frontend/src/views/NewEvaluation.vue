@@ -26,8 +26,8 @@
       <template #header>
         <div class="panel-title"><span>评测配置</span><el-tag effect="plain">{{ currentType.name }}</el-tag></div>
       </template>
-      <el-form label-position="top" :model="form">
-        <div class="form-grid">
+      <el-form label-position="left" label-width="140px" :model="form" class="legacy-form">
+        <div class="form-grid common-fields">
           <el-form-item label="任务名称">
             <el-input v-model="form.name" placeholder="用于在结果中心快速识别" />
           </el-form-item>
@@ -61,7 +61,7 @@
               <el-option v-for="item in cases" :key="item.path" :label="item.name" :value="item.path" />
             </el-select>
           </el-form-item>
-          <div class="form-grid">
+          <div class="form-grid assertion-fields">
             <el-form-item label="输出必须包含"><el-select v-model="form.mustContain" multiple filterable allow-create default-first-option /></el-form-item>
             <el-form-item label="输出禁止包含"><el-select v-model="form.mustNotContain" multiple filterable allow-create default-first-option /></el-form-item>
           </div>
@@ -77,7 +77,7 @@
 
         <template v-else>
           <el-divider content-position="left">题库与采样</el-divider>
-          <div class="form-grid">
+          <div class="form-grid bank-fields">
             <el-form-item label="题库">
               <el-select v-model="form.benchmarkId" filterable placeholder="选择已安装题库" @change="onBenchmarkChange">
                 <el-option v-for="bank in installedBenchmarks" :key="bank.id" :value="bank.id" :label="`${bank.name}（${bank.item_count} 题）`" />
@@ -238,5 +238,5 @@ onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <style scoped>
-.steps{width:440px;background:transparent}.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.type-card{position:relative;display:grid;grid-template-columns:50px 1fr;grid-template-rows:auto auto;text-align:left;gap:3px 14px;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--text);cursor:pointer;transition:.2s}.type-card:hover,.type-card.active{border-color:var(--brand);box-shadow:0 8px 24px rgba(39,91,225,.1);transform:translateY(-1px)}.type-card strong{font-size:16px}.type-card small{color:var(--muted);line-height:1.5}.type-icon{grid-row:1/3;width:46px;height:46px;display:grid;place-items:center;border-radius:12px;background:var(--brand-soft);color:var(--brand);font-size:22px}.check{position:absolute;right:12px;top:12px;color:var(--brand);opacity:0}.active .check{opacity:1}.form-panel{margin-top:16px}.panel-title,.progress-head,.submit-row{display:flex;justify-content:space-between;align-items:center}.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}.form-grid>:first-child{grid-column:span 1}.runtime-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.field-help{font-size:12px;color:var(--muted);margin-top:6px}.option-meta{float:right;color:var(--muted);margin-left:20px;font-size:12px}.submit-row{margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}.selection-summary{display:flex;gap:10px;align-items:center}.selection-summary span{font-size:13px;color:var(--muted);padding-left:10px;border-left:1px solid var(--line)}.progress-panel{margin-top:16px}.progress-head h3{margin:4px 0}.progress-head p{margin:0 0 18px;color:var(--muted)}.result-actions{margin-top:18px}@media(max-width:900px){.steps{display:none}.type-grid,.form-grid,.runtime-grid{grid-template-columns:1fr}.submit-row{align-items:flex-end}.selection-summary{flex-direction:column;align-items:flex-start}.type-grid{gap:10px}}
+.steps{width:440px;background:transparent}.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.type-card{position:relative;display:grid;grid-template-columns:42px 1fr;grid-template-rows:auto auto;text-align:left;gap:3px 12px;padding:16px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--text);cursor:pointer}.type-card strong{font-size:15px}.type-card small{color:var(--muted);line-height:1.5}.type-icon{grid-row:1/3;width:40px;height:40px;display:grid;place-items:center;border-radius:4px;background:var(--brand-soft);color:var(--brand);font-size:19px}.check{position:absolute;right:10px;top:10px;color:var(--brand);opacity:0}.active .check{opacity:1}.panel-title,.progress-head,.submit-row{display:flex;justify-content:space-between;align-items:center}.form-grid{display:block}.legacy-form :deep(.el-form-item){max-width:900px;margin-bottom:18px}.legacy-form :deep(.el-form-item__content>.el-select),.legacy-form :deep(.el-form-item__content>.el-input){max-width:520px}.legacy-form :deep(.el-textarea){max-width:760px}.assertion-fields,.bank-fields,.runtime-grid{display:grid;grid-template-columns:repeat(2,minmax(0,560px));gap:0 18px}.field-help{font-size:12px;color:var(--muted);margin-top:6px}.option-meta{float:right;color:var(--muted);margin-left:20px;font-size:12px}.submit-row{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}.selection-summary{display:flex;gap:10px;align-items:center}.selection-summary span{font-size:13px;color:var(--muted);padding-left:10px;border-left:1px solid var(--line)}.progress-head h3{margin:4px 0}.progress-head p{margin:0 0 18px;color:var(--muted)}.result-actions{margin-top:18px}@media(max-width:900px){.steps{display:none}.type-grid,.assertion-fields,.bank-fields,.runtime-grid{grid-template-columns:1fr}.submit-row{align-items:flex-end}.selection-summary{flex-direction:column;align-items:flex-start}.type-grid{gap:8px}}
 </style>
