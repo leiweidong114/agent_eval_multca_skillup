@@ -1,0 +1,7 @@
+id: marker
+title: Verify that the selected Agent discovers the evaluated Skill
+input:
+  prompt: Return the evaluation marker using the installed Skill.
+expect:
+  must_contain:
+    - MULTICA_SKILL_UP_OK
