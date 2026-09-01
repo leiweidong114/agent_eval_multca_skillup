@@ -1,0 +1,7 @@
+default_profile: litellm_minimax
+
+profiles:
+  litellm_minimax:
+    model: MiniMax-M3
+    api_base: http://127.0.0.1:4000/v1
+    api_key_env: LITELLM_API_KEY

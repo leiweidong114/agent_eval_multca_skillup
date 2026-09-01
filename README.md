@@ -1,10 +1,10 @@
 # agent_eval_multca_skillup
 
-一个本地、无登录、无数据库、无 LiteLLM 依赖的 Agent Skill 评测工具：
+一个本地、无 Multica 登录、无数据库依赖的 Agent Skill 评测工具。默认通过本机 LiteLLM 使用 MiniMax 模型：
 
 - Skill-Up 负责隔离 Skill、执行用例、断言、基准对照和生成 JSON/HTML/JUnit 报告。
 - Multica 的开源 Agent backend 负责统一调用不同 Agent CLI。
-- 本项目不启动 Multica Server，不调用 Multica 登录、Issue、数据库或云服务。
+- 本项目不启动 Multica Server，不调用 Multica 登录、Issue 或数据库服务。
 - 发给 Agent 的系统提示词固定为空；单条用例 Prompt 按原始字节内容传递，不注入 Multica 默认提示词。
 
 ## 项目结构（server_dev 分支，前后端分离）
@@ -79,7 +79,36 @@ agent-eval CLI
         -> 指定的 Agent CLI + 指定模型
 ```
 
-Agent CLI 自身可能需要厂商账号、API Key 或本地配置；这属于 Agent 的认证，不是 Multica 登录。本项目不会读取 PostgreSQL，也不会访问 LiteLLM。
+Agent CLI 自身可能需要本地安装和配置；这属于 Agent 运行环境，不是 Multica 登录。本项目不会读取 PostgreSQL。默认模型流量发送到配置的 LiteLLM 服务。
+
+## LiteLLM / MiniMax 模型配置
+
+默认配置位于 `backend/config/models.yaml`：
+
+```yaml
+default_profile: litellm_minimax
+profiles:
+  litellm_minimax:
+    model: MiniMax-M3
+    api_base: http://127.0.0.1:4000/v1
+    api_key_env: LITELLM_API_KEY
+```
+
+虚拟 Key 使用环境变量 `LITELLM_API_KEY`，或写入被 Git 忽略的
+`backend/config/local.yaml`：
+
+```yaml
+secrets:
+  LITELLM_API_KEY: sk-your-virtual-key
+```
+
+运行时会为不同 Agent CLI 同时提供 OpenAI 兼容变量
+`OPENAI_BASE_URL`/`OPENAI_API_KEY` 和 Anthropic 兼容变量
+`ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`。虚拟 Key 不会写入生成的
+`eval.yaml`、评测报告或 Git。可通过修改 `models.yaml` 添加多个 profile，运行时用
+`--profile <name>` 选择；`--model` 仅用于临时覆盖该 profile 的默认模型。
+Codex 还会自动获得 `model_provider=litellm` 的命令行配置，避免已有 ChatGPT 登录覆盖
+LiteLLM 地址。
 
 ## Windows 安装
 
@@ -124,7 +153,7 @@ Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `backend/.runt
 .\backend\.runtime\windows\python\Scripts\agent-eval.exe run `
   --skill .\backend\skills\example-marker `
   --agent codex `
-  --model gpt-5.4 `
+  --profile litellm_minimax `
   --case .\backend\skills\example-marker\evals\cases\marker.yaml `
   --agent-executable C:\path\to\codex.exe `
   --parallelism 2 `
@@ -138,7 +167,7 @@ Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `backend/.runt
 .\backend\.runtime\windows\python\Scripts\agent-eval.exe run `
   --skill C:\skills\my-skill `
   --agent claude `
-  --model claude-sonnet-4-5 `
+  --profile litellm_minimax `
   --prompt "执行这个任务" `
   --must-contain "expected marker" `
   --must-not-contain "forbidden text" `

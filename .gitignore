@@ -2,6 +2,7 @@
 .runtime/
 .tools/
 runs/
+backend/config/local.yaml
 
 # Python
 .venv/

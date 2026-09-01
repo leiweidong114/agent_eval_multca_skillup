@@ -12,6 +12,7 @@ from typing import Any
 
 import yaml
 
+from agent_eval.model_config import resolve_model_profile
 from agent_eval.runtime import (
     default_agent_command,
     find_multica_runtime,
@@ -106,7 +107,8 @@ def aggregate_scores(results: list[dict[str, Any]]) -> dict[str, Any]:
 def build_eval_config(
     *,
     agent: str,
-    model: str,
+    model: str | None,
+    profile: str | None = None,
     executable: str,
     runtime_binary: Path,
     skill_name: str,
@@ -188,7 +190,8 @@ def run_evaluation(
     project_root: Path,
     skill_dir: str,
     agent: str,
-    model: str,
+    model: str | None,
+    profile: str | None = None,
     case_files: list[str] | None = None,
     prompt: str | None = None,
     executable: str | None = None,
@@ -209,6 +212,13 @@ def run_evaluation(
     if not case_files and not prompt:
         raise ValueError("Pass at least one --case or --prompt")
     agent = normalize_agent(agent)
+    resolved_profile = resolve_model_profile(
+        project_root,
+        profile_name=profile,
+        model_override=model,
+        agent=agent,
+    )
+    model = resolved_profile.model
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     unique = uuid.uuid4().hex[:8]
     runs_root = Path(output_dir).resolve() if output_dir else project_root / "runs"
@@ -251,7 +261,7 @@ def run_evaluation(
         timeout_seconds=timeout_seconds,
         max_turns=max_turns,
         benchmark=benchmark,
-        extra_args=extra_args or [],
+        extra_args=[*resolved_profile.agent_args, *(extra_args or [])],
     )
     eval_path = staged_skill / "evals" / "eval.yaml"
     eval_path.write_text(
@@ -259,6 +269,7 @@ def run_evaluation(
     )
     output = result_root / "skill-up"
     env = os.environ.copy()
+    env.update(resolved_profile.environment)
     env["AGENT_EVAL_RUN_ID"] = result_root.name
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = executable or default_agent_command(agent)
 
@@ -280,6 +291,7 @@ def run_evaluation(
             "run_id": result_root.name,
             "agent": agent,
             "model": model,
+            "model_profile": resolved_profile.name,
             "skill": str(source_skill),
             "result_dir": str(result_root),
             "validated": True,
@@ -325,6 +337,7 @@ def run_evaluation(
         "run_id": result_root.name,
         "agent": agent,
         "model": model,
+        "model_profile": resolved_profile.name,
         "skill": str(source_skill),
         "result_dir": str(result_root),
         "skill_up_exit_code": completed.returncode,

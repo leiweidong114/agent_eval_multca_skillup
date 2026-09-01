@@ -15,7 +15,8 @@ router = APIRouter(prefix="/api", tags=["eval"])
 class RunRequest(BaseModel):
     skill: str = Field(..., description="Skill name under backend/skills")
     agent: str = Field(..., description="Multica Agent backend name")
-    model: str = Field(..., description="Model string passed to the Agent")
+    model: str | None = Field(default=None, description="Optional profile model override")
+    profile: str | None = Field(default=None, description="Profile from config/models.yaml")
     case: list[str] = Field(default_factory=list, description="Case YAML file paths")
     prompt: str | None = Field(default=None, description="Generate a one-off case from a prompt")
     must_contain: list[str] = Field(default_factory=list)
@@ -43,6 +44,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         skill_dir=str(skill_dir),
         agent=request.agent,
         model=request.model,
+        profile=request.profile,
         case_files=request.case,
         prompt=request.prompt,
         executable=request.agent_executable,

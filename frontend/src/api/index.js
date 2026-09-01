@@ -6,6 +6,7 @@ const http = axios.create({
 })
 
 export const fetchAgents = () => http.get('/agents').then((r) => r.data)
+export const fetchModelConfig = () => http.get('/model-config').then((r) => r.data)
 export const fetchSkills = () => http.get('/skills').then((r) => r.data)
 export const fetchSkillCases = (name) => http.get(`/skills/${name}/cases`).then((r) => r.data)
 

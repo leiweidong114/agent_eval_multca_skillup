@@ -5,11 +5,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from agent_eval.model_config import describe_model_config
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
     default_agent_command,
 )
-from app.config import SKILLS_ROOT
+from app.config import BACKEND_ROOT, SKILLS_ROOT
 
 router = APIRouter(prefix="/api", tags=["discovery"])
 
@@ -47,6 +48,12 @@ def list_agents() -> list[dict[str, str | bool | None]]:
             }
         )
     return result
+
+
+@router.get("/model-config")
+def get_model_config() -> dict[str, object]:
+    """Return non-secret model defaults used by the CLI and Web UI."""
+    return describe_model_config(BACKEND_ROOT)
 
 
 @router.get("/skills")

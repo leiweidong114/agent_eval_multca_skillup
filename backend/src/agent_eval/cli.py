@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from agent_eval.runner import run_evaluation
+from agent_eval.model_config import describe_model_config
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
     default_agent_command,
@@ -24,7 +25,8 @@ def _parser() -> argparse.ArgumentParser:
     run = commands.add_parser("run", help="Evaluate one Skill with a chosen Agent and model")
     run.add_argument("--skill", required=True)
     run.add_argument("--agent", required=True)
-    run.add_argument("--model", required=True)
+    run.add_argument("--model", help="Override the model from the selected profile")
+    run.add_argument("--profile", help="Model profile from config/models.yaml")
     run.add_argument("--case", action="append", default=[])
     run.add_argument("--prompt")
     run.add_argument("--must-contain", action="append", default=[])
@@ -65,7 +67,8 @@ def main() -> None:
             "multica_eval_runtime": str(find_multica_runtime(PROJECT_ROOT)),
             "login_required": False,
             "database_required": False,
-            "litellm_required": False,
+            "litellm_required": True,
+            "model_config": describe_model_config(PROJECT_ROOT),
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
@@ -74,6 +77,7 @@ def main() -> None:
         skill_dir=args.skill,
         agent=args.agent,
         model=args.model,
+        profile=args.profile,
         case_files=args.case,
         prompt=args.prompt,
         executable=args.agent_executable,

@@ -40,8 +40,14 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="模型">
-          <el-input v-model="form.model" placeholder="如 gpt-5.4 / claude-sonnet-4-5" style="width: 320px" />
+        <el-form-item label="模型配置">
+          <el-select v-model="form.profile" style="width: 320px" @change="applyProfileModel">
+            <el-option v-for="name in modelConfig.profiles" :key="name" :label="name" :value="name" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="模型覆盖">
+          <el-input v-model="form.model" placeholder="留空则使用配置文件默认模型" style="width: 320px" />
         </el-form-item>
 
         <el-form-item label="Agent 可执行文件">
@@ -142,6 +148,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   fetchAgents,
+  fetchModelConfig,
   fetchSkills,
   fetchSkillCases,
   triggerRun,
@@ -151,6 +158,7 @@ import {
 const form = reactive({
   skill: '',
   agent: '',
+  profile: '',
   model: '',
   agent_executable: '',
   case: [],
@@ -165,6 +173,7 @@ const form = reactive({
 })
 
 const agents = ref([])
+const modelConfig = reactive({ profiles: [], profile_models: {}, default_profile: '', default_model: '' })
 const skills = ref([])
 const cases = ref([])
 const result = ref(null)
@@ -200,11 +209,27 @@ async function loadAgents() {
   }
 }
 
+async function loadModelConfig() {
+  try {
+    const data = await fetchModelConfig()
+    Object.assign(modelConfig, data)
+    form.profile = data.default_profile || ''
+    form.model = data.default_model || ''
+  } catch (e) {
+    ElMessage.error(`获取模型配置失败: ${e.message}`)
+  }
+}
+
+function applyProfileModel(name) {
+  form.model = modelConfig.profile_models?.[name] || ''
+}
+
 function buildPayload() {
   return {
     skill: form.skill,
     agent: form.agent,
-    model: form.model,
+    profile: form.profile || null,
+    model: form.model || null,
     case: form.case,
     prompt: form.prompt || null,
     agent_executable: form.agent_executable || null,
@@ -228,8 +253,8 @@ function validatePayload() {
     ElMessage.warning('请选择 Agent')
     return false
   }
-  if (!form.model) {
-    ElMessage.warning('请填写模型')
+  if (!form.profile) {
+    ElMessage.warning('请选择模型配置')
     return false
   }
   if (!form.case.length && !form.prompt) {
@@ -269,7 +294,8 @@ async function validate() {
 function reset() {
   form.skill = ''
   form.agent = ''
-  form.model = ''
+  form.profile = modelConfig.default_profile || ''
+  form.model = modelConfig.default_model || ''
   form.agent_executable = ''
   form.case = []
   form.prompt = ''
@@ -285,6 +311,7 @@ function reset() {
 
 onMounted(() => {
   loadAgents()
+  loadModelConfig()
   refreshSkills()
 })
 </script>
