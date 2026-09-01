@@ -12,6 +12,9 @@ if (-not $CacheDirectory) { $CacheDirectory = Join-Path $repoRoot ".offline-cach
 $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 $CacheDirectory = [System.IO.Path]::GetFullPath($CacheDirectory)
 $lock = Get-Content -Raw (Join-Path $PSScriptRoot "runtime-lock.json") | ConvertFrom-Json
+$originalPythonPath = $env:PYTHONPATH
+Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+$env:PYTHONNOUSERSITE = "1"
 $branch = (git -C $repoRoot branch --show-current).Trim()
 $commit = (git -C $repoRoot rev-parse HEAD).Trim()
 if ((git -C $repoRoot status --porcelain)) {
@@ -178,4 +181,6 @@ try {
         (Test-Path -LiteralPath $pythonBuildRoot)) {
         Remove-Item -LiteralPath $pythonBuildRoot -Recurse -Force
     }
+    if ($null -ne $originalPythonPath) { $env:PYTHONPATH = $originalPythonPath }
+    Remove-Item Env:PYTHONNOUSERSITE -ErrorAction SilentlyContinue
 }
