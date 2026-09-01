@@ -88,3 +88,24 @@ def test_aggregate_scores_reports_task_baseline_gain_and_stability():
     assert scores["skill_gain"] == 100
     assert scores["execution_stability"] == 100
     assert scores["total_tokens"] == 123
+
+
+def test_aggregate_scores_handles_error_cases_without_grading():
+    scores = aggregate_scores(
+        [
+            {
+                "case_results": [
+                    {
+                        "configuration": "with_skill",
+                        "status": "ERROR",
+                        "duration_ms": 25,
+                        "grading": None,
+                    }
+                ]
+            }
+        ]
+    )
+
+    assert scores["task_score"] is None
+    assert scores["execution_stability"] == 0
+    assert scores["with_skill_cases"] == 1

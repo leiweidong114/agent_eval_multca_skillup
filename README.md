@@ -7,6 +7,68 @@
 - 本项目不启动 Multica Server，不调用 Multica 登录、Issue、数据库或云服务。
 - 发给 Agent 的系统提示词固定为空；单条用例 Prompt 按原始字节内容传递，不注入 Multica 默认提示词。
 
+## 项目结构（server_dev 分支，前后端分离）
+
+本分支在原有 CLI 工具基础上新增了前后端分离的 Web 界面：
+
+```text
+agent_eval_multca_skillup/
+├── backend/                 # 后端（Python + FastAPI）
+│   ├── app/
+│   │   ├── main.py          # FastAPI 入口（含 CORS、路由装配）
+│   │   ├── config.py        # 后端路径配置
+│   │   └── api/             # REST 接口
+│   │       ├── routes_eval.py    # 评测运行 /api/run、/api/validate
+│   │       ├── routes_skill.py   # Skill/Agent 发现 /api/skills、/api/agents
+│   │       └── routes_runs.py    # 历史记录 /api/runs、/api/runs/{id}
+│   ├── src/                 # 原有 agent_eval 评测核心逻辑
+│   ├── tests/               # 原有单元测试
+│   ├── skills/              # 评测用 Skill（example-marker）
+│   ├── run_server.py        # 后端启动脚本
+│   └── requirements.txt     # Web 后端依赖（fastapi/uvicorn）
+├── frontend/                # 前端（Vue 3 + Vite + Element Plus）
+│   ├── src/
+│   │   ├── views/           # 评测运行/评测结果/Skill管理 页面
+│   │   ├── components/      # 评分卡片等组件
+│   │   └── api/             # axios 封装
+│   ├── vite.config.js       # dev 代理 /api -> http://127.0.0.1:8000
+│   └── package.json
+├── tests_reports/           # 各步骤测试报告
+└── README.md
+```
+
+### 后端接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/health | 健康检查 |
+| GET | /api/agents | 支持的 Agent 列表 |
+| GET | /api/skills | 可用 Skill 列表 |
+| GET | /api/skills/{name}/cases | 某 Skill 的用例列表 |
+| POST | /api/run | 触发评测运行 |
+| POST | /api/validate | 仅校验配置不完整运行 |
+| GET | /api/runs | 历史评测记录 |
+| GET | /api/runs/{run_id} | 单次评测详情 |
+
+### 启动方式
+
+后端（需先运行 `backend/scripts/setup_windows.ps1` 生成运行时）：
+
+```powershell
+cd backend
+python run_server.py --port 8000
+```
+
+前端：
+
+```powershell
+cd frontend
+npm install
+npm run dev   # 打开 http://127.0.0.1:5173
+```
+
+前端 dev 服务器会把 `/api` 请求代理到后端 `http://127.0.0.1:8000`。
+
 ## 架构
 
 ```text

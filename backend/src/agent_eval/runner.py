@@ -75,7 +75,7 @@ def aggregate_scores(results: list[dict[str, Any]]) -> dict[str, Any]:
             if str(case.get("status", "")).upper() in {"PASS", "FAIL"}:
                 bucket["completed"] += 1
             total_duration_ms += int(case.get("duration_ms", 0) or 0)
-            grading = case.get("grading", {}).get("summary", {})
+            grading = (case.get("grading") or {}).get("summary") or {}
             bucket["passed"] += int(grading.get("passed", 0) or 0)
             bucket["total"] += int(grading.get("total", 0) or 0)
 

@@ -1,10 +1,21 @@
+# 运行时产物（后端 backend/ 及根目录均忽略）
 .runtime/
 .tools/
-.venv/
 runs/
+
+# Python
+.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 *.egg-info/
 build/
 dist/
+
+# 临时探测文件
+.tmp_*.py
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
