@@ -29,6 +29,7 @@ if (-not $resolvedStage.StartsWith($resolvedOutput + '\', [System.StringComparis
 $packageName = "agent-eval-full-offline-win-x64-$($commit.Substring(0,8))"
 $packageRoot = Join-Path $stage $packageName
 $bundle = Join-Path $stage "agent_eval_multca_skillup.bundle"
+$pythonBuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-eval-python-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
 function Get-Asset([object]$Entry, [string]$Subdirectory) {
@@ -64,25 +65,24 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "offline\assets\git") | Out-Null
     Copy-Item $bundle (Join-Path $packageRoot "offline\assets\git\agent_eval_multca_skillup.bundle")
 
-    $pythonArchive = Get-Asset $lock.python "python"
-    $getPipEntry = [pscustomobject]@{ url = $lock.python.get_pip_url; file = $lock.python.get_pip_file }
-    $getPip = Get-Asset $getPipEntry "python"
+    $pythonInstaller = Get-Asset $lock.python "python"
     $goArchive = Get-Asset $lock.go "go"
     $nodeArchive = Get-Asset $lock.node "node"
     $null = Get-Asset $lock.git "git"
     $null = Get-Asset $lock.vc_redist "system"
 
     $builderRoot = Join-Path $stage "builder"
-    $packagePython = Join-Path $packageRoot "backend\.runtime\windows\python"
-    New-Item -ItemType Directory -Force -Path $packagePython | Out-Null
-    Expand-Archive -LiteralPath $pythonArchive -DestinationPath $packagePython -Force
-    $pth = Get-ChildItem $packagePython -Filter "python*._pth" -File | Select-Object -First 1
-    if (-not $pth) { throw "Embedded Python path configuration is missing." }
-    $pthContent = (Get-Content -Raw $pth.FullName).Replace("#import site", "import site")
-    [System.IO.File]::WriteAllText($pth.FullName, $pthContent, [System.Text.UTF8Encoding]::new($false))
-    $python = Join-Path $packagePython "python.exe"
-    & $python $getPip --no-warn-script-location
-    if ($LASTEXITCODE -ne 0) { throw "pip bootstrap failed." }
+    New-Item -ItemType Directory -Force -Path $pythonBuildRoot | Out-Null
+    $pythonInstallLog = Join-Path $pythonBuildRoot "install.log"
+    $pythonInstall = Start-Process -FilePath $pythonInstaller -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
+        "/quiet", "InstallAllUsers=0", "Include_launcher=0", "Include_test=0",
+        "Include_pip=1", "PrependPath=0", "Shortcuts=0",
+        "TargetDir=`"$pythonBuildRoot`"", "/log", "`"$pythonInstallLog`""
+    )
+    $python = Join-Path $pythonBuildRoot "python.exe"
+    if ($pythonInstall.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $python)) {
+        throw "Build Python installation failed with exit code $($pythonInstall.ExitCode); see $pythonInstallLog."
+    }
     & $python -m pip install --upgrade pip setuptools wheel
     & $python -m pip install -r (Join-Path $packageRoot "offline\python-requirements.in")
     if ($LASTEXITCODE -ne 0) { throw "Python dependency resolution failed." }
@@ -92,6 +92,11 @@ try {
     & $python -m pip download --only-binary=:all: --dest (Join-Path $pythonAssetRoot "wheelhouse") -r $requirementsLock
     & $python -m pip download --only-binary=:all: --dest (Join-Path $pythonAssetRoot "wheelhouse") pip setuptools wheel
     if ($LASTEXITCODE -ne 0) { throw "Python wheelhouse creation failed." }
+    $pythonRuntimeArchive = Join-Path $pythonAssetRoot "python-runtime.zip"
+    Compress-Archive -Path (Join-Path $pythonBuildRoot "*") -DestinationPath $pythonRuntimeArchive -CompressionLevel Optimal
+    $packagePython = Join-Path $packageRoot "backend\.runtime\windows\python"
+    New-Item -ItemType Directory -Force -Path $packagePython | Out-Null
+    Copy-Item (Join-Path $pythonBuildRoot "*") $packagePython -Recurse -Force
 
     $goBuildRoot = Join-Path $builderRoot "go"
     Expand-Archive -LiteralPath $goArchive -DestinationPath $goBuildRoot -Force
@@ -164,5 +169,12 @@ try {
         Remove-Item -LiteralPath $stage -Recurse -Force
     } elseif ($KeepStage) {
         Write-Host "Stage retained: $stage"
+    }
+    $resolvedTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\')
+    $resolvedPythonBuild = [System.IO.Path]::GetFullPath($pythonBuildRoot)
+    if ($resolvedPythonBuild.StartsWith($resolvedTemp + '\', [System.StringComparison]::OrdinalIgnoreCase) -and
+        ([System.IO.Path]::GetFileName($resolvedPythonBuild)).StartsWith('agent-eval-python-') -and
+        (Test-Path -LiteralPath $pythonBuildRoot)) {
+        Remove-Item -LiteralPath $pythonBuildRoot -Recurse -Force
     }
 }

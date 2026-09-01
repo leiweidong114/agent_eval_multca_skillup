@@ -3,10 +3,8 @@
   "platform": "windows-amd64",
   "python": {
     "version": "3.12.10",
-    "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip",
-    "file": "python-3.12.10-embed-amd64.zip",
-    "get_pip_url": "https://bootstrap.pypa.io/get-pip.py",
-    "get_pip_file": "get-pip.py"
+    "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe",
+    "file": "python-3.12.10-amd64.exe"
   },
   "go": {
     "version": "1.26.7",
