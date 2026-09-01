@@ -6,6 +6,14 @@
       </template>
 
       <el-form :model="form" label-width="140px" label-position="left">
+        <el-form-item label="用户标识">
+          <el-input v-model="form.user_id" placeholder="用于归档，例如 wedax" style="width: 320px" />
+        </el-form-item>
+
+        <el-form-item label="评测任务名称">
+          <el-input v-model="form.task_name" placeholder="留空则使用 Skill 名称" style="width: 320px" />
+        </el-form-item>
+
         <el-form-item label="Skill">
           <el-select
             v-model="form.skill"
@@ -125,6 +133,13 @@
         <el-form-item label="数据库轨迹">
           <el-switch v-model="form.collect_database_trace" active-text="读取 LiteLLM 模型交互记录" />
         </el-form-item>
+        <el-form-item label="模型硬校验">
+          <el-switch
+            v-model="form.require_model_verification"
+            :disabled="!form.collect_database_trace"
+            active-text="数据库必须确认实际调用了指定模型"
+          />
+        </el-form-item>
 
         <el-form-item>
           <el-button type="primary" :loading="running" @click="run">
@@ -164,6 +179,8 @@ import {
 } from '../api'
 
 const form = reactive({
+  user_id: 'local',
+  task_name: '',
   skill: '',
   agent: '',
   profile: '',
@@ -179,6 +196,7 @@ const form = reactive({
   max_turns: 12,
   benchmark: true,
   collect_database_trace: true,
+  require_model_verification: true,
 })
 
 const agents = ref([])
@@ -248,6 +266,8 @@ function applyProfileModel(name) {
 
 function buildPayload() {
   return {
+    user_id: form.user_id,
+    task_name: form.task_name || null,
     skill: form.skill,
     agent: form.agent,
     profile: form.profile || null,
@@ -263,11 +283,16 @@ function buildPayload() {
     max_turns: form.max_turns,
     benchmark: form.benchmark,
     collect_database_trace: form.collect_database_trace,
+    require_model_verification: form.require_model_verification,
     extra_args: [],
   }
 }
 
 function validatePayload() {
+  if (!form.user_id.trim()) {
+    ElMessage.warning('请填写用户标识')
+    return false
+  }
   if (!form.skill) {
     ElMessage.warning('请选择 Skill')
     return false
@@ -318,6 +343,8 @@ async function validate() {
 }
 
 function reset() {
+  form.user_id = 'local'
+  form.task_name = ''
   form.skill = ''
   form.agent = ''
   form.profile = modelConfig.default_profile || ''
@@ -333,6 +360,7 @@ function reset() {
   form.max_turns = 12
   form.benchmark = true
   form.collect_database_trace = true
+  form.require_model_verification = true
   result.value = null
 }
 

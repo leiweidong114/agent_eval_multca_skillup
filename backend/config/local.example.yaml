@@ -1,6 +1,8 @@
 # Copy this file to local.yaml. local.yaml is ignored by Git.
 secrets:
   LITELLM_API_KEY: sk-your-virtual-key
+  # Required for exact per-task correlation and hard model verification.
+  LITELLM_MASTER_KEY: sk-your-litellm-master-key
   LITELLM_DATABASE_PASSWORD: your-database-password
 
 # Optional: override non-secret defaults for another environment.

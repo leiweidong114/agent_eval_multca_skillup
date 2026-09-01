@@ -14,6 +14,8 @@ router = APIRouter(prefix="/api", tags=["eval"])
 
 
 class RunRequest(BaseModel):
+    user_id: str = Field(default="local", min_length=1, max_length=128)
+    task_name: str | None = Field(default=None, max_length=200)
     skill: str = Field(..., description="Skill name under backend/skills")
     agent: str = Field(..., description="Multica Agent backend name")
     model: str | None = Field(default=None, description="Optional profile model override")
@@ -30,6 +32,10 @@ class RunRequest(BaseModel):
     benchmark: bool = Field(default=True)
     extra_args: list[str] = Field(default_factory=list)
     collect_database_trace: bool = Field(default=True)
+    require_model_verification: bool = Field(
+        default=True,
+        description="Fail the evaluation unless PostgreSQL proves the requested model was called",
+    )
 
 
 def _resolve_skill(name: str) -> Path:
@@ -61,6 +67,9 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         extra_args=request.extra_args,
         validate_only=validate_only,
         collect_database_trace=request.collect_database_trace,
+        require_model_verification=request.require_model_verification,
+        user_id=request.user_id,
+        task_name=request.task_name,
     )
     return result
 

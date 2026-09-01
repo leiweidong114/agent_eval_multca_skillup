@@ -9,6 +9,7 @@ from typing import Any, Mapping
 
 import yaml
 from urllib.parse import unquote, urlsplit
+from agent_eval.model_config import load_env_secrets
 
 
 class DatabaseConfigurationError(ValueError):
@@ -84,10 +85,18 @@ def resolve_database_config(
         raise DatabaseConfigurationError("database.privacy must be a mapping")
     source_environment = environ if environ is not None else os.environ
     secrets = data.get("secrets") or {}
+    env_secrets = load_env_secrets(project_root)
     url_env = str(database.get("url_env") or "DATABASE_URL")
-    database_url = str(source_environment.get(url_env) or secrets.get(url_env) or "").strip()
+    database_url = str(
+        source_environment.get(url_env) or secrets.get(url_env) or env_secrets.get(url_env) or ""
+    ).strip()
     password_env = str(database.get("password_env") or "LITELLM_DATABASE_PASSWORD")
-    password = str(source_environment.get(password_env) or secrets.get(password_env) or "")
+    password = str(
+        source_environment.get(password_env)
+        or secrets.get(password_env)
+        or env_secrets.get(password_env)
+        or ""
+    )
     host = str(database.get("host") or "127.0.0.1")
     port = int(database.get("port") or 5432)
     name = str(database.get("name") or "litellm")
@@ -242,4 +251,63 @@ def summarize_model_interactions(
         "average_request_duration_ms": round(sum(durations) / len(durations), 2)
         if durations
         else None,
+    }
+
+
+def verify_requested_model(
+    rows: list[dict[str, Any]],
+    *,
+    expected_model: str,
+    accepted_model_groups: list[str] | None = None,
+    exact: bool,
+) -> dict[str, Any]:
+    """Prove that a run reached the requested LiteLLM model.
+
+    Exact key correlation is preferred. A time-window match can still verify the
+    selected deployment, but its weaker Agent attribution is reported explicitly.
+    """
+    groups = {expected_model.lower()}
+    groups.update(str(item).lower() for item in accepted_model_groups or [] if item)
+    expected_leaf = expected_model.rsplit("/", 1)[-1].lower()
+
+    def matches(row: dict[str, Any]) -> bool:
+        model = str(row.get("model") or "").lower()
+        group = str(row.get("model_group") or "").lower()
+        return (
+            group in groups
+            or model == expected_model.lower()
+            or model.endswith(f"/{expected_leaf}")
+        )
+
+    successful = [row for row in rows if str(row.get("status") or "").lower() == "success"]
+    mismatches = [
+        {
+            "request_id": row.get("request_id"),
+            "model": row.get("model"),
+            "model_group": row.get("model_group"),
+            "model_id": row.get("model_id"),
+        }
+        for row in rows
+        if not matches(row)
+    ]
+    verified = bool(successful and not mismatches and all(matches(row) for row in successful))
+    if not rows:
+        reason = "no_database_interactions"
+    elif not successful:
+        reason = "no_successful_model_call"
+    elif mismatches:
+        reason = "requested_model_mismatch"
+    else:
+        reason = None
+    return {
+        "status": "verified" if verified else "unverified",
+        "verified": verified,
+        "agent_attribution": "exact_run_key" if exact else "model_and_time_window",
+        "exact_agent_attribution": exact,
+        "expected_model": expected_model,
+        "accepted_model_groups": sorted(groups),
+        "successful_matching_calls": sum(matches(row) for row in successful),
+        "mismatches": mismatches,
+        "reason": reason,
+        "warning": None if exact or not verified else "Exact run-key correlation was unavailable",
     }

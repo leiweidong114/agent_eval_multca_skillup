@@ -17,11 +17,20 @@ import psutil
 
 import yaml
 
-from agent_eval.database import fetch_model_interactions, summarize_model_interactions
-from agent_eval.model_config import resolve_model_profile, write_openclaw_profile_config
+from agent_eval.database import (
+    fetch_model_interactions,
+    summarize_model_interactions,
+    verify_requested_model,
+)
+from agent_eval.model_config import (
+    resolve_config_secret,
+    resolve_model_profile,
+    write_openclaw_profile_config,
+)
 from agent_eval.skill_quality import evaluate_skill_quality
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 from agent_eval.runtime import (
+    backend_agent,
     default_agent_command,
     find_multica_runtime,
     find_skill_up,
@@ -255,7 +264,10 @@ def run_evaluation(
     extra_args: list[str] | None = None,
     validate_only: bool = False,
     collect_database_trace: bool = True,
+    require_model_verification: bool = True,
     run_id: str | None = None,
+    user_id: str = "local",
+    task_name: str | None = None,
     progress_callback: Callable[[str, int, str], None] | None = None,
     cancel_event: Event | None = None,
 ) -> dict[str, Any]:
@@ -271,7 +283,8 @@ def run_evaluation(
         raise FileNotFoundError(f"SKILL.md was not found under {source_skill}")
     if not case_files and not prompt:
         raise ValueError("Pass at least one --case or --prompt")
-    agent = normalize_agent(agent)
+    requested_agent = normalize_agent(agent)
+    agent = backend_agent(requested_agent)
     resolved_profile = resolve_model_profile(
         project_root,
         profile_name=profile,
@@ -280,11 +293,13 @@ def run_evaluation(
     )
     provider_model = resolved_profile.model
     model = resolved_profile.model_for_agent(agent)
+    agent_executable = executable or default_agent_command(requested_agent)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    unique = uuid.uuid4().hex[:8]
-    runs_root = Path(output_dir).resolve() if output_dir else project_root / "runs"
-    generated_run_id = f"{timestamp}__{_slug(source_skill.name)}__{_slug(agent)}-{_slug(model)}__{unique}"
-    result_root = runs_root / (run_id or generated_run_id)
+    operation_id = run_id or uuid.uuid4().hex
+    owner = _slug(user_id or "local")
+    task = _slug(task_name or source_skill.name)
+    runs_root = Path(output_dir).resolve() if output_dir else project_root / "evaluation_results"
+    result_root = runs_root / owner / task / f"{timestamp}__{operation_id}"
     staged_skill = result_root / "staging" / "skill"
     _copy_skill(source_skill, staged_skill)
     skill_quality = evaluate_skill_quality(source_skill)
@@ -314,7 +329,7 @@ def run_evaluation(
     eval_config = build_eval_config(
         agent=agent,
         model=model,
-        executable=executable or default_agent_command(agent),
+        executable=agent_executable,
         runtime_binary=runtime_binary,
         skill_name=_slug(source_skill.name),
         case_paths=staged_cases,
@@ -330,13 +345,19 @@ def run_evaluation(
     )
     output = result_root / "skill-up"
     env = os.environ.copy()
+    if agent == "claude":
+        env.pop("ANTHROPIC_API_KEY", None)
     env.update(resolved_profile.environment)
+    if agent == "claude":
+        claude_config = result_root / "runtime" / "claude-config"
+        claude_config.mkdir(parents=True, exist_ok=True)
+        env["CLAUDE_CONFIG_DIR"] = str(claude_config)
     if agent == "openclaw":
         openclaw_config = result_root / "runtime" / "openclaw.json"
         write_openclaw_profile_config(openclaw_config, resolved_profile)
         env["OPENCLAW_CONFIG_PATH"] = str(openclaw_config)
-    env["AGENT_EVAL_RUN_ID"] = result_root.name
-    env["AGENT_EVAL_AGENT_EXECUTABLE"] = executable or default_agent_command(agent)
+    env["AGENT_EVAL_RUN_ID"] = operation_id
+    env["AGENT_EVAL_AGENT_EXECUTABLE"] = agent_executable
 
     progress("validating", 15, "Validating Skill-Up configuration")
     validation = _execute_process(
@@ -352,8 +373,12 @@ def run_evaluation(
 
     if validate_only:
         summary = {
-            "run_id": result_root.name,
-            "agent": agent,
+            "run_id": operation_id,
+            "user_id": user_id,
+            "task_name": task_name or source_skill.name,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "agent": requested_agent,
+            "agent_backend": agent,
             "model": model,
             "model_profile": resolved_profile.name,
             "provider_model": provider_model,
@@ -371,16 +396,23 @@ def run_evaluation(
         return summary
 
     trace_key = None
+    trace_key_error: str | None = None
     if collect_database_trace and resolved_profile.api_base:
         try:
-            trace_key = create_trace_key(resolved_profile.api_base, provider_model, result_root.name)
+            trace_key = create_trace_key(
+                resolved_profile.api_base,
+                provider_model,
+                operation_id,
+                master_key=resolve_config_secret(project_root, "LITELLM_MASTER_KEY"),
+            )
             if trace_key is not None:
                 for key_name in (
                     "LITELLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                     "ANTHROPIC_AUTH_TOKEN", "MINIMAX_API_KEY",
                 ):
                     env[key_name] = trace_key.key
-        except Exception:
+        except Exception as exc:
+            trace_key_error = str(exc)
             trace_key = None
 
     command = [
@@ -416,12 +448,18 @@ def run_evaluation(
     scores = aggregate_scores(results)
     scores["skill_quality_score"] = skill_quality["score"]
     database_trace: dict[str, Any] = {"status": "disabled"}
+    model_verification: dict[str, Any] = {
+        "status": "not_requested", "verified": None, "expected_model": provider_model
+    }
     trace_file: str | None = None
     if collect_database_trace:
         progress("collecting_trace", 85, "Collecting model interaction records")
         try:
             interactions: list[dict[str, Any]] = []
-            for attempt in range(3):
+            # LiteLLM writes SpendLogs asynchronously. Slower providers and a
+            # remote PostgreSQL instance can lag several seconds behind a
+            # successfully completed Agent process.
+            for attempt in range(8):
                 interactions = fetch_model_interactions(
                     project_root,
                     started_at=evaluation_started_at,
@@ -429,11 +467,22 @@ def run_evaluation(
                     model=provider_model,
                     key_alias=trace_key.alias if trace_key else None,
                 )
-                if interactions or attempt == 2:
+                if interactions or attempt == 7:
                     break
-                time.sleep(1)
+                time.sleep(2)
             database_trace = summarize_model_interactions(interactions, exact=trace_key is not None)
+            if trace_key_error:
+                database_trace["exact_correlation_error"] = trace_key_error
+            agent_model = resolved_profile.model_for_agent(agent)
+            accepted_groups = [agent_model.removeprefix("custom-local:")]
+            model_verification = verify_requested_model(
+                interactions,
+                expected_model=provider_model,
+                accepted_model_groups=accepted_groups,
+                exact=trace_key is not None,
+            )
             scores["model_trace_score"] = database_trace["model_call_success_rate"]
+            scores["model_verification_score"] = 100 if model_verification["verified"] else 0
             trace_path = result_root / "model-interactions.json"
             trace_path.write_text(
                 json.dumps(interactions, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -441,11 +490,29 @@ def run_evaluation(
             trace_file = str(trace_path)
         except Exception as exc:
             database_trace = {"status": "unavailable", "error": str(exc)}
+            model_verification = {
+                "status": "unverified", "verified": False,
+                "expected_model": provider_model, "reason": "database_trace_unavailable",
+                "error": str(exc),
+            }
             scores["model_trace_score"] = None
+            scores["model_verification_score"] = 0
+
+    verification_failed = bool(
+        collect_database_trace
+        and require_model_verification
+        and model_verification.get("verified") is not True
+    )
+    evaluation_status = "failed" if completed.returncode or verification_failed else "completed"
 
     summary = {
-        "run_id": result_root.name,
-        "agent": agent,
+        "run_id": operation_id,
+        "user_id": user_id,
+        "task_name": task_name or source_skill.name,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": evaluation_status,
+        "agent": requested_agent,
+        "agent_backend": agent,
         "model": model,
         "model_profile": resolved_profile.name,
         "provider_model": provider_model,
@@ -456,6 +523,8 @@ def run_evaluation(
         "scores": scores,
         "skill_quality": skill_quality,
         "database_trace": database_trace,
+        "model_verification": model_verification,
+        "require_model_verification": require_model_verification,
         "database_trace_file": trace_file,
         "results": results,
     }
@@ -466,5 +535,9 @@ def run_evaluation(
         delete_trace_key(trace_key)
     except Exception:
         pass
-    progress("completed", 100, "Evaluation completed")
+    progress(
+        "completed" if evaluation_status == "completed" else "failed",
+        100,
+        "Evaluation completed" if evaluation_status == "completed" else "Model verification failed",
+    )
     return summary

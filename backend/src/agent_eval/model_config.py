@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlsplit, urlunsplit
 
 import yaml
+
+
+CODEBUDDY_COMPATIBLE_MODELS = {
+    "opencode-go/minimax-m2.5": "custom-local:MiniMax-M2.5",
+    "opencode-go/minimax-m2.7": "custom-local:MiniMax-M2.7",
+    "opencode-go/minimax-m3": "custom-local:MiniMax-M3",
+    "opencode-go/grok-4.5": "custom-local:grok-4.5",
+}
 
 
 @dataclass(frozen=True)
@@ -19,7 +28,18 @@ class ResolvedModelProfile:
     agent_args: tuple[str, ...]
 
     def model_for_agent(self, agent: str) -> str:
-        return "main" if agent == "openclaw" else self.model
+        if agent == "openclaw":
+            return "main"
+        if agent == "claude" and self.api_base:
+            # Claude Code accepts its stable family aliases at the CLI layer;
+            # the corresponding environment mapping below selects the actual
+            # LiteLLM deployment without requiring a native Anthropic model.
+            return "sonnet"
+        if agent == "codebuddy" and self.model in CODEBUDDY_COMPATIBLE_MODELS:
+            return CODEBUDDY_COMPATIBLE_MODELS[self.model]
+        if agent == "opencode" and self.api_base:
+            return f"litellm/{self.model}"
+        return self.model
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -106,11 +126,45 @@ def resolve_model_profile(
         "ANTHROPIC_API_KEY": api_key,
         "ANTHROPIC_AUTH_TOKEN": api_key,
         "ANTHROPIC_BASE_URL": anthropic_base,
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": model,
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": model,
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": model,
         "MINIMAX_API_KEY": api_key,
         "MINIMAX_BASE_URL": openai_base,
     }
+    if agent == "claude":
+        # LiteLLM virtual keys are bearer tokens. Claude Code gives
+        # ANTHROPIC_API_KEY precedence and would send it as x-api-key, so use
+        # ANTHROPIC_AUTH_TOKEN exclusively for this backend.
+        environment.pop("ANTHROPIC_API_KEY")
+    environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(
+        {
+            "provider": {
+                "litellm": {
+                    "npm": "@ai-sdk/openai-compatible",
+                    "name": "LiteLLM",
+                    "options": {
+                        "baseURL": openai_base,
+                        "apiKey": "{env:LITELLM_API_KEY}",
+                    },
+                    "models": {
+                        model: {
+                            "name": model,
+                            "reasoning": True,
+                            "limit": {"context": 200000, "output": 32000},
+                        }
+                    },
+                }
+            }
+        },
+        ensure_ascii=False,
+    )
     agent_args: tuple[str, ...] = ()
-    if agent == "codex":
+    if agent == "claude":
+        # Prevent user keychain/apiKeyHelper settings from overriding the
+        # gateway credentials supplied for this isolated evaluation process.
+        agent_args = ("--bare",)
+    elif agent == "codex":
         # Codex with an existing ChatGPT login otherwise keeps using the
         # built-in OpenAI provider even when OPENAI_BASE_URL is set.
         agent_args = (
@@ -126,6 +180,36 @@ def resolve_model_profile(
             'model_providers.litellm.wire_api="responses"',
         )
     return ResolvedModelProfile(selected, model, api_base, environment, agent_args)
+
+
+def load_env_secrets(project_root: Path) -> dict[str, str]:
+    """Load a simple ignored KEY=value file without mutating process globals."""
+    path = project_root / "config" / "secrets.env"
+    if not path.is_file():
+        return {}
+    result: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            result[key] = value.strip().strip('"').strip("'")
+    return result
+
+
+def resolve_config_secret(
+    project_root: Path,
+    name: str,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> str:
+    config = load_model_config(project_root)
+    secrets = config.get("secrets") or {}
+    env_secrets = load_env_secrets(project_root)
+    source_environment = environ if environ is not None else os.environ
+    return str(source_environment.get(name) or secrets.get(name) or env_secrets.get(name) or "").strip()
 
 
 def describe_model_config(project_root: Path) -> dict[str, Any]:

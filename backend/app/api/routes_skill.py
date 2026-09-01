@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import shutil
-import os
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from agent_eval.database import database_health
-from agent_eval.model_config import describe_model_config
+from agent_eval.model_config import describe_model_config, resolve_config_secret
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
     default_agent_command,
@@ -74,7 +73,9 @@ def get_model_config() -> dict[str, object]:
 def get_database_health() -> dict[str, object]:
     """Check direct PostgreSQL access without exposing credentials."""
     result = database_health(BACKEND_ROOT)
-    result["exact_trace_available"] = bool(os.environ.get("LITELLM_MASTER_KEY"))
+    result["exact_trace_available"] = bool(
+        resolve_config_secret(BACKEND_ROOT, "LITELLM_MASTER_KEY")
+    )
     result["trace_note"] = (
         "Exact per-run LiteLLM correlation enabled" if result["exact_trace_available"]
         else "Set LITELLM_MASTER_KEY to enable exact correlation; current runs use model/time matching"

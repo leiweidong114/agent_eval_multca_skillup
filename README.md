@@ -6,7 +6,7 @@
 - Multica 的开源 Agent backend 负责统一调用不同 Agent CLI。
 - 本项目不启动 Multica Server，不调用 Multica 登录、Issue 或数据库服务。
 - 发给 Agent 的系统提示词固定为空；单条用例 Prompt 按原始字节内容传递，不注入 Multica 默认提示词。
-- PostgreSQL 只作为可选的只读轨迹数据源；数据库暂时不可用不会阻断结果评测。
+- PostgreSQL 作为指定模型硬校验的数据源；默认要求数据库精确确认当前任务实际调用了指定模型。
 
 ## 项目结构（dev 分支，前后端分离）
 
@@ -89,9 +89,9 @@ agent-eval CLI
         -> 指定的 Agent CLI + 指定模型
 ```
 
-Agent CLI 自身可能需要本地安装和配置；这属于 Agent 运行环境，不是 Multica 登录。评测可按模型和运行时间窗口关联 PostgreSQL `LiteLLM_SpendLogs`，原始匹配记录写入本次运行目录的 `model-interactions.json`。
+Agent CLI 自身可能需要本地安装和配置；这属于 Agent 运行环境，不是 Multica 登录。评测会为每个任务创建独立的 LiteLLM 虚拟 Key，并按 Key 别名关联 PostgreSQL `LiteLLM_SpendLogs`，原始记录写入任务目录的 `model-interactions.json`。
 
-评测任务由后端工作线程执行，任务状态写入 `backend/runs/_jobs`，前端可实时查询进度和取消。服务重启后未完成任务会标记为 `interrupted`，不会被误报为成功。
+评测任务由后端工作线程执行，任务状态写入 `backend/evaluation_results/_jobs`，前端可实时查询进度和取消。所有任务产物按 `用户/任务/时间__run_id` 集中归档；服务重启后未完成任务会标记为 `interrupted`。
 
 ## 模型配置
 
@@ -109,6 +109,14 @@ profiles:
     api_key_env: LITELLM_API_KEY
   litellm_minimax:
     model: MiniMax-M3
+    api_base: http://8.137.196.46/v1
+    api_key_env: LITELLM_API_KEY
+  litellm_opencode_go:
+    model: opencode-go/minimax-m3
+    api_base: http://8.137.196.46/v1
+    api_key_env: LITELLM_API_KEY
+  litellm_opencode_go_minimax_2_7:
+    model: opencode-go/minimax-m2.7
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
 ```
@@ -130,6 +138,32 @@ Codex 还会自动获得 `model_provider=litellm` 的命令行配置，避免已
 LiteLLM 地址。OpenClaw/JustDo 会继续使用 Agent ID `main`，并由评测端生成临时
 LiteLLM provider 配置；配置只引用 `${LITELLM_API_KEY}`，不会包含真实 Key。
 
+OpenCode Go 模型在 LiteLLM UI 中使用 `opencode-go/<model-id>` 名称管理。无需启动
+Skill-Up 评测即可先做 Agent/模型连通性检查：
+
+```powershell
+agent-eval check-agent --agent codex --profile litellm_opencode_go
+agent-eval check-agent --agent claude --profile litellm_opencode_go
+agent-eval check-agent --agent codebuddy --profile litellm_opencode_go
+agent-eval check-agent --agent openclaw --profile litellm_opencode_go
+agent-eval check-agent --agent opencode --profile litellm_opencode_go
+```
+
+例如统一验证 MiniMax 2.7：
+
+```powershell
+agent-eval check-agent --agent codex --profile litellm_opencode_go_minimax_2_7
+```
+
+各 Agent 的 CLI 模型名可以不同，但底层 LiteLLM deployment 必须是同一个。例如
+CodeBuddy 只接受 `custom-local:MiniMax-M2.7`，评测系统会将它确定性映射到
+`opencode-go/minimax-m2.7`；报告中保留统一模型名和 Agent 实际参数，避免把别名误当成
+另一个模型。
+
+该命令只发送一次 `CONNECTIVITY_OK` 探针，不创建 Skill-Up 运行、评分或评测结果目录。
+`agent-eval agents` 可列出 Multica 支持的后端及当前机器实际安装的 CLI；只有探测到
+可执行文件的 Agent 才能在本机完成连通性验证。
+
 ## PostgreSQL 配置
 
 非敏感连接参数位于 `backend/config/database.yaml`。密码通过环境变量提供：
@@ -144,6 +178,7 @@ $env:LITELLM_DATABASE_PASSWORD = "数据库密码"
 secrets:
   LITELLM_API_KEY: sk-your-virtual-key
   LITELLM_DATABASE_PASSWORD: your-database-password
+  LITELLM_MASTER_KEY: sk-your-litellm-master-key
 ```
 
 如果运行环境已经提供完整 `DATABASE_URL`，它优先于分项配置。数据库用户只需对 `LiteLLM_SpendLogs` 具有只读权限。健康检查：
@@ -152,13 +187,20 @@ secrets:
 Invoke-RestMethod http://127.0.0.1:8000/api/database/health
 ```
 
+部署脚本也可以生成被 Git 忽略的 `backend/config/secrets.env`：
+
+```dotenv
+LITELLM_DATABASE_PASSWORD=your-database-password
+LITELLM_MASTER_KEY=sk-your-litellm-master-key
+```
+
 如需把一次运行和数据库记录严格一一对应，额外在后端进程环境设置 LiteLLM Master Key：
 
 ```powershell
 $env:LITELLM_MASTER_KEY = "你的 LiteLLM Master Key"
 ```
 
-后端会为每个任务创建一小时有效的临时虚拟 Key，并按 `key_alias` 精确读取 SpendLogs，运行结束后删除。未配置时仍可运行，但报告会明确标记 `model_and_time_window`，不会声称是精确关联。默认不读取 messages/response；如确需内容，可在 `database.yaml` 打开 `include_content`，敏感键会脱敏、长文本会截断。本地产物默认保留 30 天，只有调用 cleanup 接口时才执行删除。
+后端优先为每个任务创建一小时有效的临时虚拟 Key，并按 `key_alias` 精确读取 SpendLogs，运行结束后删除。若网关禁止管理接口，则退化为任务时间窗口匹配，并在报告中明确标记较弱的 Agent 归因。默认开启模型硬校验：没有成功调用或实际模型不匹配都会令任务失败。只有显式使用 `--no-require-model-verification` 才允许保留“未确认”的诊断结果。默认不读取 messages/response。
 
 ## 原理图完整 Skill 与专项 Judge
 
@@ -217,6 +259,8 @@ Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `backend/.runt
 ```powershell
 .\backend\.runtime\windows\python\Scripts\agent-eval.exe run `
   --skill .\backend\skills\example-marker `
+  --user wedax `
+  --task-name marker-regression `
   --agent codex `
   --profile litellm_deepseek_flash `
   --case .\backend\skills\example-marker\evals\cases\marker.yaml `
@@ -241,14 +285,14 @@ Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `backend/.runt
 
 Linux 将入口替换为 `backend/.runtime/linux/python/bin/agent-eval`，参数完全相同。`--agent-executable` 可省略，此时从 `PATH` 查找该 Agent 的默认命令。模型字符串直接传给所选 Agent；模型是否可用由该 Agent 的本地配置和服务端权限决定。
 
-当前 Multica 版本可选 backend：`antigravity`、`claude`、`codebuddy`、`codex`、`copilot`、`cursor`、`deveco`、`dim`、`dsh`、`grok`、`hermes`、`kimi`、`kiro`、`mcode`、`omp`、`openclaw`、`opencode`、`pi`、`qoder`、`qoderclicn`、`qwen`、`qwenpaw`、`reasonix`、`traecli`、`zeroclaw`。
+当前可选 Agent 包含 Multica 原生 backend，以及映射到 OpenClaw backend 的 `justdo` 入口。运行 `agent-eval agents` 可查看当前机器实际探测到的可执行文件。
 
 ### 使用 JustDo Agent
 
-JustDo 的 `justdo_eval` 分支提供兼容 OpenClaw CLI 的本地 Agent launcher。保持 JustDo
-运行或驻留托盘，在设置中启用外部连接，然后使用 `--agent openclaw`、`--model main` 和
-launcher 的绝对路径。这里的 `main` 是 JustDo/OpenClaw agent ID，不是底层模型名；实际
-模型和凭据由 JustDo 配置管理。
+JustDo 提供兼容 OpenClaw CLI 的本地 Agent launcher。保持 JustDo 运行或驻留托盘，
+使用 `--agent justdo` 和模型 profile；评测系统会自动使用 OpenClaw backend，并生成只对
+当前任务有效的模型配置。Windows 会自动发现开发 launcher，也可用
+`JUSTDO_AGENT_EXECUTABLE` 或 `--agent-executable` 显式指定。
 
 Windows 开发模式：
 
@@ -260,8 +304,8 @@ npm run electron:dev:openclaw
 Set-Location D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup
 .\backend\.runtime\windows\python\Scripts\agent-eval.exe run `
   --skill .\backend\skills\example-marker `
-  --agent openclaw `
-  --model main `
+  --agent justdo `
+  --profile litellm_opencode_go_minimax_2_7 `
   --agent-executable "$env:APPDATA\JustDo\multica\development\JustDo-agent.exe" `
   --case .\backend\skills\example-marker\evals\cases\marker.yaml `
   --parallelism 1 `
@@ -274,8 +318,8 @@ Linux：
 ```sh
 ./backend/.runtime/linux/python/bin/agent-eval run \
   --skill ./backend/skills/example-marker \
-  --agent openclaw \
-  --model main \
+  --agent justdo \
+  --profile litellm_opencode_go_minimax_2_7 \
   --agent-executable "$HOME/.local/bin/JustDo-agent" \
   --case ./backend/skills/example-marker/evals/cases/marker.yaml \
   --parallelism 1 \
@@ -302,7 +346,7 @@ expect:
 每次运行会把源 Skill 复制到隔离目录：
 
 ```text
-runs/<时间>__<skill>__<agent>-<model>__<id>/
+backend/evaluation_results/<用户>/<任务>/<时间>__<run_id>/
   staging/skill/            # 隔离副本与本次 eval.yaml
   skill-up/                 # Skill-Up JSON、HTML、JUnit、日志和 transcript
   model-interactions.json   # PostgreSQL 中与本次运行匹配的模型交互
@@ -317,6 +361,7 @@ runs/<时间>__<skill>__<agent>-<model>__<id>/
 - `execution_stability`：有 Skill 用例中成功完成评测流程的比例；PASS 和普通断言 FAIL 都算完成，运行错误/超时不算。
 - `skill_quality_score`：对 Skill 名称、描述、流程、约束、产物、异常处理和验证说明的透明结构评分。
 - `model_trace_score`：数据库匹配模型调用的成功率；未走 LiteLLM 或没有匹配记录时为 `null`。
+- `model_verification_score`：数据库精确确认指定模型时为 100，否则为 0；详情见 `model_verification`。
 - `total_tokens`、`total_duration_ms`：所有本次执行的资源统计。
 
 默认 `--benchmark` 会同时运行有 Skill 和无 Skill 两组。只验证任务结果、不做基线时使用 `--no-benchmark`。增加 `--iterations N` 可用于稳定性评测。

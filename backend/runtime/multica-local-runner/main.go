@@ -74,6 +74,8 @@ func normalizeAgent(value string) string {
 		return "qwen"
 	case "qodercli":
 		return "qoder"
+	case "justdo":
+		return "openclaw"
 	default:
 		return strings.ToLower(strings.TrimSpace(value))
 	}

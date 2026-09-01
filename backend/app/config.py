@@ -8,5 +8,6 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 # 评测 Skill 根目录
 SKILLS_ROOT = BACKEND_ROOT / "skills"
 
-# 评测输出目录
-RUNS_ROOT = BACKEND_ROOT / "runs"
+# 所有评测产物集中在：evaluation_results/<用户>/<任务>/<时间__run_id>/
+EVALUATION_RESULTS_ROOT = BACKEND_ROOT / "evaluation_results"
+RUNS_ROOT = EVALUATION_RESULTS_ROOT  # compatibility alias for existing imports

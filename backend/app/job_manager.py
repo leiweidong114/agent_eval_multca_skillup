@@ -48,6 +48,8 @@ class EvaluationJobManager:
             "job_id": job_id, "status": "queued", "phase": "queued", "progress": 0,
             "message": "Waiting for a worker", "created_at": now, "updated_at": now,
             "skill": skill_dir.name, "agent": request.get("agent"),
+            "user_id": request.get("user_id", "local"),
+            "task_name": request.get("task_name") or skill_dir.name,
             "model": request.get("model"), "profile": request.get("profile"),
             "result": None, "error": None,
         }
@@ -84,9 +86,16 @@ class EvaluationJobManager:
                 benchmark=request.get("benchmark", True), output_dir=str(RUNS_ROOT),
                 extra_args=request.get("extra_args"), validate_only=False,
                 collect_database_trace=request.get("collect_database_trace", True),
+                require_model_verification=request.get("require_model_verification", True),
                 run_id=job_id, progress_callback=on_progress, cancel_event=cancel,
+                user_id=request.get("user_id", "local"),
+                task_name=request.get("task_name") or skill_dir.name,
             )
-            self._update(job_id, status="completed", phase="completed", progress=100, result=result)
+            status = "completed" if result.get("status", "completed") == "completed" else "failed"
+            self._update(
+                job_id, status=status, phase=status, progress=100, result=result,
+                message="Evaluation completed" if status == "completed" else "Model verification failed",
+            )
         except EvaluationCancelled as exc:
             self._update(job_id, status="cancelled", phase="cancelled", message=str(exc))
         except Exception as exc:

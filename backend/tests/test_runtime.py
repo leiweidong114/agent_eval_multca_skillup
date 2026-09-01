@@ -7,6 +7,7 @@ from agent_eval.runtime import (
     find_multica_runtime,
     find_skill_up,
     normalize_agent,
+    backend_agent,
     skill_target,
 )
 
@@ -14,6 +15,8 @@ from agent_eval.runtime import (
 def test_agent_aliases_and_commands():
     assert normalize_agent("claude_code") == "claude"
     assert normalize_agent("qwen_code") == "qwen"
+    assert normalize_agent("justdo") == "justdo"
+    assert backend_agent("justdo") == "openclaw"
     assert default_agent_command("qodercli") == "qodercli"
     with pytest.raises(ValueError, match="Unsupported Agent"):
         normalize_agent("not-a-real-agent")

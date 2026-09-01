@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -14,9 +15,14 @@ def expired_runs() -> dict[str, Any]:
     cutoff = datetime.now() - timedelta(days=days)
     items = []
     if RUNS_ROOT.is_dir():
-        for path in RUNS_ROOT.iterdir():
-            if path.is_dir() and path.name != "_jobs" and datetime.fromtimestamp(path.stat().st_mtime) < cutoff:
-                items.append({"run_id": path.name, "path": str(path), "modified_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat()})
+        for report in RUNS_ROOT.rglob("evaluation-report.json"):
+            path = report.parent
+            if "_jobs" not in path.parts and datetime.fromtimestamp(path.stat().st_mtime) < cutoff:
+                try:
+                    data = json.loads(report.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    data = {}
+                items.append({"run_id": data.get("run_id", path.name), "path": str(path), "modified_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat()})
     return {"retention_days": days, "cutoff": cutoff.isoformat(), "expired": items}
 
 
@@ -26,7 +32,7 @@ def cleanup_expired_runs() -> dict[str, Any]:
     deleted = []
     for item in report["expired"]:
         target = Path(item["path"]).resolve()
-        if target.parent != root:
+        if root not in target.parents:
             continue
         shutil.rmtree(target)
         deleted.append(item["run_id"])

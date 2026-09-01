@@ -7,6 +7,7 @@ from agent_eval.database import (
     DatabaseConfigurationError,
     resolve_database_config,
     summarize_model_interactions,
+    verify_requested_model,
 )
 
 
@@ -73,3 +74,33 @@ def test_model_interaction_summary_is_deterministic():
     assert summary["total_tokens"] == 18
     assert summary["average_request_duration_ms"] == 200
     assert summarize_model_interactions([], exact=True)["correlation"] == "run_scoped_virtual_key"
+
+
+def test_requested_model_verification_requires_exact_successful_match():
+    rows = [{
+        "request_id": "req-1", "status": "success",
+        "model": "anthropic/minimax-m2.7", "model_group": "opencode-go/minimax-m2.7",
+        "model_id": "deployment-1",
+    }]
+    verified = verify_requested_model(
+        rows, expected_model="opencode-go/minimax-m2.7", exact=True
+    )
+    assert verified["verified"] is True
+    assert verified["successful_matching_calls"] == 1
+    weak = verify_requested_model(
+        rows, expected_model="opencode-go/minimax-m2.7", exact=False
+    )
+    assert weak["verified"] is True
+    assert weak["exact_agent_attribution"] is False
+    assert weak["warning"]
+
+
+def test_requested_model_verification_reports_mismatch():
+    result = verify_requested_model(
+        [{"request_id": "req-2", "status": "success", "model": "openai/gpt-4.1", "model_group": "gpt-4.1"}],
+        expected_model="opencode-go/minimax-m2.7",
+        exact=True,
+    )
+    assert result["verified"] is False
+    assert result["reason"] == "requested_model_mismatch"
+    assert result["mismatches"][0]["request_id"] == "req-2"
