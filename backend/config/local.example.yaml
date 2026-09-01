@@ -9,3 +9,14 @@ secrets:
 # database:
 #   host: 10.0.0.10
 #   port: 5432
+
+# Optional scoring and judge override. The committed default uses the
+# litellm_deepseek_pro profile and fails open to deterministic rules.
+# scoring:
+#   dimensions:
+#     result: {weight: 0.5, rule_weight: 0.6, llm_weight: 0.4}
+#   llm_judge:
+#     enabled: true
+#     required: false
+#     profile: litellm_deepseek_pro
+#     model: deepseek-v4-pro

@@ -34,16 +34,32 @@ type inputMessage struct {
 }
 
 type sessionInput struct {
-	Messages  []inputMessage   `json:"messages"`
-	Workspace string           `json:"workspace"`
-	CaseID    string           `json:"case_id"`
-	Variant   string           `json:"variant"`
+	Messages  []inputMessage    `json:"messages"`
+	Workspace string            `json:"workspace"`
+	CaseID    string            `json:"case_id"`
+	Variant   string            `json:"variant"`
 	Kwargs    map[string]string `json:"kwargs"`
 }
 
 type transcriptMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string          `json:"role"`
+	Content    string          `json:"content,omitempty"`
+	Turn       int             `json:"turn,omitempty"`
+	ToolCall   *toolCallInfo   `json:"tool_call,omitempty"`
+	ToolResult *toolResultInfo `json:"tool_result,omitempty"`
+}
+
+type toolCallInfo struct {
+	ID        string         `json:"id,omitempty"`
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+}
+
+type toolResultInfo struct {
+	CallID     string `json:"call_id,omitempty"`
+	Status     string `json:"status,omitempty"`
+	Content    any    `json:"content,omitempty"`
+	DurationMs int64  `json:"duration_ms,omitempty"`
 }
 
 type artifactFile struct {
@@ -56,7 +72,11 @@ type artifactSet struct {
 }
 
 type sessionResult struct {
+	Engine       string              `json:"engine,omitempty"`
+	Model        string              `json:"model,omitempty"`
+	SessionID    string              `json:"session_id,omitempty"`
 	ExitCode     int                 `json:"exit_code"`
+	DurationMs   int64               `json:"duration_ms"`
 	FinalMessage string              `json:"final_message"`
 	Turns        int                 `json:"turns"`
 	InputTokens  int64               `json:"input_tokens"`
@@ -221,7 +241,27 @@ func main() {
 	for _, message := range input.Messages {
 		transcript = append(transcript, transcriptMessage{Role: message.Role, Content: contentText(message.Content)})
 	}
+	messageCounts := map[string]int{}
 	for message := range session.Messages {
+		messageCounts[string(message.Type)]++
+		if message.Type == agent.MessageToolUse {
+			transcript = append(transcript, transcriptMessage{
+				Role: "tool_call", Turn: 1,
+				ToolCall: &toolCallInfo{ID: message.CallID, Name: message.Tool, Arguments: message.Input},
+			})
+			continue
+		}
+		if message.Type == agent.MessageToolResult {
+			transcript = append(transcript, transcriptMessage{
+				Role: "tool_result", Turn: 1,
+				ToolResult: &toolResultInfo{CallID: message.CallID, Status: message.Status, Content: message.Output},
+			})
+			continue
+		}
+		if message.Type == agent.MessageError {
+			transcript = append(transcript, transcriptMessage{Role: "error", Content: message.Content, Turn: 1})
+			continue
+		}
 		content := message.Content
 		if message.Type != agent.MessageText {
 			event := map[string]any{
@@ -234,23 +274,47 @@ func main() {
 				content = string(encoded)
 			}
 		}
-		transcript = append(transcript, transcriptMessage{Role: "assistant", Content: content})
+		transcript = append(transcript, transcriptMessage{Role: "assistant", Content: content, Turn: 1})
 	}
 	final := <-session.Result
-	var inputTokens, outputTokens int64
-	for _, usage := range final.Usage {
+	var inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens int64
+	models := make([]string, 0, len(final.Usage))
+	for usedModel, usage := range final.Usage {
+		models = append(models, usedModel)
 		inputTokens += usage.InputTokens
 		outputTokens += usage.OutputTokens
+		cacheReadTokens += usage.CacheReadTokens
+		cacheWriteTokens += usage.CacheWriteTokens
+	}
+	telemetry := map[string]any{
+		"schema_version":     "agent-eval-telemetry-v1",
+		"input_tokens":       inputTokens,
+		"output_tokens":      outputTokens,
+		"cache_read_tokens":  cacheReadTokens,
+		"cache_write_tokens": cacheWriteTokens,
+		"duration_ms":        final.DurationMs,
+		"session_id":         final.SessionID,
+		"models":             models,
+		"message_counts":     messageCounts,
+	}
+	if encoded, marshalErr := json.Marshal(telemetry); marshalErr == nil {
+		transcript = append(transcript, transcriptMessage{
+			Role: "assistant", Turn: 1, Content: "AGENT_EVAL_TELEMETRY_JSON:" + string(encoded),
+		})
 	}
 	exitCode := 1
 	if final.Status == "completed" {
 		exitCode = 0
 	}
 	result := sessionResult{
+		Engine:       "multica-local",
+		Model:        model,
+		SessionID:    final.SessionID,
 		ExitCode:     exitCode,
+		DurationMs:   final.DurationMs,
 		FinalMessage: final.Output,
 		Turns:        1,
-		InputTokens:  inputTokens,
+		InputTokens:  inputTokens + cacheReadTokens + cacheWriteTokens,
 		OutputTokens: outputTokens,
 		Transcript:   transcript,
 		Artifacts:    collectArtifacts(workspace),

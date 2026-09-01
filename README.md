@@ -51,6 +51,7 @@ agent_eval_multca_skillup/
 | GET | /api/database/health | PostgreSQL 直连状态与交互记录数 |
 | POST | /api/run | 创建后台评测任务，立即返回 job_id |
 | GET/POST | /api/jobs、/api/jobs/{id}/cancel | 进度查询与取消 |
+| GET | /api/capacity | 顶层任务池与单任务 case 并发容量 |
 | POST | /api/validate | 仅校验配置不完整运行 |
 | GET | /api/runs | 历史评测记录 |
 | GET | /api/runs/{run_id} | 单次评测详情 |
@@ -92,6 +93,9 @@ agent-eval CLI
 Agent CLI 自身可能需要本地安装和配置；这属于 Agent 运行环境，不是 Multica 登录。评测会为每个任务创建独立的 LiteLLM 虚拟 Key，并按 Key 别名关联 PostgreSQL `LiteLLM_SpendLogs`，原始记录写入任务目录的 `model-interactions.json`。
 
 评测任务由后端工作线程执行，任务状态写入 `backend/evaluation_results/_jobs`，前端可实时查询进度和取消。所有任务产物按 `用户/任务/时间__run_id` 集中归档；服务重启后未完成任务会标记为 `interrupted`。
+
+并发、三维评分、Skill 安装语义、可观测字段限制和新 Agent 上线门槛见
+[`docs/evaluation-scoring-and-agent-contract.md`](docs/evaluation-scoring-and-agent-contract.md)。
 
 ## 模型配置
 

@@ -247,6 +247,10 @@ def summarize_model_interactions(
         "prompt_tokens": sum(int(row.get("prompt_tokens") or 0) for row in rows),
         "completion_tokens": sum(int(row.get("completion_tokens") or 0) for row in rows),
         "total_tokens": sum(int(row.get("total_tokens") or 0) for row in rows),
+        "max_prompt_tokens": max(
+            (int(row.get("prompt_tokens") or 0) for row in rows), default=None
+        ),
+        "models": sorted({str(row.get("model")) for row in rows if row.get("model")}),
         "spend": round(sum(float(row.get("spend") or 0) for row in rows), 10),
         "average_request_duration_ms": round(sum(durations) / len(durations), 2)
         if durations

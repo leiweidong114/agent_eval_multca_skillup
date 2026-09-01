@@ -21,7 +21,7 @@ def _load_report(run_dir: Path) -> dict[str, object] | None:
 
 
 @router.get("/runs")
-def list_runs() -> list[dict[str, object]]:
+def list_runs(user_id: str | None = None) -> list[dict[str, object]]:
     """List evaluation run directories with a report, newest first."""
     if not RUNS_ROOT.is_dir():
         return []
@@ -36,9 +36,12 @@ def list_runs() -> list[dict[str, object]]:
         report = _load_report(run_dir)
         if report is None:
             continue
+        if user_id is not None and report.get("user_id") != user_id:
+            continue
         entries.append(
             {
                 "run_id": report.get("run_id", run_dir.name),
+                "task_id": report.get("task_id", report.get("run_id", run_dir.name)),
                 "user_id": report.get("user_id", run_dir.parents[1].name),
                 "task_name": report.get("task_name", run_dir.parent.name),
                 "result_dir": str(run_dir),

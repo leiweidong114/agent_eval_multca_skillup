@@ -62,6 +62,8 @@
           <el-descriptions-item label="模型">{{ selected.report.model }}</el-descriptions-item>
           <el-descriptions-item label="Skill" :span="2">{{ selected.report.skill }}</el-descriptions-item>
           <el-descriptions-item label="Run ID" :span="2">{{ selected.report.run_id }}</el-descriptions-item>
+          <el-descriptions-item label="用户 ID">{{ selected.report.user_id || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="任务 ID">{{ selected.report.task_id || selected.report.run_id }}</el-descriptions-item>
           <el-descriptions-item label="结果目录" :span="2">
             <el-text size="small">{{ selected.report.result_dir }}</el-text>
           </el-descriptions-item>
@@ -82,6 +84,10 @@
             :closable="false"
           />
           <pre class="trace">{{JSON.stringify(selected.report.model_verification,null,2)}}</pre>
+        </div>
+        <div v-if="selected.report.scoring" style="margin-top:16px">
+          <h4>三维综合评分</h4>
+          <pre class="trace">{{JSON.stringify(selected.report.scoring,null,2)}}</pre>
         </div>
       </template>
     </el-drawer>

@@ -29,6 +29,14 @@ from agent_eval.model_config import (
 )
 from agent_eval.skill_quality import evaluate_skill_quality
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
+from agent_eval.agent_contract import assess_agent_contract
+from agent_eval.llm_judge import run_llm_judge
+from agent_eval.scoring import (
+    calculate_rule_dimensions,
+    collect_process_metrics,
+    combine_dimensions,
+    load_scoring_config,
+)
 from agent_eval.runtime import (
     backend_agent,
     default_agent_command,
@@ -41,6 +49,13 @@ from agent_eval.runtime import (
 
 def _slug(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-._") or "run"
+
+
+def _identity(value: str, *, field: str) -> str:
+    normalized = value.strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}", normalized):
+        raise ValueError(f"{field} must be 1-128 safe identifier characters")
+    return normalized
 
 
 def _copy_skill(source: Path, target: Path) -> None:
@@ -270,6 +285,9 @@ def run_evaluation(
     task_name: str | None = None,
     progress_callback: Callable[[str, int, str], None] | None = None,
     cancel_event: Event | None = None,
+    task_id: str | None = None,
+    client_task_id: str | None = None,
+    run_llm_judge_enabled: bool = True,
 ) -> dict[str, Any]:
     def progress(phase: str, percent: int, message: str) -> None:
         if cancel_event is not None and cancel_event.is_set():
@@ -278,6 +296,11 @@ def run_evaluation(
             progress_callback(phase, percent, message)
 
     progress("preparing", 5, "Preparing isolated Skill workspace")
+    user_id = _identity(user_id, field="user_id")
+    if task_id is not None:
+        task_id = _identity(task_id, field="task_id")
+    if client_task_id is not None:
+        client_task_id = _identity(client_task_id, field="client_task_id")
     source_skill = Path(skill_dir).resolve()
     if not (source_skill / "SKILL.md").is_file():
         raise FileNotFoundError(f"SKILL.md was not found under {source_skill}")
@@ -295,11 +318,14 @@ def run_evaluation(
     model = resolved_profile.model_for_agent(agent)
     agent_executable = executable or default_agent_command(requested_agent)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    operation_id = run_id or uuid.uuid4().hex
+    operation_id = _identity(task_id or run_id or uuid.uuid4().hex, field="task_id")
+    canonical_task_id = operation_id
     owner = _slug(user_id or "local")
     task = _slug(task_name or source_skill.name)
     runs_root = Path(output_dir).resolve() if output_dir else project_root / "evaluation_results"
     result_root = runs_root / owner / task / f"{timestamp}__{operation_id}"
+    if result_root.exists():
+        raise FileExistsError(f"Task output already exists: {canonical_task_id}")
     staged_skill = result_root / "staging" / "skill"
     _copy_skill(source_skill, staged_skill)
     skill_quality = evaluate_skill_quality(source_skill)
@@ -357,6 +383,8 @@ def run_evaluation(
         write_openclaw_profile_config(openclaw_config, resolved_profile)
         env["OPENCLAW_CONFIG_PATH"] = str(openclaw_config)
     env["AGENT_EVAL_RUN_ID"] = operation_id
+    env["AGENT_EVAL_TASK_ID"] = canonical_task_id
+    env["AGENT_EVAL_USER_ID"] = user_id
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = agent_executable
 
     progress("validating", 15, "Validating Skill-Up configuration")
@@ -374,6 +402,8 @@ def run_evaluation(
     if validate_only:
         summary = {
             "run_id": operation_id,
+            "task_id": canonical_task_id,
+            "client_task_id": client_task_id,
             "user_id": user_id,
             "task_name": task_name or source_skill.name,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -388,6 +418,8 @@ def run_evaluation(
             "skill_up_exit_code": 0,
             "iterations": 0,
             "skill_quality": skill_quality,
+            "eval_config_file": str(eval_path),
+            "eval_config_generated_by": "agent_eval.runner.build_eval_config",
             "results": [],
         }
         (result_root / "evaluation-report.json").write_text(
@@ -505,8 +537,58 @@ def run_evaluation(
     )
     evaluation_status = "failed" if completed.returncode or verification_failed else "completed"
 
+    progress("scoring", 92, "Calculating rule and LLM evaluation scores")
+    process_metrics = collect_process_metrics(results, database_trace)
+    process_metrics["total_duration_ms"] = scores.get("total_duration_ms", 0)
+    scoring_config = load_scoring_config(project_root)
+    rule_dimensions = calculate_rule_dimensions(
+        scores=scores,
+        process=process_metrics,
+        skill_quality=skill_quality,
+        config=scoring_config,
+    )
+    llm_evidence = {
+        "task": {
+            "task_id": canonical_task_id,
+            "agent": agent,
+            "requested_model": model,
+            "skill": source_skill.name,
+        },
+        "deterministic_scores": scores,
+        "process_metrics": process_metrics,
+        "skill_quality_rules": skill_quality,
+        "skill_md": (source_skill / "SKILL.md").read_text(encoding="utf-8")[:30000],
+        "skill_up_results": results,
+    }
+    llm_judge = (
+        run_llm_judge(
+            project_root=project_root,
+            scoring_config=scoring_config,
+            evidence=llm_evidence,
+        )
+        if run_llm_judge_enabled
+        else {"status": "disabled_by_request"}
+    )
+    scoring = combine_dimensions(
+        rule_dimensions=rule_dimensions,
+        llm_judge=llm_judge,
+        config=scoring_config,
+    )
+    scores["overall_score"] = scoring["overall_score"]
+    scores["result_dimension_score"] = scoring["dimensions"]["result"]["score"]
+    scores["process_dimension_score"] = scoring["dimensions"]["process"]["score"]
+    scores["skill_quality_dimension_score"] = scoring["dimensions"]["skill_quality"]["score"]
+    agent_contract = assess_agent_contract(
+        agent=agent,
+        requested_model=model,
+        process_metrics=process_metrics,
+        skill_up_exit_code=completed.returncode,
+    )
+
     summary = {
         "run_id": operation_id,
+        "task_id": canonical_task_id,
+        "client_task_id": client_task_id,
         "user_id": user_id,
         "task_name": task_name or source_skill.name,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -522,10 +604,15 @@ def run_evaluation(
         "iterations": len(results),
         "scores": scores,
         "skill_quality": skill_quality,
+        "process_metrics": process_metrics,
+        "scoring": scoring,
+        "agent_contract": agent_contract,
         "database_trace": database_trace,
         "model_verification": model_verification,
         "require_model_verification": require_model_verification,
         "database_trace_file": trace_file,
+        "eval_config_file": str(eval_path),
+        "eval_config_generated_by": "agent_eval.runner.build_eval_config",
         "results": results,
     }
     (result_root / "evaluation-report.json").write_text(
