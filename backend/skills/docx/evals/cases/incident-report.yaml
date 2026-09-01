@@ -1,0 +1,60 @@
+id: incident-report
+title: Create and verify a structured incident report document
+description: Exercises structured document generation, tables, headers, pagination, rendering checks, and checksums.
+input:
+  prompt: |
+    Use the installed docx Skill and incident-data.json to create outputs/incident-report.docx.
+    Work autonomously. The document must be A4 and include a title page, executive summary, timeline table,
+    impact section, root-cause section, five-why analysis, corrective actions table with owners and due dates,
+    lessons learned, page numbers, and a header containing incident ID INC-2026-017.
+
+    Validate the DOCX package and render it for visual inspection as required by SKILL.md. Write
+    outputs/document-validation.json with package validation status, rendered page count, and detected
+    problems. Write outputs/document-manifest.json with byte size and SHA-256 digest. Finish by naming
+    the three required outputs; do not leave temporary render files outside outputs/.
+context:
+  files:
+    incident-data.json: |
+      {
+        "incident_id": "INC-2026-017",
+        "severity": "SEV-1",
+        "service": "evaluation-orchestrator",
+        "started_at": "2026-08-18T02:14:00Z",
+        "resolved_at": "2026-08-18T03:02:00Z",
+        "impact": "31 evaluation jobs delayed; 7 jobs retried; no result corruption",
+        "root_cause": "A worker lease renewal request lacked a bounded timeout and exhausted the pool",
+        "timeline": [
+          {"time": "02:14", "event": "Latency alert fired"},
+          {"time": "02:19", "event": "On-call acknowledged"},
+          {"time": "02:31", "event": "Worker pool exhaustion identified"},
+          {"time": "02:42", "event": "Lease renewal disabled"},
+          {"time": "03:02", "event": "Backlog cleared"}
+        ],
+        "actions": [
+          {"action": "Add request timeout and retry budget", "owner": "Runtime", "due": "2026-08-25"},
+          {"action": "Add pool saturation alert", "owner": "SRE", "due": "2026-08-23"},
+          {"action": "Run interruption recovery test", "owner": "QA", "due": "2026-08-29"}
+        ]
+      }
+constraints:
+  timeout_seconds: 900
+  max_turns: 18
+expect:
+  exit_code: 0
+  files_exist:
+    - outputs/incident-report.docx
+    - outputs/document-validation.json
+    - outputs/document-manifest.json
+  file_contains:
+    - path: outputs/document-validation.json
+      content: page_count
+    - path: outputs/document-manifest.json
+      content: sha256
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0
+    - files_exist:
+        - outputs/incident-report.docx
+        - outputs/document-validation.json
+        - outputs/document-manifest.json

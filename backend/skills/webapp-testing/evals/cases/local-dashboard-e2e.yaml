@@ -1,0 +1,85 @@
+id: local-dashboard-e2e
+title: Run a local dashboard end-to-end browser flow
+description: Exercises server lifecycle, browser interactions, console capture, screenshots, and cleanup.
+input:
+  prompt: |
+    Use the installed webapp-testing Skill to test the local app in site/ without asking questions.
+    Start a local loopback server on an available port by using the bundled server-lifecycle helper.
+    With headless Chromium: load the page, wait for network idle, add three jobs, mark the second job
+    complete, filter to completed jobs, verify the visible count is 1, capture browser console messages,
+    and take a full-page screenshot. Shut down the browser and server even if an assertion fails.
+
+    Create these exact artifacts:
+    - outputs/web-e2e/automation.py
+    - outputs/web-e2e/screenshot.png
+    - outputs/web-e2e/console.log
+    - outputs/web-e2e/results.json
+
+    results.json must record each step, pass/fail status, final visible count, screenshot byte size,
+    elapsed milliseconds, server process cleanup status, and SHA-256 digest of the screenshot.
+    Finish with a concise pass/fail summary.
+context:
+  files:
+    site/index.html: |
+      <!doctype html>
+      <html lang="en">
+      <head><meta charset="utf-8"><title>Evaluation Job Board</title></head>
+      <body>
+        <h1>Evaluation Job Board</h1>
+        <form id="job-form">
+          <input id="job-name" aria-label="Job name" required>
+          <button type="submit">Add job</button>
+        </form>
+        <label>Filter
+          <select id="filter"><option value="all">All</option><option value="active">Active</option><option value="completed">Completed</option></select>
+        </label>
+        <p>Visible: <span id="visible-count">0</span></p>
+        <ul id="jobs"></ul>
+        <script src="app.js"></script>
+      </body>
+      </html>
+    site/app.js: |
+      const jobs = [];
+      const form = document.querySelector('#job-form');
+      const input = document.querySelector('#job-name');
+      const filter = document.querySelector('#filter');
+      const list = document.querySelector('#jobs');
+      const count = document.querySelector('#visible-count');
+      function render() {
+        const visible = jobs.filter(j => filter.value === 'all' || (filter.value === 'completed' ? j.done : !j.done));
+        list.replaceChildren(...visible.map(j => {
+          const li = document.createElement('li');
+          li.dataset.name = j.name;
+          const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = j.done;
+          checkbox.addEventListener('change', () => { j.done = checkbox.checked; render(); });
+          li.append(checkbox, document.createTextNode(j.name)); return li;
+        }));
+        count.textContent = String(visible.length);
+        console.log(`render:${filter.value}:${visible.length}`);
+      }
+      form.addEventListener('submit', e => { e.preventDefault(); jobs.push({name: input.value, done: false}); input.value = ''; render(); });
+      filter.addEventListener('change', render); render();
+constraints:
+  timeout_seconds: 900
+  max_turns: 18
+expect:
+  exit_code: 0
+  files_exist:
+    - outputs/web-e2e/automation.py
+    - outputs/web-e2e/screenshot.png
+    - outputs/web-e2e/console.log
+    - outputs/web-e2e/results.json
+  file_contains:
+    - path: outputs/web-e2e/results.json
+      content: sha256
+    - path: outputs/web-e2e/results.json
+      content: cleanup
+    - path: outputs/web-e2e/console.log
+      content: render:completed:1
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0
+    - files_exist:
+        - outputs/web-e2e/screenshot.png
+        - outputs/web-e2e/results.json

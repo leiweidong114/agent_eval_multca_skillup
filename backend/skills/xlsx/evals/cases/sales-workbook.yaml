@@ -1,0 +1,54 @@
+id: sales-workbook
+title: Build and validate a multi-sheet sales workbook
+description: Exercises CSV ingestion, formulas, formatting, chart creation, recalculation, and artifact reporting.
+input:
+  prompt: |
+    Use the installed xlsx Skill. Read sales.csv and build outputs/regional-sales-report.xlsx.
+    Work autonomously and do not ask questions. The workbook must contain Raw Data, Regional Summary,
+    Product Summary, and Dashboard sheets; formula-driven revenue and margin totals; a regional revenue
+    chart; freeze panes; filters; professional number formats; and a visible assumptions/usage note.
+
+    Validate the workbook according to SKILL.md. Write the machine-readable validation result to
+    outputs/workbook-validation.json. Also write outputs/workbook-manifest.json containing the workbook
+    byte size, sheet names, formula count, chart count, and SHA-256 digest. Do not replace formulas with
+    hardcoded totals. Finish by naming all three output files.
+context:
+  files:
+    sales.csv: |
+      order_id,date,region,product,units,unit_price,unit_cost
+      O-1001,2026-01-03,North,Sensor-A,12,125.00,72.00
+      O-1002,2026-01-05,South,Gateway-X,5,430.00,288.00
+      O-1003,2026-01-09,East,Sensor-B,18,154.00,91.00
+      O-1004,2026-01-12,West,Controller-Z,7,385.00,241.00
+      O-1005,2026-02-02,North,Gateway-X,4,430.00,288.00
+      O-1006,2026-02-10,South,Sensor-A,21,125.00,72.00
+      O-1007,2026-02-14,East,Controller-Z,8,385.00,241.00
+      O-1008,2026-02-19,West,Sensor-B,15,154.00,91.00
+      O-1009,2026-03-01,North,Controller-Z,6,385.00,241.00
+      O-1010,2026-03-08,South,Sensor-B,17,154.00,91.00
+      O-1011,2026-03-15,East,Gateway-X,3,430.00,288.00
+      O-1012,2026-03-22,West,Sensor-A,24,125.00,72.00
+constraints:
+  timeout_seconds: 900
+  max_turns: 18
+expect:
+  exit_code: 0
+  files_exist:
+    - outputs/regional-sales-report.xlsx
+    - outputs/workbook-validation.json
+    - outputs/workbook-manifest.json
+  file_contains:
+    - path: outputs/workbook-manifest.json
+      content: sha256
+    - path: outputs/workbook-manifest.json
+      content: Regional Summary
+    - path: outputs/workbook-validation.json
+      content: status
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0
+    - files_exist:
+        - outputs/regional-sales-report.xlsx
+        - outputs/workbook-validation.json
+        - outputs/workbook-manifest.json
