@@ -6,6 +6,16 @@
       </template>
 
       <el-form :model="form" label-width="140px" label-position="left">
+        <el-form-item label="用户标识">
+          <el-input v-model="form.user_id" placeholder="用于归档，例如 wedax" style="width: 320px" />
+        </el-form-item>
+
+        <el-form-item label="评测任务名称">
+          <el-input v-model="form.task_name" placeholder="留空则使用 Skill 名称" style="width: 320px" />
+        </el-form-item>
+        <el-form-item label="业务任务 ID">
+          <el-input v-model="form.client_task_id" placeholder="可选；服务端仍会生成唯一 task_id" style="width: 320px" />
+        </el-form-item>
         <el-form-item label="Skill">
           <el-select
             v-model="form.skill"
@@ -125,6 +135,16 @@
         <el-form-item label="数据库轨迹">
           <el-switch v-model="form.collect_database_trace" active-text="读取 LiteLLM 模型交互记录" />
         </el-form-item>
+        <el-form-item label="模型硬校验">
+          <el-switch
+            v-model="form.require_model_verification"
+            :disabled="!form.collect_database_trace"
+            active-text="数据库必须确认实际调用了指定模型"
+          />
+        </el-form-item>
+        <el-form-item label="LLM Judge">
+          <el-switch v-model="form.llm_judge" active-text="使用配置的 LiteLLM Judge" />
+        </el-form-item>
 
         <el-form-item>
           <el-button type="primary" :loading="running" @click="run">
@@ -164,6 +184,9 @@ import {
 } from '../api'
 
 const form = reactive({
+  user_id: localStorage.getItem('agent_eval_user_id') || 'local',
+  task_name: '',
+  client_task_id: '',
   skill: '',
   agent: '',
   profile: '',
@@ -179,6 +202,8 @@ const form = reactive({
   max_turns: 12,
   benchmark: true,
   collect_database_trace: true,
+  require_model_verification: true,
+  llm_judge: true,
 })
 
 const agents = ref([])
@@ -248,6 +273,9 @@ function applyProfileModel(name) {
 
 function buildPayload() {
   return {
+    user_id: form.user_id,
+    task_name: form.task_name || null,
+    client_task_id: form.client_task_id || null,
     skill: form.skill,
     agent: form.agent,
     profile: form.profile || null,
@@ -263,11 +291,17 @@ function buildPayload() {
     max_turns: form.max_turns,
     benchmark: form.benchmark,
     collect_database_trace: form.collect_database_trace,
+    require_model_verification: form.require_model_verification,
+    llm_judge: form.llm_judge,
     extra_args: [],
   }
 }
 
 function validatePayload() {
+  if (!form.user_id.trim()) {
+    ElMessage.warning('请填写用户标识')
+    return false
+  }
   if (!form.skill) {
     ElMessage.warning('请选择 Skill')
     return false
@@ -292,6 +326,7 @@ async function run() {
   running.value = true
   result.value = null
   try {
+    localStorage.setItem('agent_eval_user_id', form.user_id)
     result.value = await triggerRun(buildPayload())
     ElMessage.success('评测已进入后台队列')
     await pollJob(result.value.job_id)
@@ -318,6 +353,8 @@ async function validate() {
 }
 
 function reset() {
+  form.task_name = ''
+  form.client_task_id = ''
   form.skill = ''
   form.agent = ''
   form.profile = modelConfig.default_profile || ''
@@ -333,6 +370,8 @@ function reset() {
   form.max_turns = 12
   form.benchmark = true
   form.collect_database_trace = true
+  form.require_model_verification = true
+  form.llm_judge = true
   result.value = null
 }
 

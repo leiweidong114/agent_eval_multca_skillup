@@ -1,0 +1,84 @@
+id: openapi-regression-pack
+title: Generate and verify a multi-artifact API regression pack
+description: Exercises route analysis, code generation, local HTTP calls, reporting, and manifest creation.
+input:
+  prompt: |
+    Use the installed api-test-suite-builder Skill and complete this task without asking questions.
+
+    Treat the choices as fixed: Python, pytest+httpx, full auth/input/error/contract/load scope.
+    Read openapi.json and create a deterministic regression pack under outputs/api-suite/.
+    Use the bundled generator as a starting point, then complete and run a local-only smoke flow.
+    The smoke flow must start a loopback HTTP server on an available port, call at least three
+    API routes, shut the server down, and record the observed status codes. Do not call the public internet.
+
+    Produce exactly these machine-checkable artifacts:
+    - outputs/api-suite/tests/test_api.py
+    - outputs/api-suite/load/k6-smoke.js
+    - outputs/api-suite/reports/coverage.json
+    - outputs/api-suite/reports/smoke-results.json
+    - outputs/api-suite/manifest.json
+
+    manifest.json must list every artifact, its byte size, and SHA-256 digest. Finish with a concise
+    summary that names the coverage percentage and smoke call count.
+context:
+  files:
+    openapi.json: |
+      {
+        "openapi": "3.0.3",
+        "info": {"title": "Stability Fixture API", "version": "1.0.0"},
+        "paths": {
+          "/health": {
+            "get": {"operationId": "getHealth", "responses": {"200": {"description": "healthy"}}}
+          },
+          "/users": {
+            "get": {
+              "operationId": "listUsers",
+              "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100}}],
+              "responses": {"200": {"description": "users"}, "422": {"description": "invalid limit"}}
+            },
+            "post": {
+              "operationId": "createUser",
+              "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["name", "email"], "properties": {"name": {"type": "string"}, "email": {"type": "string", "format": "email"}}}}}},
+              "responses": {"201": {"description": "created"}, "400": {"description": "invalid body"}, "409": {"description": "duplicate"}}
+            }
+          },
+          "/users/{userId}": {
+            "get": {
+              "operationId": "getUser",
+              "parameters": [{"name": "userId", "in": "path", "required": true, "schema": {"type": "string"}}],
+              "responses": {"200": {"description": "user"}, "404": {"description": "not found"}}
+            },
+            "delete": {
+              "operationId": "deleteUser",
+              "parameters": [{"name": "userId", "in": "path", "required": true, "schema": {"type": "string"}}],
+              "responses": {"204": {"description": "deleted"}, "401": {"description": "unauthorized"}, "404": {"description": "not found"}}
+            }
+          }
+        }
+      }
+constraints:
+  timeout_seconds: 900
+  max_turns: 20
+expect:
+  exit_code: 0
+  files_exist:
+    - outputs/api-suite/tests/test_api.py
+    - outputs/api-suite/load/k6-smoke.js
+    - outputs/api-suite/reports/coverage.json
+    - outputs/api-suite/reports/smoke-results.json
+    - outputs/api-suite/manifest.json
+  file_contains:
+    - path: outputs/api-suite/reports/coverage.json
+      content: coverage
+    - path: outputs/api-suite/reports/smoke-results.json
+      content: status
+    - path: outputs/api-suite/manifest.json
+      content: sha256
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0
+    - files_exist:
+        - outputs/api-suite/tests/test_api.py
+        - outputs/api-suite/reports/smoke-results.json
+        - outputs/api-suite/manifest.json

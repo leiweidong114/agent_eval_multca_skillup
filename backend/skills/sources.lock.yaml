@@ -1,0 +1,31 @@
+schema_version: 1
+updated_at: 2026-09-01
+skills:
+  api-test-suite-builder:
+    source: https://github.com/borghei/claude-skills
+    source_path: engineering/api-test-suite-builder
+    commit: ddca910e95580c63a236303fc1534054f0f14d4c
+    license: MIT + Commons Clause
+    local_additions:
+      - evals/cases/openapi-regression-pack.yaml
+  docx:
+    source: https://github.com/anthropics/skills
+    source_path: skills/docx
+    commit: 3b3fad96af16a10759d930941b4520ba0c40edae
+    license: Complete terms in LICENSE.txt
+    local_additions:
+      - evals/cases/incident-report.yaml
+  webapp-testing:
+    source: https://github.com/anthropics/skills
+    source_path: skills/webapp-testing
+    commit: 3b3fad96af16a10759d930941b4520ba0c40edae
+    license: Complete terms in LICENSE.txt
+    local_additions:
+      - evals/cases/local-dashboard-e2e.yaml
+  xlsx:
+    source: https://github.com/anthropics/skills
+    source_path: skills/xlsx
+    commit: 3b3fad96af16a10759d930941b4520ba0c40edae
+    license: Proprietary; see LICENSE.txt
+    local_additions:
+      - evals/cases/sales-workbook.yaml

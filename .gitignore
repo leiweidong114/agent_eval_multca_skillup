@@ -2,7 +2,10 @@
 .runtime/
 .tools/
 runs/
+evaluation_results/
+backend/evaluation_results/
 backend/config/local.yaml
+backend/config/secrets.env
 backend/schematic_projects/
 backend/skills/.registry/
 

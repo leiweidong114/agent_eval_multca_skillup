@@ -42,7 +42,14 @@ def test_resolves_default_litellm_profile_and_agent_environment(tmp_path):
     assert profile.environment["OPENAI_API_KEY"] == "virtual-key"
     assert profile.environment["ANTHROPIC_AUTH_TOKEN"] == "virtual-key"
     assert profile.model_for_agent("codex") == "MiniMax-M3"
+    assert profile.model_for_agent("claude") == "sonnet"
     assert profile.model_for_agent("openclaw") == "main"
+    assert profile.model_for_agent("opencode") == "litellm/MiniMax-M3"
+    inline = profile.environment["OPENCODE_CONFIG_CONTENT"]
+    assert '"baseURL": "http://127.0.0.1:4000/v1"' in inline
+    assert '"apiKey": "{env:LITELLM_API_KEY}"' in inline
+    assert "virtual-key" not in inline
+    assert '"MiniMax-M3"' in inline
     assert profile.agent_args == (
         "-c",
         'model_provider="litellm"',
@@ -55,6 +62,19 @@ def test_resolves_default_litellm_profile_and_agent_environment(tmp_path):
         "-c",
         'model_providers.litellm.wire_api="responses"',
     )
+
+
+def test_claude_uses_bare_mode_and_bearer_auth(tmp_path):
+    _write_config(tmp_path)
+    profile = resolve_model_profile(
+        tmp_path,
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+        agent="claude",
+    )
+
+    assert profile.agent_args == ("--bare",)
+    assert profile.model_for_agent("claude") == "sonnet"
+    assert "ANTHROPIC_API_KEY" not in profile.environment
 
 
 def test_local_config_overrides_model_without_committing_a_key(tmp_path):
@@ -101,8 +121,30 @@ profiles:
     )
     profile = resolve_model_profile(tmp_path, environ={}, agent="codex")
     assert profile.model == "gpt-test"
+    assert profile.model_for_agent("claude") == "gpt-test"
     assert profile.environment == {}
     assert profile.agent_args == ()
+
+
+def test_codebuddy_uses_its_supported_minimax_alias(tmp_path):
+    _write_config(tmp_path)
+    profile = resolve_model_profile(
+        tmp_path,
+        model_override="opencode-go/minimax-m3",
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+        agent="codebuddy",
+    )
+
+    assert profile.model_for_agent("codebuddy") == "custom-local:MiniMax-M3"
+    assert profile.model_for_agent("claude") == "sonnet"
+
+    minimax_27 = resolve_model_profile(
+        tmp_path,
+        model_override="opencode-go/minimax-m2.7",
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+        agent="codebuddy",
+    )
+    assert minimax_27.model_for_agent("codebuddy") == "custom-local:MiniMax-M2.7"
 
 
 def test_openclaw_profile_config_uses_litellm_without_embedding_the_key(tmp_path):

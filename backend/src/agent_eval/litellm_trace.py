@@ -19,6 +19,7 @@ def create_trace_key(
     api_base: str,
     model: str,
     run_id: str,
+    *,
     master_key: str | None = None,
 ) -> TraceKey | None:
     master_key = (master_key or os.environ.get("LITELLM_MASTER_KEY", "")).strip()

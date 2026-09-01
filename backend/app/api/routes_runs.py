@@ -21,20 +21,29 @@ def _load_report(run_dir: Path) -> dict[str, object] | None:
 
 
 @router.get("/runs")
-def list_runs() -> list[dict[str, object]]:
+def list_runs(user_id: str | None = None) -> list[dict[str, object]]:
     """List evaluation run directories with a report, newest first."""
     if not RUNS_ROOT.is_dir():
         return []
     entries: list[dict[str, object]] = []
-    for run_dir in sorted(RUNS_ROOT.iterdir(), reverse=True):
-        if not run_dir.is_dir():
-            continue
+    report_files = sorted(
+        RUNS_ROOT.rglob("evaluation-report.json"),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    for report_file in report_files:
+        run_dir = report_file.parent
         report = _load_report(run_dir)
         if report is None:
             continue
+        if user_id is not None and report.get("user_id") != user_id:
+            continue
         entries.append(
             {
-                "run_id": run_dir.name,
+                "run_id": report.get("run_id", run_dir.name),
+                "task_id": report.get("task_id", report.get("run_id", run_dir.name)),
+                "user_id": report.get("user_id", run_dir.parents[1].name),
+                "task_name": report.get("task_name", run_dir.parent.name),
                 "result_dir": str(run_dir),
                 "report": report,
             }
@@ -45,10 +54,12 @@ def list_runs() -> list[dict[str, object]]:
 @router.get("/runs/{run_id}")
 def get_run(run_id: str) -> dict[str, object]:
     """Return a single evaluation report by run_id."""
-    run_dir = (RUNS_ROOT / run_id).resolve()
-    if not run_dir.is_dir() or run_dir.parent != RUNS_ROOT.resolve():
-        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
-    report = _load_report(run_dir)
-    if report is None:
-        raise HTTPException(status_code=404, detail=f"No report for run: {run_id}")
-    return report
+    root = RUNS_ROOT.resolve()
+    for report_file in root.rglob("evaluation-report.json") if root.is_dir() else []:
+        run_dir = report_file.parent.resolve()
+        if root not in run_dir.parents:
+            continue
+        report = _load_report(run_dir)
+        if report is not None and str(report.get("run_id")) == run_id:
+            return report
+    raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")

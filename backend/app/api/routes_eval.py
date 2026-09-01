@@ -14,6 +14,9 @@ router = APIRouter(prefix="/api", tags=["eval"])
 
 
 class RunRequest(BaseModel):
+    user_id: str = Field(default="local", pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$")
+    task_name: str | None = Field(default=None, max_length=200)
+    client_task_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$")
     skill: str = Field(..., description="Skill name under backend/skills")
     agent: str = Field(..., description="Multica Agent backend name")
     model: str | None = Field(default=None, description="Optional profile model override")
@@ -30,6 +33,11 @@ class RunRequest(BaseModel):
     benchmark: bool = Field(default=True)
     extra_args: list[str] = Field(default_factory=list)
     collect_database_trace: bool = Field(default=True)
+    require_model_verification: bool = Field(
+        default=True,
+        description="Fail the evaluation unless PostgreSQL proves the requested model was called",
+    )
+    llm_judge: bool = Field(default=True)
 
 
 def _resolve_skill(name: str) -> Path:
@@ -61,6 +69,11 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         extra_args=request.extra_args,
         validate_only=validate_only,
         collect_database_trace=request.collect_database_trace,
+        require_model_verification=request.require_model_verification,
+        user_id=request.user_id,
+        task_name=request.task_name,
+        client_task_id=request.client_task_id,
+        run_llm_judge_enabled=request.llm_judge,
     )
     return result
 
@@ -80,8 +93,14 @@ def create_run(request: RunRequest) -> dict[str, object]:
 
 
 @router.get("/jobs")
-def list_jobs() -> list[dict[str, object]]:
-    return job_manager.list()
+def list_jobs(user_id: str | None = None) -> list[dict[str, object]]:
+    return job_manager.list(user_id=user_id)
+
+
+@router.get("/capacity")
+def get_capacity() -> dict[str, object]:
+    """Expose both levels of local evaluation concurrency."""
+    return job_manager.capacity()
 
 
 @router.get("/jobs/{job_id}")

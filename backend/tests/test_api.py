@@ -11,6 +11,7 @@ def test_health_and_discovery_endpoints():
     agents = client.get("/api/agents")
     assert agents.status_code == 200
     assert any(item["agent"] == "codex" for item in agents.json())
+    assert any(item["agent"] == "justdo" for item in agents.json())
     skills = client.get("/api/skills")
     assert skills.status_code == 200
 

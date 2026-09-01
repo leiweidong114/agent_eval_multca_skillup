@@ -8,7 +8,7 @@ from pathlib import Path
 SUPPORTED_AGENTS = (
     "antigravity", "claude", "codebuddy", "codex", "copilot", "cursor",
     "deveco", "dim", "dsh", "grok", "hermes", "kimi", "kiro", "mcode",
-    "omp", "openclaw", "opencode", "pi", "qoder", "qoderclicn", "qwen",
+    "justdo", "omp", "openclaw", "opencode", "pi", "qoder", "qoderclicn", "qwen",
     "qwenpaw", "reasonix", "traecli", "zeroclaw",
 )
 
@@ -32,6 +32,7 @@ AGENT_COMMANDS = {
     "hermes": "hermes",
     "kimi": "kimi",
     "kiro": "kiro-cli",
+    "justdo": "JustDo-agent",
     "mcode": "mcode",
     "omp": "omp",
     "openclaw": "openclaw",
@@ -59,6 +60,7 @@ SKILL_ROOTS = {
     "grok": ".grok/skills",
     "kimi": ".kimi/skills",
     "kiro": ".kiro/skills",
+    "justdo": "skills",
     "mcode": ".minimax/skills",
     "omp": ".omp/skills",
     "dsh": ".dsh/skills",
@@ -86,7 +88,24 @@ def normalize_agent(value: str) -> str:
 
 
 def default_agent_command(agent: str) -> str:
-    return AGENT_COMMANDS.get(normalize_agent(agent), normalize_agent(agent))
+    normalized = normalize_agent(agent)
+    if normalized == "justdo":
+        configured = os.environ.get("JUSTDO_AGENT_EXECUTABLE", "").strip()
+        if configured:
+            return configured
+        if os.name == "nt":
+            appdata = os.environ.get("APPDATA", "").strip()
+            if appdata:
+                candidate = Path(appdata) / "JustDo" / "multica" / "development" / "JustDo-agent.exe"
+                if candidate.is_file():
+                    return str(candidate)
+    return AGENT_COMMANDS.get(normalized, normalized)
+
+
+def backend_agent(agent: str) -> str:
+    """Return the Multica backend used to execute a user-facing Agent choice."""
+    normalized = normalize_agent(agent)
+    return "openclaw" if normalized == "justdo" else normalized
 
 
 def skill_target(agent: str, skill_name: str) -> str:

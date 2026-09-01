@@ -1,9 +1,9 @@
 # Copy this file to local.yaml. local.yaml is ignored by Git.
 secrets:
   LITELLM_API_KEY: sk-your-virtual-key
+  # Required for exact per-task correlation and hard model verification.
+  LITELLM_MASTER_KEY: sk-your-litellm-master-key
   LITELLM_DATABASE_PASSWORD: your-database-password
-  # Optional. Enables exact per-run LiteLLM trace correlation.
-  LITELLM_MASTER_KEY: your-litellm-master-key
 
 # The LiteLLM API and PostgreSQL can use the same intranet host.
 default_profile: intranet_default
@@ -20,3 +20,14 @@ database:
 agents:
   codex:
     executable: C:\Tools\codex\codex.exe
+
+# Optional scoring and judge override. The committed scoring defaults fail
+# open to deterministic rules when the judge is unavailable.
+# scoring:
+#   dimensions:
+#     result: {weight: 0.5, rule_weight: 0.6, llm_weight: 0.4}
+#   llm_judge:
+#     enabled: true
+#     required: false
+#     profile: intranet_default
+#     model: your-litellm-model-name
