@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+import httpx
+from pydantic import BaseModel, Field
 
 from agent_eval.database import database_health
 from agent_eval.agent_contract import describe_agent_contract
@@ -13,6 +16,7 @@ from agent_eval.model_config import (
     describe_model_config,
     discover_available_models,
     resolve_config_secret,
+    resolve_model_profile,
 )
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
@@ -33,6 +37,11 @@ router = APIRouter(prefix="/api", tags=["discovery"])
 
 class CleanupRequest(BaseModel):
     confirm: bool = False
+
+
+class ModelTestRequest(BaseModel):
+    model: str = Field(min_length=1, max_length=300)
+    profile: str = Field(min_length=1, max_length=200)
 
 
 def _scan_skills(root: Path) -> list[dict[str, str]]:
@@ -72,6 +81,44 @@ def list_agents() -> list[dict[str, Any]]:
     return result
 
 
+@router.post("/agents/{agent_name}/test")
+def test_agent(agent_name: str) -> dict[str, object]:
+    """Run a harmless version probe against a discovered local Agent CLI."""
+    if agent_name not in SUPPORTED_AGENTS:
+        raise HTTPException(status_code=404, detail=f"Unsupported Agent: {agent_name}")
+    command = default_agent_command(agent_name)
+    executable = shutil.which(command)
+    if not executable:
+        return {"ok": False, "agent": agent_name, "message": "未在 PATH 中发现可执行文件"}
+    started = time.perf_counter()
+    try:
+        process = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=12,
+            check=False,
+            encoding="utf-8",
+            errors="replace",
+        )
+        output = (process.stdout or process.stderr or "").strip().splitlines()
+        return {
+            "ok": process.returncode == 0,
+            "agent": agent_name,
+            "executable": executable,
+            "duration_ms": round((time.perf_counter() - started) * 1000),
+            "message": output[0][:300] if output else f"进程退出码 {process.returncode}",
+        }
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "ok": False,
+            "agent": agent_name,
+            "executable": executable,
+            "duration_ms": round((time.perf_counter() - started) * 1000),
+            "message": "检测超时" if isinstance(exc, subprocess.TimeoutExpired) else str(exc),
+        }
+
+
 @router.get("/model-config")
 def get_model_config() -> dict[str, object]:
     """Return non-secret model defaults used by the CLI and Web UI."""
@@ -82,6 +129,58 @@ def get_model_config() -> dict[str, object]:
 def list_models() -> dict[str, object]:
     """Return models discovered from LiteLLM plus configured native fallbacks."""
     return discover_available_models(BACKEND_ROOT)
+
+
+@router.post("/models/test")
+def test_model(request: ModelTestRequest) -> dict[str, object]:
+    """Send a minimal non-streaming completion through the selected LiteLLM profile."""
+    started = time.perf_counter()
+    try:
+        profile = resolve_model_profile(
+            BACKEND_ROOT,
+            profile_name=request.profile,
+            model_override=request.model,
+        )
+        if not profile.api_base:
+            return {
+                "ok": True,
+                "model": request.model,
+                "profile": request.profile,
+                "duration_ms": 0,
+                "message": "本地原生模型配置有效；实际可用性由 Agent 负责",
+            }
+        openai_base = profile.environment["OPENAI_BASE_URL"].rstrip("/")
+        response = httpx.post(
+            f"{openai_base}/chat/completions",
+            headers={"Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}"},
+            json={
+                "model": request.model,
+                "messages": [{"role": "user", "content": "Reply with OK."}],
+                "max_tokens": 4,
+                "temperature": 0,
+                "stream": False,
+            },
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        actual_model = str(payload.get("model") or request.model) if isinstance(payload, dict) else request.model
+        return {
+            "ok": True,
+            "model": request.model,
+            "actual_model": actual_model,
+            "profile": request.profile,
+            "duration_ms": round((time.perf_counter() - started) * 1000),
+            "message": "模型响应正常",
+        }
+    except (ValueError, httpx.HTTPError) as exc:
+        return {
+            "ok": False,
+            "model": request.model,
+            "profile": request.profile,
+            "duration_ms": round((time.perf_counter() - started) * 1000),
+            "message": str(exc)[:500],
+        }
 
 
 @router.get("/database/health")
