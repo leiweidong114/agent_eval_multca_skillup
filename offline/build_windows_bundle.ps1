@@ -33,6 +33,7 @@ $packageName = "agent-eval-full-offline-win-x64-$($commit.Substring(0,8))"
 $packageRoot = Join-Path $stage $packageName
 $bundle = Join-Path $stage "agent_eval_multca_skillup.bundle"
 $pythonBuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-eval-python-" + [guid]::NewGuid().ToString("N"))
+$goSourceRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-eval-go-src-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
 function Get-Asset([object]$Entry, [string]$Subdirectory) {
@@ -108,21 +109,29 @@ try {
     $env:GOTOOLCHAIN = "local"
     $env:CGO_ENABLED = "0"
     $sources = Join-Path $packageRoot "offline\assets\sources"
-    New-Item -ItemType Directory -Force -Path $sources | Out-Null
-    git clone --depth 1 --branch $lock.multica.tag $lock.multica.repository (Join-Path $sources "multica")
-    git clone --depth 1 --branch $lock.skill_up.tag $lock.skill_up.repository (Join-Path $sources "skill-up")
-    $actualMultica = (git -C (Join-Path $sources "multica") rev-parse HEAD).Trim()
-    $actualSkillUp = (git -C (Join-Path $sources "skill-up") rev-parse HEAD).Trim()
+    New-Item -ItemType Directory -Force -Path $sources,$goSourceRoot | Out-Null
+    $multicaSource = Join-Path $goSourceRoot "multica"
+    $skillUpSource = Join-Path $goSourceRoot "skill-up"
+    git -c core.longpaths=true clone --depth 1 --branch $lock.multica.tag $lock.multica.repository $multicaSource
+    if ($LASTEXITCODE -ne 0) { throw "Multica source clone failed." }
+    git -c core.longpaths=true clone --depth 1 --branch $lock.skill_up.tag $lock.skill_up.repository $skillUpSource
+    if ($LASTEXITCODE -ne 0) { throw "Skill-Up source clone failed." }
+    $actualMultica = (git -C $multicaSource rev-parse HEAD).Trim()
+    $actualSkillUp = (git -C $skillUpSource rev-parse HEAD).Trim()
     if ($actualMultica -ne $lock.multica.commit) { throw "Unexpected Multica commit: $actualMultica" }
     if ($actualSkillUp -ne $lock.skill_up.commit) { throw "Unexpected Skill-Up commit: $actualSkillUp" }
-    git -C (Join-Path $sources "skill-up") apply (Join-Path $packageRoot "backend\patches\skill-up-v0.9.1-windows-custom-engine.patch")
+    git -C $skillUpSource apply --ignore-space-change --ignore-whitespace (Join-Path $packageRoot "backend\patches\skill-up-v0.9.1-windows-custom-engine.patch")
     if ($LASTEXITCODE -ne 0) { throw "Skill-Up patch failed." }
-    Push-Location (Join-Path $sources "multica\server")
+    Push-Location (Join-Path $multicaSource "server")
     try { & $go mod vendor } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "Multica vendoring failed." }
-    Push-Location (Join-Path $sources "skill-up")
+    Push-Location $skillUpSource
     try { & $go mod vendor } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "Skill-Up vendoring failed." }
+    & tar.exe --exclude=.git -czf (Join-Path $sources "multica-v0.4.36-vendored.tar.gz") -C $goSourceRoot "multica"
+    if ($LASTEXITCODE -ne 0) { throw "Multica source archive failed." }
+    & tar.exe --exclude=.git -czf (Join-Path $sources "skill-up-v0.9.1-patched-vendored.tar.gz") -C $goSourceRoot "skill-up"
+    if ($LASTEXITCODE -ne 0) { throw "Skill-Up source archive failed." }
 
     $nodeBuildRoot = Join-Path $builderRoot "node"
     Expand-Archive -LiteralPath $nodeArchive -DestinationPath $nodeBuildRoot -Force
@@ -180,6 +189,12 @@ try {
         ([System.IO.Path]::GetFileName($resolvedPythonBuild)).StartsWith('agent-eval-python-') -and
         (Test-Path -LiteralPath $pythonBuildRoot)) {
         Remove-Item -LiteralPath $pythonBuildRoot -Recurse -Force
+    }
+    $resolvedGoSource = [System.IO.Path]::GetFullPath($goSourceRoot)
+    if ($resolvedGoSource.StartsWith($resolvedTemp + '\', [System.StringComparison]::OrdinalIgnoreCase) -and
+        ([System.IO.Path]::GetFileName($resolvedGoSource)).StartsWith('agent-eval-go-src-') -and
+        (Test-Path -LiteralPath $goSourceRoot)) {
+        Remove-Item -LiteralPath $goSourceRoot -Recurse -Force
     }
     if ($null -ne $originalPythonPath) { $env:PYTHONPATH = $originalPythonPath }
     Remove-Item Env:PYTHONNOUSERSITE -ErrorAction SilentlyContinue
