@@ -61,8 +61,13 @@ try {
     $builderRoot = Join-Path $stage "builder"
     $packagePython = Join-Path $packageRoot "backend\.runtime\windows\python"
     New-Item -ItemType Directory -Force -Path $packagePython | Out-Null
-    & $pythonInstaller /quiet InstallAllUsers=0 Include_launcher=0 Include_test=0 Include_pip=1 PrependPath=0 Shortcuts=0 TargetDir="$packagePython"
-    if ($LASTEXITCODE -ne 0) { throw "Build Python installation failed." }
+    $pythonInstall = Start-Process -FilePath $pythonInstaller -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
+        "/quiet", "InstallAllUsers=0", "Include_launcher=0", "Include_test=0",
+        "Include_pip=1", "PrependPath=0", "Shortcuts=0", "TargetDir=$packagePython"
+    )
+    if ($pythonInstall.ExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $packagePython "python.exe"))) {
+        throw "Build Python installation failed with exit code $($pythonInstall.ExitCode)."
+    }
     $python = Join-Path $packagePython "python.exe"
     $buildEnv = Join-Path $builderRoot "venv"
     & $python -m venv $buildEnv

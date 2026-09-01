@@ -47,8 +47,13 @@ if (-not $pythonInstaller) { throw "Offline Python installer is missing." }
 if ($Force -and (Test-Path -LiteralPath $backendPython)) { Remove-Item -LiteralPath $backendPython -Recurse -Force }
 if (-not (Test-Path -LiteralPath (Join-Path $backendPython "python.exe"))) {
     New-Item -ItemType Directory -Force -Path $backendPython | Out-Null
-    & $pythonInstaller.FullName /quiet InstallAllUsers=0 Include_launcher=0 Include_test=0 Include_pip=1 PrependPath=0 Shortcuts=0 TargetDir="$backendPython"
-    if ($LASTEXITCODE -ne 0) { throw "Offline Python installation failed." }
+    $pythonInstall = Start-Process -FilePath $pythonInstaller.FullName -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
+        "/quiet", "InstallAllUsers=0", "Include_launcher=0", "Include_test=0",
+        "Include_pip=1", "PrependPath=0", "Shortcuts=0", "TargetDir=$backendPython"
+    )
+    if ($pythonInstall.ExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $backendPython "python.exe"))) {
+        throw "Offline Python installation failed with exit code $($pythonInstall.ExitCode)."
+    }
 }
 
 & (Join-Path $PSScriptRoot "rebuild_all.ps1") -SkipTests:$SkipTests
