@@ -108,7 +108,8 @@ secrets:
 `eval.yaml`、评测报告或 Git。可通过修改 `models.yaml` 添加多个 profile，运行时用
 `--profile <name>` 选择；`--model` 仅用于临时覆盖该 profile 的默认模型。
 Codex 还会自动获得 `model_provider=litellm` 的命令行配置，避免已有 ChatGPT 登录覆盖
-LiteLLM 地址。
+LiteLLM 地址。OpenClaw/JustDo 会继续使用 Agent ID `main`，并由评测端生成临时
+LiteLLM provider 配置；配置只引用 `${LITELLM_API_KEY}`，不会包含真实 Key。
 
 ## Windows 安装
 

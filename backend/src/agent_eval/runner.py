@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 
-from agent_eval.model_config import resolve_model_profile
+from agent_eval.model_config import resolve_model_profile, write_openclaw_profile_config
 from agent_eval.runtime import (
     default_agent_command,
     find_multica_runtime,
@@ -218,7 +218,8 @@ def run_evaluation(
         model_override=model,
         agent=agent,
     )
-    model = resolved_profile.model
+    provider_model = resolved_profile.model
+    model = resolved_profile.model_for_agent(agent)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     unique = uuid.uuid4().hex[:8]
     runs_root = Path(output_dir).resolve() if output_dir else project_root / "runs"
@@ -270,6 +271,10 @@ def run_evaluation(
     output = result_root / "skill-up"
     env = os.environ.copy()
     env.update(resolved_profile.environment)
+    if agent == "openclaw":
+        openclaw_config = result_root / "runtime" / "openclaw.json"
+        write_openclaw_profile_config(openclaw_config, resolved_profile)
+        env["OPENCLAW_CONFIG_PATH"] = str(openclaw_config)
     env["AGENT_EVAL_RUN_ID"] = result_root.name
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = executable or default_agent_command(agent)
 
@@ -292,6 +297,7 @@ def run_evaluation(
             "agent": agent,
             "model": model,
             "model_profile": resolved_profile.name,
+            "provider_model": provider_model,
             "skill": str(source_skill),
             "result_dir": str(result_root),
             "validated": True,
@@ -338,6 +344,7 @@ def run_evaluation(
         "agent": agent,
         "model": model,
         "model_profile": resolved_profile.name,
+        "provider_model": provider_model,
         "skill": str(source_skill),
         "result_dir": str(result_root),
         "skill_up_exit_code": completed.returncode,

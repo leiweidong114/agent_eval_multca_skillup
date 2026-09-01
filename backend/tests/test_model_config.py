@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_eval.model_config import describe_model_config, resolve_model_profile
+from agent_eval.model_config import (
+    describe_model_config,
+    resolve_model_profile,
+    write_openclaw_profile_config,
+)
 
 
 def _write_config(root: Path) -> None:
@@ -37,6 +41,8 @@ def test_resolves_default_litellm_profile_and_agent_environment(tmp_path):
     assert profile.environment["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:4000"
     assert profile.environment["OPENAI_API_KEY"] == "virtual-key"
     assert profile.environment["ANTHROPIC_AUTH_TOKEN"] == "virtual-key"
+    assert profile.model_for_agent("codex") == "MiniMax-M3"
+    assert profile.model_for_agent("openclaw") == "main"
     assert profile.agent_args == (
         "-c",
         'model_provider="litellm"',
@@ -79,3 +85,19 @@ def test_missing_virtual_key_is_rejected(tmp_path):
 
     with pytest.raises(ValueError, match="TEST_LITELLM_KEY"):
         resolve_model_profile(tmp_path, environ={})
+
+
+def test_openclaw_profile_config_uses_litellm_without_embedding_the_key(tmp_path):
+    _write_config(tmp_path)
+    profile = resolve_model_profile(
+        tmp_path,
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+    )
+    path = tmp_path / "run" / "openclaw.json"
+
+    write_openclaw_profile_config(path, profile)
+    content = path.read_text(encoding="utf-8")
+
+    assert '"primary": "litellm/MiniMax-M3"' in content
+    assert '"apiKey": "${LITELLM_API_KEY}"' in content
+    assert "virtual-key" not in content

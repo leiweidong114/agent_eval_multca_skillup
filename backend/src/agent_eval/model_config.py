@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,9 @@ class ResolvedModelProfile:
     api_base: str
     environment: dict[str, str]
     agent_args: tuple[str, ...]
+
+    def model_for_agent(self, agent: str) -> str:
+        return "main" if agent == "openclaw" else self.model
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -147,3 +151,47 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
         "profiles": sorted(profiles) if isinstance(profiles, dict) else [],
         "profile_models": profile_models,
     }
+
+
+def write_openclaw_profile_config(path: Path, profile: ResolvedModelProfile) -> None:
+    openai_base, _ = _normalized_base_url(profile.api_base)
+    primary = f"litellm/{profile.model}"
+    config = {
+        "models": {
+            "mode": "replace",
+            "providers": {
+                "litellm": {
+                    "baseUrl": openai_base,
+                    "api": "openai-completions",
+                    "apiKey": "${LITELLM_API_KEY}",
+                    "auth": "api-key",
+                    "timeoutSeconds": 1800,
+                    "models": [
+                        {
+                            "id": profile.model,
+                            "name": profile.model,
+                            "api": "openai-completions",
+                            "input": ["text"],
+                            "compat": {"supportsUsageInStreaming": True},
+                            "reasoning": True,
+                            "contextWindow": 200000,
+                            "maxTokens": 32000,
+                        }
+                    ],
+                }
+            },
+        },
+        "agents": {
+            "defaults": {"model": {"primary": primary}},
+            "list": [
+                {
+                    "id": "main",
+                    "default": True,
+                    "identity": {"name": "main"},
+                    "model": {"primary": primary},
+                }
+            ],
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
