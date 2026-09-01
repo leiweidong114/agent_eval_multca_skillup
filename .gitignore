@@ -31,3 +31,4 @@ offline/assets/
 offline/skill-node-tools/node_modules/
 .offline-cache/
 dist-offline/
+offline-manifest.json
