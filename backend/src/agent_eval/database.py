@@ -267,8 +267,9 @@ def verify_requested_model(
 ) -> dict[str, Any]:
     """Prove that a run reached the requested LiteLLM model.
 
-    Exact key correlation is preferred. A time-window match can still verify the
-    selected deployment, but its weaker Agent attribution is reported explicitly.
+    A model/time-window match is useful diagnostic evidence, but only an exact
+    run key can attribute the call to this Agent evaluation. Concurrent runs can
+    otherwise see one another's SpendLogs rows.
     """
     groups = {expected_model.lower()}
     groups.update(str(item).lower() for item in accepted_model_groups or [] if item)
@@ -294,18 +295,26 @@ def verify_requested_model(
         for row in rows
         if not matches(row)
     ]
-    verified = bool(successful and not mismatches and all(matches(row) for row in successful))
+    model_matched = bool(
+        successful and not mismatches and all(matches(row) for row in successful)
+    )
+    verified = bool(model_matched and exact)
     if not rows:
         reason = "no_database_interactions"
     elif not successful:
         reason = "no_successful_model_call"
     elif mismatches:
         reason = "requested_model_mismatch"
+    elif not exact:
+        reason = "exact_run_correlation_unavailable"
     else:
         reason = None
     return {
-        "status": "verified" if verified else "unverified",
+        "status": "verified" if verified else (
+            "matched_unattributed" if model_matched else "unverified"
+        ),
         "verified": verified,
+        "model_matched": model_matched,
         "agent_attribution": "exact_run_key" if exact else "model_and_time_window",
         "exact_agent_attribution": exact,
         "expected_model": expected_model,
@@ -313,5 +322,7 @@ def verify_requested_model(
         "successful_matching_calls": sum(matches(row) for row in successful),
         "mismatches": mismatches,
         "reason": reason,
-        "warning": None if exact or not verified else "Exact run-key correlation was unavailable",
+        "warning": None if exact or not model_matched else (
+            "The model matched only by time window; the call cannot be attributed to this run"
+        ),
     }

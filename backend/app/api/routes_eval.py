@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agent_eval.runner import run_evaluation
+from agent_eval.runtime import validate_evaluation_capabilities
 from app.config import BACKEND_ROOT, RUNS_ROOT
 from app.job_manager import job_manager
 from app.skill_registry import resolve_skill
@@ -83,6 +84,10 @@ def create_run(request: RunRequest) -> dict[str, object]:
     """Queue an evaluation and return immediately with a job id."""
     try:
         skill_dir = _resolve_skill(request.skill)
+        validate_evaluation_capabilities(
+            request.agent,
+            require_model_selection=request.require_model_verification,
+        )
         return job_manager.submit(request.model_dump(), skill_dir)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

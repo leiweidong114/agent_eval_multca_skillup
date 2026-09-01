@@ -10,6 +10,7 @@ from agent_eval.database import database_health
 from agent_eval.agent_config import describe_agents
 from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.model_config import describe_model_config, resolve_config_secret
+from agent_eval.runtime import agent_capabilities
 from app.config import BACKEND_ROOT, SKILLS_ROOT
 from app.skill_registry import (
     delete_skill_version,
@@ -50,7 +51,9 @@ def list_agents() -> list[dict[str, Any]]:
     """List supported Multica Agent backends and local CLI discovery."""
     result = describe_agents(BACKEND_ROOT)
     for item in result:
-        item["evaluation_contract"] = describe_agent_contract(str(item["agent"]))
+        agent = str(item["agent"])
+        item["capabilities"] = agent_capabilities(agent)
+        item["evaluation_contract"] = describe_agent_contract(agent)
     return result
 
 

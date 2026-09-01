@@ -70,4 +70,9 @@ scoring:
 4. 明确 actual model、subagent、context、cache、session ID 的支持状态和来源。
 5. 通过统一契约测试，并保存一份真实 `evaluation-report.json` 作为认证证据。
 
+支持的 backend、可指定模型、可注入 Skill、当前机器已安装、完成 live 认证是五种不同状态。
+发现接口以 `capabilities` 明确返回前两项；只有
+`specified_model_and_skill_evaluation=true` 且 `detected_executable` 非空，才具备开始在线矩阵
+评测的前提。静态配置测试不能替代真实 CLI、凭据、模型轨迹和 Skill 断言结果。
+
 `GET /api/agents` 返回每个 Agent 的 `evaluation_contract`。单次报告的 `agent_contract.run_contract_passed` 只表示本次基础字段齐全，不能替代上述 live 认证。

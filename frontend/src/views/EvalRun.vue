@@ -40,12 +40,14 @@
             placeholder="选择 Agent"
             filterable
             style="width: 320px"
+            @change="onAgentChange"
           >
             <el-option
               v-for="a in agents"
               :key="a.agent"
-              :label="a.agent"
+              :label="agentLabel(a)"
               :value="a.agent"
+              :disabled="a.capabilities?.skill_injection === false"
             />
           </el-select>
         </el-form-item>
@@ -253,6 +255,22 @@ async function loadAgents() {
     agents.value = await fetchAgents()
   } catch (e) {
     ElMessage.error(`获取 Agent 失败: ${e.message}`)
+  }
+}
+
+function agentLabel(agent) {
+  const notes = []
+  if (!agent.detected_executable) notes.push('未安装')
+  if (agent.capabilities?.skill_injection === false) notes.push('无 Skill 适配')
+  else if (agent.capabilities?.model_selection === false) notes.push('模型由运行时管理')
+  return notes.length ? `${agent.agent}（${notes.join('，')}）` : agent.agent
+}
+
+function onAgentChange(name) {
+  const selected = agents.value.find((item) => item.agent === name)
+  if (selected?.capabilities?.model_selection === false) {
+    form.require_model_verification = false
+    ElMessage.warning('该 Agent 的模型由运行时管理，已关闭指定模型硬校验')
   }
 }
 

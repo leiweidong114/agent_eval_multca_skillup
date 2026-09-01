@@ -90,8 +90,11 @@ def test_requested_model_verification_requires_exact_successful_match():
     weak = verify_requested_model(
         rows, expected_model="opencode-go/minimax-m2.7", exact=False
     )
-    assert weak["verified"] is True
+    assert weak["verified"] is False
+    assert weak["model_matched"] is True
     assert weak["exact_agent_attribution"] is False
+    assert weak["status"] == "matched_unattributed"
+    assert weak["reason"] == "exact_run_correlation_unavailable"
     assert weak["warning"]
 
 
