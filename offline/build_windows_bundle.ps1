@@ -52,7 +52,9 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "offline\assets\git") | Out-Null
     Copy-Item $bundle (Join-Path $packageRoot "offline\assets\git\agent_eval_multca_skillup.bundle")
 
-    $pythonInstaller = Get-Asset $lock.python "python"
+    $pythonArchive = Get-Asset $lock.python "python"
+    $getPipEntry = [pscustomobject]@{ url = $lock.python.get_pip_url; file = $lock.python.get_pip_file }
+    $getPip = Get-Asset $getPipEntry "python"
     $goArchive = Get-Asset $lock.go "go"
     $nodeArchive = Get-Asset $lock.node "node"
     $null = Get-Asset $lock.git "git"
@@ -61,25 +63,22 @@ try {
     $builderRoot = Join-Path $stage "builder"
     $packagePython = Join-Path $packageRoot "backend\.runtime\windows\python"
     New-Item -ItemType Directory -Force -Path $packagePython | Out-Null
-    $pythonInstall = Start-Process -FilePath $pythonInstaller -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
-        "/quiet", "InstallAllUsers=0", "Include_launcher=0", "Include_test=0",
-        "Include_pip=1", "PrependPath=0", "Shortcuts=0", "TargetDir=$packagePython"
-    )
-    if ($pythonInstall.ExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $packagePython "python.exe"))) {
-        throw "Build Python installation failed with exit code $($pythonInstall.ExitCode)."
-    }
+    Expand-Archive -LiteralPath $pythonArchive -DestinationPath $packagePython -Force
+    $pth = Get-ChildItem $packagePython -Filter "python*._pth" -File | Select-Object -First 1
+    if (-not $pth) { throw "Embedded Python path configuration is missing." }
+    $pthContent = (Get-Content -Raw $pth.FullName).Replace("#import site", "import site")
+    [System.IO.File]::WriteAllText($pth.FullName, $pthContent, [System.Text.UTF8Encoding]::new($false))
     $python = Join-Path $packagePython "python.exe"
-    $buildEnv = Join-Path $builderRoot "venv"
-    & $python -m venv $buildEnv
-    $buildPython = Join-Path $buildEnv "Scripts\python.exe"
-    & $buildPython -m pip install --upgrade pip setuptools wheel
-    & $buildPython -m pip install -r (Join-Path $packageRoot "offline\python-requirements.in")
+    & $python $getPip --no-warn-script-location
+    if ($LASTEXITCODE -ne 0) { throw "pip bootstrap failed." }
+    & $python -m pip install --upgrade pip setuptools wheel
+    & $python -m pip install -r (Join-Path $packageRoot "offline\python-requirements.in")
     if ($LASTEXITCODE -ne 0) { throw "Python dependency resolution failed." }
     $pythonAssetRoot = Join-Path $packageRoot "offline\assets\python"
     $requirementsLock = Join-Path $pythonAssetRoot "requirements.lock"
-    & $buildPython -m pip freeze --exclude-editable | Where-Object { $_ -notmatch '^agent-eval-' } | Set-Content -Encoding utf8 $requirementsLock
-    & $buildPython -m pip download --only-binary=:all: --dest (Join-Path $pythonAssetRoot "wheelhouse") -r $requirementsLock
-    & $buildPython -m pip download --only-binary=:all: --dest (Join-Path $pythonAssetRoot "wheelhouse") pip setuptools wheel
+    & $python -m pip freeze --exclude-editable | Where-Object { $_ -notmatch '^agent-eval-' } | Set-Content -Encoding utf8 $requirementsLock
+    & $python -m pip download --only-binary=:all: --dest (Join-Path $pythonAssetRoot "wheelhouse") -r $requirementsLock
+    & $python -m pip download --only-binary=:all: --dest (Join-Path $pythonAssetRoot "wheelhouse") pip setuptools wheel
     if ($LASTEXITCODE -ne 0) { throw "Python wheelhouse creation failed." }
 
     $goBuildRoot = Join-Path $builderRoot "go"

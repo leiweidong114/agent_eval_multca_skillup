@@ -42,18 +42,19 @@ if ($portableGit -and ($Force -or -not (Test-Path -LiteralPath (Join-Path $gitTa
     if ($LASTEXITCODE -ne 0) { throw "PortableGit extraction failed." }
 }
 
-$pythonInstaller = Get-ChildItem (Join-Path $assets "python") -Filter "python-*-amd64.exe" -File | Select-Object -First 1
-if (-not $pythonInstaller) { throw "Offline Python installer is missing." }
+$pythonArchive = Get-ChildItem (Join-Path $assets "python") -Filter "python-*-embed-amd64.zip" -File | Select-Object -First 1
+$getPip = Join-Path $assets "python\get-pip.py"
+if (-not $pythonArchive -or -not (Test-Path -LiteralPath $getPip)) { throw "Offline embedded Python assets are missing." }
 if ($Force -and (Test-Path -LiteralPath $backendPython)) { Remove-Item -LiteralPath $backendPython -Recurse -Force }
 if (-not (Test-Path -LiteralPath (Join-Path $backendPython "python.exe"))) {
     New-Item -ItemType Directory -Force -Path $backendPython | Out-Null
-    $pythonInstall = Start-Process -FilePath $pythonInstaller.FullName -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
-        "/quiet", "InstallAllUsers=0", "Include_launcher=0", "Include_test=0",
-        "Include_pip=1", "PrependPath=0", "Shortcuts=0", "TargetDir=$backendPython"
-    )
-    if ($pythonInstall.ExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $backendPython "python.exe"))) {
-        throw "Offline Python installation failed with exit code $($pythonInstall.ExitCode)."
-    }
+    Expand-Archive -LiteralPath $pythonArchive.FullName -DestinationPath $backendPython -Force
+    $pth = Get-ChildItem $backendPython -Filter "python*._pth" -File | Select-Object -First 1
+    if (-not $pth) { throw "Embedded Python path configuration is missing." }
+    $pthContent = (Get-Content -Raw $pth.FullName).Replace("#import site", "import site")
+    [System.IO.File]::WriteAllText($pth.FullName, $pthContent, [System.Text.UTF8Encoding]::new($false))
+    & (Join-Path $backendPython "python.exe") $getPip --no-index --find-links (Join-Path $assets "python\wheelhouse") --no-warn-script-location
+    if ($LASTEXITCODE -ne 0) { throw "Offline pip bootstrap failed." }
 }
 
 & (Join-Path $PSScriptRoot "rebuild_all.ps1") -SkipTests:$SkipTests
