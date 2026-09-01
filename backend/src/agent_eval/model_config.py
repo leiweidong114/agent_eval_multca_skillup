@@ -11,14 +11,6 @@ from urllib.parse import urlsplit, urlunsplit
 import yaml
 
 
-CODEBUDDY_COMPATIBLE_MODELS = {
-    "opencode-go/minimax-m2.5": "custom-local:MiniMax-M2.5",
-    "opencode-go/minimax-m2.7": "custom-local:MiniMax-M2.7",
-    "opencode-go/minimax-m3": "custom-local:MiniMax-M3",
-    "opencode-go/grok-4.5": "custom-local:grok-4.5",
-}
-
-
 @dataclass(frozen=True)
 class ResolvedModelProfile:
     name: str
@@ -35,8 +27,11 @@ class ResolvedModelProfile:
             # the corresponding environment mapping below selects the actual
             # LiteLLM deployment without requiring a native Anthropic model.
             return "sonnet"
-        if agent == "codebuddy" and self.model in CODEBUDDY_COMPATIBLE_MODELS:
-            return CODEBUDDY_COMPATIBLE_MODELS[self.model]
+        if agent == "codebuddy" and self.api_base:
+            # A per-run models.json entry uses the provider model id verbatim,
+            # so CodeBuddy sends that exact id to the LiteLLM gateway instead
+            # of resolving a similarly named model from the user's Token Plan.
+            return f"custom-local:{self.model}"
         if agent == "opencode" and self.api_base:
             return f"litellm/{self.model}"
         return self.model
@@ -283,6 +278,29 @@ def write_openclaw_profile_config(path: Path, profile: ResolvedModelProfile) -> 
                 }
             ],
         },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def write_codebuddy_profile_config(path: Path, profile: ResolvedModelProfile) -> None:
+    """Write an isolated OpenAI-compatible CodeBuddy model without persisting a key."""
+    openai_base, _ = _normalized_base_url(profile.api_base)
+    config = {
+        "models": [
+            {
+                "id": profile.model,
+                "name": profile.model,
+                "vendor": "LiteLLM",
+                "url": f"{openai_base}/chat/completions",
+                "apiKey": "${LITELLM_API_KEY}",
+                "maxInputTokens": 200000,
+                "maxOutputTokens": 32000,
+                "supportsToolCall": True,
+                "supportsImages": True,
+                "supportsReasoning": True,
+            }
+        ]
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")

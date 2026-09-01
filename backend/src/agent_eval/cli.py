@@ -21,6 +21,7 @@ from agent_eval.database import (
 from agent_eval.model_config import (
     describe_model_config,
     resolve_model_profile,
+    write_codebuddy_profile_config,
     write_openclaw_profile_config,
 )
 from agent_eval.runtime import (
@@ -144,6 +145,10 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             # Keep user-level Claude settings (especially env overrides and
             # apiKeyHelper) out of this gateway connectivity probe.
             env["CLAUDE_CONFIG_DIR"] = str(root / "claude-config")
+        if runtime_agent == "codebuddy":
+            codebuddy_config = root / "codebuddy-config"
+            write_codebuddy_profile_config(codebuddy_config / "models.json", profile)
+            env["CODEBUDDY_CONFIG_DIR"] = str(codebuddy_config)
         input_path, output_path = root / "input.json", root / "output.json"
         probe_id = f"connectivity-{uuid.uuid4().hex}"
         input_path.write_text(

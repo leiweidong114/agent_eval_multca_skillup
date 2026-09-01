@@ -5,6 +5,7 @@ import pytest
 from agent_eval.model_config import (
     describe_model_config,
     resolve_model_profile,
+    write_codebuddy_profile_config,
     write_openclaw_profile_config,
 )
 
@@ -126,7 +127,7 @@ profiles:
     assert profile.agent_args == ()
 
 
-def test_codebuddy_uses_its_supported_minimax_alias(tmp_path):
+def test_codebuddy_uses_exact_gateway_model_id(tmp_path):
     _write_config(tmp_path)
     profile = resolve_model_profile(
         tmp_path,
@@ -135,7 +136,7 @@ def test_codebuddy_uses_its_supported_minimax_alias(tmp_path):
         agent="codebuddy",
     )
 
-    assert profile.model_for_agent("codebuddy") == "custom-local:MiniMax-M3"
+    assert profile.model_for_agent("codebuddy") == "custom-local:opencode-go/minimax-m3"
     assert profile.model_for_agent("claude") == "sonnet"
 
     minimax_27 = resolve_model_profile(
@@ -144,7 +145,26 @@ def test_codebuddy_uses_its_supported_minimax_alias(tmp_path):
         environ={"TEST_LITELLM_KEY": "virtual-key"},
         agent="codebuddy",
     )
-    assert minimax_27.model_for_agent("codebuddy") == "custom-local:MiniMax-M2.7"
+    assert minimax_27.model_for_agent("codebuddy") == "custom-local:opencode-go/minimax-m2.7"
+
+
+def test_codebuddy_profile_config_uses_litellm_without_embedding_the_key(tmp_path):
+    _write_config(tmp_path)
+    profile = resolve_model_profile(
+        tmp_path,
+        model_override="opencode-go/minimax-m2.7",
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+        agent="codebuddy",
+    )
+    path = tmp_path / "run" / "models.json"
+
+    write_codebuddy_profile_config(path, profile)
+    content = path.read_text(encoding="utf-8")
+
+    assert '"id": "opencode-go/minimax-m2.7"' in content
+    assert '"url": "http://127.0.0.1:4000/v1/chat/completions"' in content
+    assert '"apiKey": "${LITELLM_API_KEY}"' in content
+    assert "virtual-key" not in content
 
 
 def test_openclaw_profile_config_uses_litellm_without_embedding_the_key(tmp_path):

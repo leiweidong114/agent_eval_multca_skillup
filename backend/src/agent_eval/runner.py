@@ -26,6 +26,7 @@ from agent_eval.model_config import (
     resolve_config_secret,
     resolve_model_profile,
     write_openclaw_profile_config,
+    write_codebuddy_profile_config,
 )
 from agent_eval.skill_quality import evaluate_skill_quality
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
@@ -384,6 +385,10 @@ def run_evaluation(
         claude_config = result_root / "runtime" / "claude-config"
         claude_config.mkdir(parents=True, exist_ok=True)
         env["CLAUDE_CONFIG_DIR"] = str(claude_config)
+    if agent == "codebuddy":
+        codebuddy_config = result_root / "runtime" / "codebuddy-config"
+        write_codebuddy_profile_config(codebuddy_config / "models.json", resolved_profile)
+        env["CODEBUDDY_CONFIG_DIR"] = str(codebuddy_config)
     if agent == "openclaw":
         openclaw_config = result_root / "runtime" / "openclaw.json"
         write_openclaw_profile_config(openclaw_config, resolved_profile)
