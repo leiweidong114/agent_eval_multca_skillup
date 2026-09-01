@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import shutil
+import os
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from agent_eval.database import database_health
 from agent_eval.model_config import describe_model_config
@@ -12,8 +14,19 @@ from agent_eval.runtime import (
     default_agent_command,
 )
 from app.config import BACKEND_ROOT, SKILLS_ROOT
+from app.skill_registry import (
+    delete_skill_version,
+    list_uploaded_skills,
+    resolve_skill,
+    upload_skill,
+)
+from app.retention import cleanup_expired_runs, expired_runs
 
 router = APIRouter(prefix="/api", tags=["discovery"])
+
+
+class CleanupRequest(BaseModel):
+    confirm: bool = False
 
 
 def _scan_skills(root: Path) -> list[dict[str, str]]:
@@ -60,7 +73,27 @@ def get_model_config() -> dict[str, object]:
 @router.get("/database/health")
 def get_database_health() -> dict[str, object]:
     """Check direct PostgreSQL access without exposing credentials."""
-    return database_health(BACKEND_ROOT)
+    result = database_health(BACKEND_ROOT)
+    result["exact_trace_available"] = bool(os.environ.get("LITELLM_MASTER_KEY"))
+    result["trace_note"] = (
+        "Exact per-run LiteLLM correlation enabled" if result["exact_trace_available"]
+        else "Set LITELLM_MASTER_KEY to enable exact correlation; current runs use model/time matching"
+    )
+    return result
+
+
+@router.get("/privacy/retention")
+def get_retention() -> dict[str, object]:
+    """Preview expired local evaluation artifacts without deleting them."""
+    return expired_runs()
+
+
+@router.post("/privacy/retention/cleanup")
+def run_retention_cleanup(request: CleanupRequest) -> dict[str, object]:
+    """Explicitly delete only expired run directories under the configured run root."""
+    if not request.confirm:
+        raise HTTPException(status_code=400, detail="Set confirm=true to delete expired runs")
+    return cleanup_expired_runs()
 
 
 @router.get("/skills")
@@ -68,15 +101,43 @@ def list_skills() -> dict[str, object]:
     """List available Skills under backend/skills."""
     return {
         "root": str(SKILLS_ROOT),
-        "skills": _scan_skills(SKILLS_ROOT),
+        "skills": _scan_skills(SKILLS_ROOT) + list_uploaded_skills(),
     }
+
+
+@router.post("/skills/upload")
+async def upload_skill_archive(
+    name: str = Form(...), archive: UploadFile = File(...)
+) -> dict[str, object]:
+    if not (archive.filename or "").lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Only ZIP Skill archives are accepted")
+    data = await archive.read(20 * 1024 * 1024 + 1)
+    try:
+        return upload_skill(name, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/skills/versions")
+def list_skill_versions() -> list[dict[str, object]]:
+    return list_uploaded_skills()
+
+
+@router.delete("/skills/{skill_name}/versions/{version}")
+def remove_skill_version(skill_name: str, version: str) -> dict[str, object]:
+    try:
+        if not delete_skill_version(skill_name, version):
+            raise HTTPException(status_code=404, detail="Skill version not found")
+        return {"deleted": True, "name": skill_name, "version": version}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/skills/{skill_name}/cases")
 def list_skill_cases(skill_name: str) -> dict[str, object]:
     """List case YAML files for a specific Skill."""
-    skill_dir = (SKILLS_ROOT / skill_name).resolve()
-    if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
+    skill_dir = resolve_skill(skill_name)
+    if skill_dir is None:
         raise HTTPException(status_code=404, detail=f"Skill not found: {skill_name}")
     cases_dir = skill_dir / "evals" / "cases"
     cases: list[dict[str, str]] = []

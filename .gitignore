@@ -3,6 +3,8 @@
 .tools/
 runs/
 backend/config/local.yaml
+backend/schematic_projects/
+backend/skills/.registry/
 
 # Python
 .venv/

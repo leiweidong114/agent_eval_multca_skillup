@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import routes_eval, routes_runs, routes_skill
+from app.api import routes_eval, routes_runs, routes_schematic, routes_skill
 
 app = FastAPI(
     title="Agent Eval Multca Skillup API",
@@ -23,6 +23,7 @@ app.add_middleware(
 app.include_router(routes_skill.router)
 app.include_router(routes_eval.router)
 app.include_router(routes_runs.router)
+app.include_router(routes_schematic.router)
 
 
 @app.get("/api/health")

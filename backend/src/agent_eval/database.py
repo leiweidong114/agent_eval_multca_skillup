@@ -29,6 +29,8 @@ class DatabaseConfig:
     include_content: bool
     lookaround_seconds: int
     limit: int
+    retention_days: int
+    max_content_chars: int
 
     def connection_kwargs(self) -> dict[str, Any]:
         return {
@@ -77,6 +79,9 @@ def resolve_database_config(
     trace = database.get("trace") or {}
     if not isinstance(trace, dict):
         raise DatabaseConfigurationError("database.trace must be a mapping")
+    privacy = database.get("privacy") or {}
+    if not isinstance(privacy, dict):
+        raise DatabaseConfigurationError("database.privacy must be a mapping")
     source_environment = environ if environ is not None else os.environ
     secrets = data.get("secrets") or {}
     url_env = str(database.get("url_env") or "DATABASE_URL")
@@ -115,6 +120,8 @@ def resolve_database_config(
         include_content=bool(trace.get("include_content", False)),
         lookaround_seconds=max(0, int(trace.get("lookaround_seconds") or 0)),
         limit=max(1, min(5000, int(trace.get("limit") or 500))),
+        retention_days=max(1, int(privacy.get("retention_days") or 30)),
+        max_content_chars=max(100, int(privacy.get("max_content_chars") or 20000)),
     )
 
 
@@ -160,12 +167,29 @@ def _json_value(value: Any) -> Any:
         return str(value)
 
 
+_SENSITIVE_KEYS = {"authorization", "api_key", "apikey", "password", "secret", "token"}
+
+
+def _sanitize(value: Any, *, max_chars: int) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: "[REDACTED]" if key.lower() in _SENSITIVE_KEYS else _sanitize(item, max_chars=max_chars)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize(item, max_chars=max_chars) for item in value]
+    if isinstance(value, str) and len(value) > max_chars:
+        return value[:max_chars] + "...[TRUNCATED]"
+    return value
+
+
 def fetch_model_interactions(
     project_root: Path,
     *,
     started_at: datetime,
     finished_at: datetime,
     model: str,
+    key_alias: str | None = None,
 ) -> list[dict[str, Any]]:
     config = resolve_database_config(project_root)
     if not config.enabled or not config.trace_enabled:
@@ -174,28 +198,40 @@ def fetch_model_interactions(
     start = started_at - timedelta(seconds=config.lookaround_seconds)
     end = finished_at + timedelta(seconds=config.lookaround_seconds)
     content_columns = ", messages, response" if config.include_content else ""
+    match_sql = '''(
+        metadata->>'user_api_key_alias' = %s
+        or metadata->'spend_logs_metadata'->>'user_api_key_alias' = %s
+    )''' if key_alias else '''"startTime" between %s and %s
+          and (model = %s or model_group = %s or model like %s)'''
+    parameters: tuple[Any, ...] = (key_alias, key_alias) if key_alias else (
+        start, end, model, model, f"%{model}%"
+    )
     query = f'''select request_id, call_type, spend, total_tokens, prompt_tokens,
         completion_tokens, "startTime" as start_time, "endTime" as end_time,
         model, model_id, model_group, custom_llm_provider, session_id, status,
         agent_id, request_duration_ms{content_columns}
         from "LiteLLM_SpendLogs"
-        where "startTime" between %s and %s
-          and (model = %s or model_group = %s or model like %s)
+        where {match_sql}
         order by "startTime" asc
         limit %s'''
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
-            cursor.execute(query, (start, end, model, model, f"%{model}%", config.limit))
+            cursor.execute(query, (*parameters, config.limit))
             rows = cursor.fetchall()
-    return [{key: _json_value(value) for key, value in row.items()} for row in rows]
+    return [
+        _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=config.max_content_chars)
+        for row in rows
+    ]
 
 
-def summarize_model_interactions(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def summarize_model_interactions(
+    rows: list[dict[str, Any]], *, exact: bool = False
+) -> dict[str, Any]:
     successes = sum(str(row.get("status", "")).lower() == "success" for row in rows)
     durations = [int(row["request_duration_ms"]) for row in rows if row.get("request_duration_ms") is not None]
     return {
         "status": "matched" if rows else "no_match",
-        "correlation": "model_and_time_window",
+        "correlation": "run_scoped_virtual_key" if exact else "model_and_time_window",
         "model_call_count": len(rows),
         "successful_model_calls": successes,
         "model_call_success_rate": round(100 * successes / len(rows), 2) if rows else None,

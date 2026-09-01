@@ -8,7 +8,7 @@
 - 发给 Agent 的系统提示词固定为空；单条用例 Prompt 按原始字节内容传递，不注入 Multica 默认提示词。
 - PostgreSQL 只作为可选的只读轨迹数据源；数据库暂时不可用不会阻断结果评测。
 
-## 项目结构（server_dev 分支，前后端分离）
+## 项目结构（dev 分支，前后端分离）
 
 本分支在原有 CLI 工具基础上新增了前后端分离的 Web 界面：
 
@@ -21,6 +21,7 @@ agent_eval_multca_skillup/
 │   │   └── api/             # REST 接口
 │   │       ├── routes_eval.py    # 评测运行 /api/run、/api/validate
 │   │       ├── routes_skill.py   # Skill/Agent 发现 /api/skills、/api/agents
+│   │       ├── routes_schematic.py # 原理图生成、工程读取与 JSON 专项 Judge
 │   │       └── routes_runs.py    # 历史记录 /api/runs、/api/runs/{id}
 │   ├── src/                 # 原有 agent_eval 评测核心逻辑
 │   ├── tests/               # 原有单元测试
@@ -48,10 +49,16 @@ agent_eval_multca_skillup/
 | GET | /api/skills/{name}/cases | 某 Skill 的用例列表 |
 | GET | /api/model-config | 非敏感模型配置 |
 | GET | /api/database/health | PostgreSQL 直连状态与交互记录数 |
-| POST | /api/run | 触发评测运行 |
+| POST | /api/run | 创建后台评测任务，立即返回 job_id |
+| GET/POST | /api/jobs、/api/jobs/{id}/cancel | 进度查询与取消 |
 | POST | /api/validate | 仅校验配置不完整运行 |
 | GET | /api/runs | 历史评测记录 |
 | GET | /api/runs/{run_id} | 单次评测详情 |
+| POST/GET | /api/skills/upload、/api/skills/versions | Skill ZIP 上传与内容版本管理 |
+| GET/POST | /api/privacy/retention、/api/privacy/retention/cleanup | 保留策略预览与显式清理 |
+| GET/POST | /api/schematic/example、/api/schematic/generate | 框图示例与完整原理图流水线 |
+| POST | /api/schematic/judge | 对外部生成的原理图 JSON 做专项评分 |
+| GET | /api/schematic/projects/{id} | 读取可在网页打开的原理图工程 |
 
 ### 启动方式
 
@@ -83,6 +90,8 @@ agent-eval CLI
 ```
 
 Agent CLI 自身可能需要本地安装和配置；这属于 Agent 运行环境，不是 Multica 登录。评测可按模型和运行时间窗口关联 PostgreSQL `LiteLLM_SpendLogs`，原始匹配记录写入本次运行目录的 `model-interactions.json`。
+
+评测任务由后端工作线程执行，任务状态写入 `backend/runs/_jobs`，前端可实时查询进度和取消。服务重启后未完成任务会标记为 `interrupted`，不会被误报为成功。
 
 ## 模型配置
 
@@ -142,6 +151,29 @@ secrets:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/api/database/health
 ```
+
+如需把一次运行和数据库记录严格一一对应，额外在后端进程环境设置 LiteLLM Master Key：
+
+```powershell
+$env:LITELLM_MASTER_KEY = "你的 LiteLLM Master Key"
+```
+
+后端会为每个任务创建一小时有效的临时虚拟 Key，并按 `key_alias` 精确读取 SpendLogs，运行结束后删除。未配置时仍可运行，但报告会明确标记 `model_and_time_window`，不会声称是精确关联。默认不读取 messages/response；如确需内容，可在 `database.yaml` 打开 `include_content`，敏感键会脱敏、长文本会截断。本地产物默认保留 30 天，只有调用 cleanup 接口时才执行删除。
+
+## 原理图完整 Skill 与专项 Judge
+
+内置 Skill 位于 `backend/skills/schematic-generation`，包含 147 示例、格式契约、流水线脚本和专项 Judge。可脱离 Agent 单独验证：
+
+```powershell
+python backend/skills/schematic-generation/scripts/schematic_pipeline.py `
+  --input backend/skills/schematic-generation/assets/example_block_diagram.json `
+  --output backend/schematic_projects/demo/generated
+python backend/skills/schematic-generation/scripts/schematic_judge.py `
+  --input backend/skills/schematic-generation/assets/example_block_diagram.json `
+  --output backend/schematic_projects/demo/generated
+```
+
+网页 `/schematic` 可编辑/展示框图，执行信号接口提取、公共/私有 CBB 分流、器件并行生成、整版 JSON 打包和专项评分，并返回 `/schematic?project=<id>` 工程 URL。Judge 总分 100：器件 25、引脚 15、连线拓扑 40、网络名 15、Schema/过程产物 5。
 
 ## Windows 安装
 

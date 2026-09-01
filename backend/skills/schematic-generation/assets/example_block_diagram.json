@@ -1,0 +1,22 @@
+{
+  "title": "147 控制与采集框图",
+  "components": [
+    {"id":"J1","name":"电源接口","type":"connector","library_type":"public","pins":[{"id":"VIN","name":"VIN","direction":"output"},{"id":"GND","name":"GND","direction":"power"}]},
+    {"id":"U3","name":"3V3稳压器","type":"regulator","library_type":"public","pins":[{"id":"IN","name":"IN","direction":"input"},{"id":"OUT","name":"OUT","direction":"output"},{"id":"GND","name":"GND","direction":"power"}]},
+    {"id":"U1","name":"主控MCU","type":"mcu","library_type":"private","pins":[{"id":"VCC","name":"VCC","direction":"power"},{"id":"SCL","name":"I2C_SCL","direction":"output"},{"id":"SDA","name":"I2C_SDA","direction":"bidirectional"},{"id":"GND","name":"GND","direction":"power"}]},
+    {"id":"U2","name":"温度传感器","type":"sensor","library_type":"private","pins":[{"id":"VCC","name":"VCC","direction":"power"},{"id":"SCL","name":"I2C_SCL","direction":"input"},{"id":"SDA","name":"I2C_SDA","direction":"bidirectional"},{"id":"GND","name":"GND","direction":"power"}]},
+    {"id":"R1","name":"SDA上拉","type":"resistor","library_type":"public","pins":[{"id":"1","name":"1","direction":"power"},{"id":"2","name":"2","direction":"bidirectional"}]},
+    {"id":"C1","name":"去耦电容","type":"capacitor","library_type":"public","pins":[{"id":"1","name":"1","direction":"power"},{"id":"2","name":"2","direction":"power"}]}
+  ],
+  "connections": [
+    {"id":"W1","source":{"component":"J1","pin":"VIN"},"target":{"component":"U3","pin":"IN"},"net":"VIN_12V"},
+    {"id":"W2","source":{"component":"U3","pin":"OUT"},"target":{"component":"U1","pin":"VCC"},"net":"VCC_3V3"},
+    {"id":"W3","source":{"component":"U3","pin":"OUT"},"target":{"component":"U2","pin":"VCC"},"net":"VCC_3V3"},
+    {"id":"W4","source":{"component":"U1","pin":"SCL"},"target":{"component":"U2","pin":"SCL"},"net":"I2C_SCL"},
+    {"id":"W5","source":{"component":"U1","pin":"SDA"},"target":{"component":"U2","pin":"SDA"},"net":"I2C_SDA"},
+    {"id":"W6","source":{"component":"R1","pin":"2"},"target":{"component":"U1","pin":"SDA"},"net":"I2C_SDA"},
+    {"id":"W7","source":{"component":"U3","pin":"OUT"},"target":{"component":"R1","pin":"1"},"net":"VCC_3V3"},
+    {"id":"W8","source":{"component":"C1","pin":"1"},"target":{"component":"U1","pin":"VCC"},"net":"VCC_3V3"},
+    {"id":"W9","source":{"component":"C1","pin":"2"},"target":{"component":"U1","pin":"GND"},"net":"GND"}
+  ]
+}

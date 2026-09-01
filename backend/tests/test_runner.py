@@ -1,6 +1,11 @@
 from pathlib import Path
+import os
+import sys
+from threading import Event
 
-from agent_eval.runner import aggregate_scores, build_eval_config
+import pytest
+
+from agent_eval.runner import EvaluationCancelled, _execute_process, aggregate_scores, build_eval_config
 
 
 def test_eval_config_uses_local_multica_without_auth_or_database(tmp_path):
@@ -109,3 +114,15 @@ def test_aggregate_scores_handles_error_cases_without_grading():
     assert scores["task_score"] is None
     assert scores["execution_stability"] == 0
     assert scores["with_skill_cases"] == 1
+
+
+def test_background_process_can_be_cancelled(tmp_path):
+    cancelled = Event()
+    cancelled.set()
+    with pytest.raises(EvaluationCancelled):
+        _execute_process(
+            [sys.executable, "-c", "import time; time.sleep(10)"],
+            cwd=tmp_path,
+            env=dict(os.environ),
+            cancel_event=cancelled,
+        )

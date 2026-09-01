@@ -8,7 +8,9 @@
         </div>
       </template>
 
-      <el-table v-if="runs.length" :data="runs" stripe style="width: 100%" @row-click="openDetail">
+      <el-input v-model="filter" placeholder="按 Run ID、Agent、模型或 Skill 过滤" clearable style="width:360px;margin-bottom:12px" />
+
+      <el-table v-if="filtered.length" :data="paged" stripe style="width: 100%" @row-click="openDetail">
         <el-table-column prop="run_id" label="Run ID" min-width="280" show-overflow-tooltip />
         <el-table-column label="Agent" min-width="120">
           <template #default="{ row }">{{ row.report.agent }}</template>
@@ -34,6 +36,7 @@
       </el-table>
 
       <el-empty v-else description="暂无评测记录" />
+      <el-pagination v-if="filtered.length" v-model:current-page="page" :page-size="10" :total="filtered.length" layout="prev, pager, next, total" style="margin-top:12px" />
     </el-card>
 
     <el-drawer
@@ -57,13 +60,18 @@
           <h4>评分</h4>
           <ScoreCard :scores="selected.report.scores" />
         </div>
+        <div v-if="selected.report.database_trace" style="margin-top:16px">
+          <h4>模型交互过程</h4>
+          <el-alert :title="`关联方式：${selected.report.database_trace.correlation || 'unknown'}`" type="info" />
+          <pre class="trace">{{JSON.stringify(selected.report.database_trace,null,2)}}</pre>
+        </div>
       </template>
     </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { fetchRuns } from '../api'
 import ScoreCard from '../components/ScoreCard.vue'
@@ -71,6 +79,10 @@ import ScoreCard from '../components/ScoreCard.vue'
 const runs = ref([])
 const drawer = ref(false)
 const selected = ref(null)
+const filter=ref(''); const page=ref(1)
+const filtered=computed(()=>runs.value.filter(r=>JSON.stringify({id:r.run_id,agent:r.report.agent,model:r.report.model,skill:r.report.skill}).toLowerCase().includes(filter.value.toLowerCase())))
+const paged=computed(()=>filtered.value.slice((page.value-1)*10,page.value*10))
+watch(filter,()=>{page.value=1})
 
 function scoreType(v) {
   if (v === null || v === undefined) return 'info'
@@ -104,4 +116,5 @@ onMounted(load)
   justify-content: space-between;
   align-items: center;
 }
+.trace{background:#f5f7fa;padding:12px;max-height:360px;overflow:auto}
 </style>

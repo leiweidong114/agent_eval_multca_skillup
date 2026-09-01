@@ -1,0 +1,7 @@
+name: complete-schematic-flow
+prompt: Read assets/example_block_diagram.json and generate every required schematic artifact according to SKILL.md.
+expected_output:
+  - schematic.json
+  - 01_signal_interfaces.json
+  - 02_cbb_classification.json
+  - manifest.json

@@ -10,12 +10,17 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from threading import Event
+from collections.abc import Callable
+
+import psutil
 
 import yaml
 
 from agent_eval.database import fetch_model_interactions, summarize_model_interactions
 from agent_eval.model_config import resolve_model_profile, write_openclaw_profile_config
 from agent_eval.skill_quality import evaluate_skill_quality
+from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 from agent_eval.runtime import (
     default_agent_command,
     find_multica_runtime,
@@ -37,6 +42,47 @@ def _copy_skill(source: Path, target: Path) -> None:
             ".git", ".runtime", ".tools", "runs", "__pycache__", "*.pyc"
         ),
     )
+
+
+class EvaluationCancelled(RuntimeError):
+    pass
+
+
+def _execute_process(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    cancel_event: Event | None,
+) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    while True:
+        try:
+            stdout, stderr = process.communicate(timeout=0.5)
+            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        except subprocess.TimeoutExpired:
+            if cancel_event is None or not cancel_event.is_set():
+                continue
+            try:
+                parent = psutil.Process(process.pid)
+                descendants = parent.children(recursive=True)
+                for child in descendants:
+                    child.terminate()
+                parent.terminate()
+                _, alive = psutil.wait_procs([*descendants, parent], timeout=3)
+                for item in alive:
+                    item.kill()
+            except (psutil.Error, OSError):
+                process.kill()
+            process.communicate()
+            raise EvaluationCancelled("Evaluation was cancelled")
 
 
 def _generated_case(
@@ -209,7 +255,17 @@ def run_evaluation(
     extra_args: list[str] | None = None,
     validate_only: bool = False,
     collect_database_trace: bool = True,
+    run_id: str | None = None,
+    progress_callback: Callable[[str, int, str], None] | None = None,
+    cancel_event: Event | None = None,
 ) -> dict[str, Any]:
+    def progress(phase: str, percent: int, message: str) -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise EvaluationCancelled("Evaluation was cancelled")
+        if progress_callback is not None:
+            progress_callback(phase, percent, message)
+
+    progress("preparing", 5, "Preparing isolated Skill workspace")
     source_skill = Path(skill_dir).resolve()
     if not (source_skill / "SKILL.md").is_file():
         raise FileNotFoundError(f"SKILL.md was not found under {source_skill}")
@@ -227,9 +283,8 @@ def run_evaluation(
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     unique = uuid.uuid4().hex[:8]
     runs_root = Path(output_dir).resolve() if output_dir else project_root / "runs"
-    result_root = runs_root / (
-        f"{timestamp}__{_slug(source_skill.name)}__{_slug(agent)}-{_slug(model)}__{unique}"
-    )
+    generated_run_id = f"{timestamp}__{_slug(source_skill.name)}__{_slug(agent)}-{_slug(model)}__{unique}"
+    result_root = runs_root / (run_id or generated_run_id)
     staged_skill = result_root / "staging" / "skill"
     _copy_skill(source_skill, staged_skill)
     skill_quality = evaluate_skill_quality(source_skill)
@@ -283,13 +338,12 @@ def run_evaluation(
     env["AGENT_EVAL_RUN_ID"] = result_root.name
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = executable or default_agent_command(agent)
 
-    validation = subprocess.run(
+    progress("validating", 15, "Validating Skill-Up configuration")
+    validation = _execute_process(
         [str(skill_up), "validate", str(eval_path)],
         cwd=project_root,
         env=env,
-        text=True,
-        capture_output=True,
-        check=False,
+        cancel_event=cancel_event,
     )
     (result_root / "validate.stdout.log").write_text(validation.stdout, encoding="utf-8")
     (result_root / "validate.stderr.log").write_text(validation.stderr, encoding="utf-8")
@@ -316,6 +370,19 @@ def run_evaluation(
         )
         return summary
 
+    trace_key = None
+    if collect_database_trace and resolved_profile.api_base:
+        try:
+            trace_key = create_trace_key(resolved_profile.api_base, provider_model, result_root.name)
+            if trace_key is not None:
+                for key_name in (
+                    "LITELLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+                    "ANTHROPIC_AUTH_TOKEN", "MINIMAX_API_KEY",
+                ):
+                    env[key_name] = trace_key.key
+        except Exception:
+            trace_key = None
+
     command = [
         str(skill_up),
         "run",
@@ -330,13 +397,12 @@ def run_evaluation(
         "junit",
     ]
     evaluation_started_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    completed = subprocess.run(
+    progress("running", 25, "Agent evaluation is running")
+    completed = _execute_process(
         command,
         cwd=project_root,
         env=env,
-        text=True,
-        capture_output=True,
-        check=False,
+        cancel_event=cancel_event,
     )
     evaluation_finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
     (result_root / "skill-up.stdout.log").write_text(completed.stdout, encoding="utf-8")
@@ -352,6 +418,7 @@ def run_evaluation(
     database_trace: dict[str, Any] = {"status": "disabled"}
     trace_file: str | None = None
     if collect_database_trace:
+        progress("collecting_trace", 85, "Collecting model interaction records")
         try:
             interactions: list[dict[str, Any]] = []
             for attempt in range(3):
@@ -360,11 +427,12 @@ def run_evaluation(
                     started_at=evaluation_started_at,
                     finished_at=evaluation_finished_at,
                     model=provider_model,
+                    key_alias=trace_key.alias if trace_key else None,
                 )
                 if interactions or attempt == 2:
                     break
                 time.sleep(1)
-            database_trace = summarize_model_interactions(interactions)
+            database_trace = summarize_model_interactions(interactions, exact=trace_key is not None)
             scores["model_trace_score"] = database_trace["model_call_success_rate"]
             trace_path = result_root / "model-interactions.json"
             trace_path.write_text(
@@ -394,4 +462,9 @@ def run_evaluation(
     (result_root / "evaluation-report.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    try:
+        delete_trace_key(trace_key)
+    except Exception:
+        pass
+    progress("completed", 100, "Evaluation completed")
     return summary

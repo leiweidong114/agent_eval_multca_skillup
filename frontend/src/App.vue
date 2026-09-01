@@ -22,6 +22,12 @@
           <el-icon><Grid /></el-icon>
           <span>Skill / Agent</span>
         </el-menu-item>
+        <el-menu-item index="/skills">
+          <el-icon><UploadFilled /></el-icon><span>Skill 版本</span>
+        </el-menu-item>
+        <el-menu-item index="/schematic">
+          <el-icon><Connection /></el-icon><span>原理图评测</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 

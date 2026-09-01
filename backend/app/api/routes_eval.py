@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agent_eval.runner import run_evaluation
-from app.config import BACKEND_ROOT, RUNS_ROOT, SKILLS_ROOT
+from app.config import BACKEND_ROOT, RUNS_ROOT
+from app.job_manager import job_manager
+from app.skill_registry import resolve_skill
 
 router = APIRouter(prefix="/api", tags=["eval"])
 
@@ -32,8 +33,8 @@ class RunRequest(BaseModel):
 
 
 def _resolve_skill(name: str) -> Path:
-    skill_dir = (SKILLS_ROOT / name).resolve()
-    if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
+    skill_dir = resolve_skill(name)
+    if skill_dir is None:
         raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
     return skill_dir
 
@@ -66,15 +67,37 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
 
 @router.post("/run")
 def create_run(request: RunRequest) -> dict[str, object]:
-    """Trigger a full evaluation run (with skill + optional baseline)."""
+    """Queue an evaluation and return immediately with a job id."""
     try:
-        return _run(request=request, validate_only=False)
+        skill_dir = _resolve_skill(request.skill)
+        return job_manager.submit(request.model_dump(), skill_dir)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/jobs")
+def list_jobs() -> list[dict[str, object]]:
+    return job_manager.list()
+
+
+@router.get("/jobs/{job_id}")
+def get_job(job_id: str) -> dict[str, object]:
+    job = job_manager.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@router.post("/jobs/{job_id}/cancel")
+def cancel_job(job_id: str) -> dict[str, object]:
+    job = job_manager.cancel(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 @router.post("/validate")

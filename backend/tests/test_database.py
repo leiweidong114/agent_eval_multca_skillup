@@ -37,6 +37,7 @@ def test_database_config_uses_environment_secret(tmp_path):
     assert config.password == "secret"
     assert config.trace_enabled is True
     assert config.include_content is True
+    assert config.retention_days == 30
 
 
 def test_database_config_rejects_missing_password(tmp_path):
@@ -71,3 +72,4 @@ def test_model_interaction_summary_is_deterministic():
     assert summary["model_call_success_rate"] == 50
     assert summary["total_tokens"] == 18
     assert summary["average_request_duration_ms"] == 200
+    assert summarize_model_interactions([], exact=True)["correlation"] == "run_scoped_virtual_key"

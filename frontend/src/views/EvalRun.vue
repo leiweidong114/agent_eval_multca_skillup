@@ -16,9 +16,9 @@
           >
             <el-option
               v-for="s in skills"
-              :key="s.name"
-              :label="s.name"
-              :value="s.name"
+              :key="s.skill_id || s.name"
+              :label="s.skill_id || s.name"
+              :value="s.skill_id || s.name"
             />
           </el-select>
           <el-button style="margin-left: 12px" @click="refreshSkills">刷新</el-button>
@@ -132,6 +132,7 @@
             运行评测
           </el-button>
           <el-button :loading="validating" @click="validate">仅校验</el-button>
+          <el-button v-if="running && result?.job_id" type="danger" plain @click="cancel">取消任务</el-button>
           <el-button @click="reset">重置</el-button>
         </el-form-item>
       </el-form>
@@ -141,13 +142,15 @@
       <template #header>
         <span class="card-title">运行结果</span>
       </template>
+      <el-progress v-if="result.progress !== undefined" :percentage="result.progress" :status="progressStatus" />
+      <p v-if="result.message">{{ result.phase }}：{{ result.message }}</p>
       <pre class="result-pre">{{ JSON.stringify(result, null, 2) }}</pre>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   fetchAgents,
@@ -156,6 +159,8 @@ import {
   fetchSkillCases,
   triggerRun,
   triggerValidate,
+  fetchJob,
+  cancelJob,
 } from '../api'
 
 const form = reactive({
@@ -183,6 +188,19 @@ const cases = ref([])
 const result = ref(null)
 const running = ref(false)
 const validating = ref(false)
+const progressStatus = computed(() => result.value?.status === 'failed' ? 'exception' : result.value?.status === 'completed' ? 'success' : '')
+let pollTimer = null
+
+async function pollJob(id) {
+  result.value = await fetchJob(id)
+  if (['completed', 'failed', 'cancelled', 'interrupted'].includes(result.value.status)) {
+    running.value = false
+    clearTimeout(pollTimer)
+    ElMessage[result.value.status === 'completed' ? 'success' : 'warning'](`任务${result.value.status}`)
+    return
+  }
+  pollTimer = setTimeout(() => pollJob(id).catch((e) => { running.value = false; ElMessage.error(e.message) }), 1000)
+}
 
 async function refreshSkills() {
   try {
@@ -275,12 +293,15 @@ async function run() {
   result.value = null
   try {
     result.value = await triggerRun(buildPayload())
-    ElMessage.success('评测完成')
+    ElMessage.success('评测已进入后台队列')
+    await pollJob(result.value.job_id)
   } catch (e) {
     ElMessage.error(`运行失败: ${e.response?.data?.detail || e.message}`)
-  } finally {
-    running.value = false
-  }
+  } finally {}
+}
+
+async function cancel() {
+  result.value = await cancelJob(result.value.job_id)
 }
 
 async function validate() {
