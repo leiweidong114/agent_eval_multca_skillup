@@ -175,9 +175,11 @@ def test_openclaw_profile_config_uses_litellm_without_embedding_the_key(tmp_path
     )
     path = tmp_path / "run" / "openclaw.json"
 
-    write_openclaw_profile_config(path, profile)
+    workspace = tmp_path / "openclaw-workspace"
+    write_openclaw_profile_config(path, profile, workspace=workspace)
     content = path.read_text(encoding="utf-8")
 
     assert '"primary": "litellm/MiniMax-M3"' in content
     assert '"apiKey": "${LITELLM_API_KEY}"' in content
+    assert f'"workspace": "{str(workspace).replace(chr(92), chr(92) * 2)}"' in content
     assert "virtual-key" not in content

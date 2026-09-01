@@ -17,6 +17,7 @@ import psutil
 
 import yaml
 
+from agent_eval.codebuddy_proxy import CodeBuddyCompatibilityProxy
 from agent_eval.database import (
     fetch_model_interactions,
     summarize_model_interactions,
@@ -391,7 +392,11 @@ def run_evaluation(
         env["CODEBUDDY_CONFIG_DIR"] = str(codebuddy_config)
     if agent == "openclaw":
         openclaw_config = result_root / "runtime" / "openclaw.json"
-        write_openclaw_profile_config(openclaw_config, resolved_profile)
+        openclaw_workspace = result_root / "runtime" / "openclaw-workspace"
+        _copy_skill(staged_skill, openclaw_workspace / "skills" / _slug(source_skill.name))
+        write_openclaw_profile_config(
+            openclaw_config, resolved_profile, workspace=openclaw_workspace
+        )
         env["OPENCLAW_CONFIG_PATH"] = str(openclaw_config)
     env["AGENT_EVAL_RUN_ID"] = operation_id
     env["AGENT_EVAL_TASK_ID"] = canonical_task_id
@@ -474,12 +479,27 @@ def run_evaluation(
     ]
     evaluation_started_at = datetime.now(timezone.utc).replace(tzinfo=None)
     progress("running", 25, "Agent evaluation is running")
-    completed = _execute_process(
-        command,
-        cwd=project_root,
-        env=env,
-        cancel_event=cancel_event,
-    )
+    if agent == "codebuddy":
+        openai_base = resolved_profile.environment["OPENAI_BASE_URL"]
+        proxy = CodeBuddyCompatibilityProxy(f"{openai_base}/chat/completions")
+        proxy.start()
+        codebuddy_config = Path(env["CODEBUDDY_CONFIG_DIR"])
+        write_codebuddy_profile_config(
+            codebuddy_config / "models.json", resolved_profile, endpoint=proxy.url
+        )
+        try:
+            completed = _execute_process(
+                command, cwd=project_root, env=env, cancel_event=cancel_event
+            )
+        finally:
+            proxy.close()
+    else:
+        completed = _execute_process(
+            command,
+            cwd=project_root,
+            env=env,
+            cancel_event=cancel_event,
+        )
     evaluation_finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
     (result_root / "skill-up.stdout.log").write_text(completed.stdout, encoding="utf-8")
     (result_root / "skill-up.stderr.log").write_text(completed.stderr, encoding="utf-8")

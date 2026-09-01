@@ -239,7 +239,12 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
     }
 
 
-def write_openclaw_profile_config(path: Path, profile: ResolvedModelProfile) -> None:
+def write_openclaw_profile_config(
+    path: Path,
+    profile: ResolvedModelProfile,
+    *,
+    workspace: Path | None = None,
+) -> None:
     openai_base, _ = _normalized_base_url(profile.api_base)
     primary = f"litellm/{profile.model}"
     config = {
@@ -275,6 +280,7 @@ def write_openclaw_profile_config(path: Path, profile: ResolvedModelProfile) -> 
                     "default": True,
                     "identity": {"name": "main"},
                     "model": {"primary": primary},
+                    **({"workspace": str(workspace)} if workspace is not None else {}),
                 }
             ],
         },
@@ -283,7 +289,12 @@ def write_openclaw_profile_config(path: Path, profile: ResolvedModelProfile) -> 
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def write_codebuddy_profile_config(path: Path, profile: ResolvedModelProfile) -> None:
+def write_codebuddy_profile_config(
+    path: Path,
+    profile: ResolvedModelProfile,
+    *,
+    endpoint: str | None = None,
+) -> None:
     """Write an isolated OpenAI-compatible CodeBuddy model without persisting a key."""
     openai_base, _ = _normalized_base_url(profile.api_base)
     config = {
@@ -292,7 +303,7 @@ def write_codebuddy_profile_config(path: Path, profile: ResolvedModelProfile) ->
                 "id": profile.model,
                 "name": profile.model,
                 "vendor": "LiteLLM",
-                "url": f"{openai_base}/chat/completions",
+                "url": endpoint or f"{openai_base}/chat/completions",
                 "apiKey": "${LITELLM_API_KEY}",
                 "maxInputTokens": 200000,
                 "maxOutputTokens": 32000,
