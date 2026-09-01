@@ -50,6 +50,12 @@ function Get-Asset([object]$Entry, [string]$Subdirectory) {
             }
         }
     }
+    if ($Entry.PSObject.Properties.Name -contains "sha256" -and $Entry.sha256) {
+        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $cacheFile).Hash.ToLowerInvariant()
+        if ($actual -ne ([string]$Entry.sha256).ToLowerInvariant()) {
+            throw "Pinned asset checksum mismatch: $($Entry.file) ($actual)"
+        }
+    }
     $destination = Join-Path $packageRoot "offline\assets\$Subdirectory"
     New-Item -ItemType Directory -Force -Path $destination | Out-Null
     Copy-Item -LiteralPath $cacheFile -Destination (Join-Path $destination $Entry.file) -Force
@@ -65,7 +71,7 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "offline\assets\git") | Out-Null
     Copy-Item $bundle (Join-Path $packageRoot "offline\assets\git\agent_eval_multca_skillup.bundle")
 
-    $pythonInstaller = Get-Asset $lock.python "python"
+    $pythonDistribution = Get-Asset $lock.python "python"
     $goArchive = Get-Asset $lock.go "go"
     $nodeArchive = Get-Asset $lock.node "node"
     $null = Get-Asset $lock.git "git"
@@ -73,16 +79,11 @@ try {
 
     $builderRoot = Join-Path $stage "builder"
     New-Item -ItemType Directory -Force -Path $pythonBuildRoot | Out-Null
-    $pythonInstallLog = Join-Path $pythonBuildRoot "install.log"
-    $pythonInstall = Start-Process -FilePath $pythonInstaller -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
-        "/quiet", "InstallAllUsers=0", "Include_launcher=0", "Include_test=0",
-        "Include_pip=1", "PrependPath=0", "Shortcuts=0",
-        "TargetDir=`"$pythonBuildRoot`"", "/log", "`"$pythonInstallLog`""
-    )
-    $python = Join-Path $pythonBuildRoot "python.exe"
-    if ($pythonInstall.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $python)) {
-        throw "Build Python installation failed with exit code $($pythonInstall.ExitCode); see $pythonInstallLog."
-    }
+    & tar.exe -xf $pythonDistribution -C $pythonBuildRoot
+    if ($LASTEXITCODE -ne 0) { throw "Portable Python extraction failed." }
+    $pythonHome = Join-Path $pythonBuildRoot "python"
+    $python = Join-Path $pythonHome "python.exe"
+    if (-not (Test-Path -LiteralPath $python)) { throw "Portable Python executable is missing." }
     & $python -m pip install --upgrade pip setuptools wheel
     & $python -m pip install -r (Join-Path $packageRoot "offline\python-requirements.in")
     if ($LASTEXITCODE -ne 0) { throw "Python dependency resolution failed." }
@@ -93,10 +94,10 @@ try {
     & $python -m pip download --only-binary=:all: --dest (Join-Path $pythonAssetRoot "wheelhouse") pip setuptools wheel
     if ($LASTEXITCODE -ne 0) { throw "Python wheelhouse creation failed." }
     $pythonRuntimeArchive = Join-Path $pythonAssetRoot "python-runtime.zip"
-    Compress-Archive -Path (Join-Path $pythonBuildRoot "*") -DestinationPath $pythonRuntimeArchive -CompressionLevel Optimal
+    Compress-Archive -Path (Join-Path $pythonHome "*") -DestinationPath $pythonRuntimeArchive -CompressionLevel Optimal
     $packagePython = Join-Path $packageRoot "backend\.runtime\windows\python"
     New-Item -ItemType Directory -Force -Path $packagePython | Out-Null
-    Copy-Item (Join-Path $pythonBuildRoot "*") $packagePython -Recurse -Force
+    Copy-Item (Join-Path $pythonHome "*") $packagePython -Recurse -Force
 
     $goBuildRoot = Join-Path $builderRoot "go"
     Expand-Archive -LiteralPath $goArchive -DestinationPath $goBuildRoot -Force
