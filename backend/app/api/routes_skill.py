@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import shutil
-import os
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from agent_eval.database import database_health
-from agent_eval.model_config import describe_model_config
-from agent_eval.runtime import (
-    SUPPORTED_AGENTS,
-    default_agent_command,
-)
+from agent_eval.agent_config import describe_agents
+from agent_eval.model_config import describe_model_config, resolve_config_secret
 from app.config import BACKEND_ROOT, SKILLS_ROOT
 from app.skill_registry import (
     delete_skill_version,
@@ -51,17 +46,7 @@ def _scan_skills(root: Path) -> list[dict[str, str]]:
 @router.get("/agents")
 def list_agents() -> list[dict[str, str | bool | None]]:
     """List supported Multica Agent backends and local CLI discovery."""
-    result: list[dict[str, str | bool | None]] = []
-    for agent in SUPPORTED_AGENTS:
-        command = default_agent_command(agent)
-        result.append(
-            {
-                "agent": agent,
-                "default_command": command,
-                "detected_executable": shutil.which(command),
-            }
-        )
-    return result
+    return describe_agents(BACKEND_ROOT)
 
 
 @router.get("/model-config")
@@ -74,7 +59,9 @@ def get_model_config() -> dict[str, object]:
 def get_database_health() -> dict[str, object]:
     """Check direct PostgreSQL access without exposing credentials."""
     result = database_health(BACKEND_ROOT)
-    result["exact_trace_available"] = bool(os.environ.get("LITELLM_MASTER_KEY"))
+    result["exact_trace_available"] = bool(
+        resolve_config_secret(BACKEND_ROOT, "LITELLM_MASTER_KEY")
+    )
     result["trace_note"] = (
         "Exact per-run LiteLLM correlation enabled" if result["exact_trace_available"]
         else "Set LITELLM_MASTER_KEY to enable exact correlation; current runs use model/time matching"

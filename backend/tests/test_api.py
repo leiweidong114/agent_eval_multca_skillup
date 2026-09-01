@@ -15,6 +15,12 @@ def test_health_and_discovery_endpoints():
     assert skills.status_code == 200
 
 
+def test_built_frontend_is_served_when_dist_exists():
+    response = client.get("/")
+    if response.status_code == 200:
+        assert "<div id=\"app\"></div>" in response.text
+
+
 def test_database_health_never_exposes_credentials_or_crashes():
     response = client.get("/api/database/health")
     assert response.status_code == 200

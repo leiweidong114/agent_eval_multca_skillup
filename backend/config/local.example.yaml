@@ -2,8 +2,21 @@
 secrets:
   LITELLM_API_KEY: sk-your-virtual-key
   LITELLM_DATABASE_PASSWORD: your-database-password
+  # Optional. Enables exact per-run LiteLLM trace correlation.
+  LITELLM_MASTER_KEY: your-litellm-master-key
 
-# Optional: override non-secret defaults for another environment.
-# database:
-#   host: 10.0.0.10
-#   port: 5432
+# The LiteLLM API and PostgreSQL can use the same intranet host.
+default_profile: intranet_default
+profiles:
+  intranet_default:
+    model: your-litellm-model-name
+    api_base: http://10.0.0.10:4000/v1
+    api_key_env: LITELLM_API_KEY
+database:
+  host: 10.0.0.10
+  port: 5432
+
+# Agent installations remain external to this project.
+agents:
+  codex:
+    executable: C:\Tools\codex\codex.exe

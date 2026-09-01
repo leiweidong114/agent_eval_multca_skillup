@@ -192,6 +192,26 @@ Set-Location D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skil
 
 Skill-Up 0.9.1 的自定义本地引擎硬编码了 POSIX 命令语法。本项目构建时自动应用 [`backend/patches/skill-up-v0.9.1-windows-custom-engine.patch`](backend/patches/skill-up-v0.9.1-windows-custom-engine.patch)，仅修复 Windows `cmd.exe` 的路径引用和旧输出清理，不改变评分逻辑。
 
+## 完整 Windows 离线开发包
+
+`offline/build_windows_bundle.ps1` 在联网 Windows 构建机生成完整的 x64 ZIP。包内同时包含独立 Git 仓库、PortableGit、Python 与 wheelhouse、Go SDK 与 vendored Multica/Skill-Up 源码、Node.js 与 npm 缓存、预编译运行时和前端产物。内网机器不需要访问公网：
+
+```powershell
+# 联网构建机；必须先提交当前分支改动
+.\offline\build_windows_bundle.ps1 -OutputDirectory D:\offline-output
+
+# 内网机器；完整包已经预构建，修改源码后可重新初始化/构建
+.\scripts\bootstrap_offline.ps1
+.\scripts\configure.ps1 -Server 10.0.0.10 -Model your-model `
+  -LiteLLMKey sk-xxx -DatabasePassword your-password
+.\scripts\doctor.ps1 -Agent codex
+.\scripts\start.ps1
+```
+
+后端修改后运行 `scripts/rebuild_backend.ps1`，前端修改后运行 `scripts/rebuild_frontend.ps1`，Go 运行层修改后运行 `scripts/rebuild_go.ps1`；也可运行 `scripts/rebuild_all.ps1`。`scripts/dev_shell.ps1` 把包内 Git、Python、Go 和 Node 临时加入当前 PowerShell 的 `PATH`。
+
+离线包中的 `backend/config/local.yaml` 只提供占位模板。真实 LiteLLM、PostgreSQL 和 Agent 凭据必须在内网机器配置，不会写入 Git bundle 或联网构建产物。
+
 ## Linux 安装
 
 要求：x86_64/arm64 Linux、`sh`、Git、curl、Python 3.10+：

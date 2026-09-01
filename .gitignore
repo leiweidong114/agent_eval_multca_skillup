@@ -22,3 +22,8 @@ dist/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
+# Offline build downloads and release artifacts
+offline/assets/
+.offline-cache/
+dist-offline/

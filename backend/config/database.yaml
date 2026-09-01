@@ -1,6 +1,6 @@
 database:
   enabled: true
-  host: 8.137.196.46
+  host: 127.0.0.1
   port: 5432
   name: litellm
   user: litellm

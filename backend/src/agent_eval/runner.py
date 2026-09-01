@@ -18,11 +18,15 @@ import psutil
 import yaml
 
 from agent_eval.database import fetch_model_interactions, summarize_model_interactions
-from agent_eval.model_config import resolve_model_profile, write_openclaw_profile_config
+from agent_eval.agent_config import resolve_agent_executable
+from agent_eval.model_config import (
+    resolve_config_secret,
+    resolve_model_profile,
+    write_openclaw_profile_config,
+)
 from agent_eval.skill_quality import evaluate_skill_quality
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 from agent_eval.runtime import (
-    default_agent_command,
     find_multica_runtime,
     find_skill_up,
     normalize_agent,
@@ -272,6 +276,7 @@ def run_evaluation(
     if not case_files and not prompt:
         raise ValueError("Pass at least one --case or --prompt")
     agent = normalize_agent(agent)
+    agent_executable = resolve_agent_executable(project_root, agent, executable)
     resolved_profile = resolve_model_profile(
         project_root,
         profile_name=profile,
@@ -314,7 +319,7 @@ def run_evaluation(
     eval_config = build_eval_config(
         agent=agent,
         model=model,
-        executable=executable or default_agent_command(agent),
+        executable=agent_executable,
         runtime_binary=runtime_binary,
         skill_name=_slug(source_skill.name),
         case_paths=staged_cases,
@@ -336,7 +341,7 @@ def run_evaluation(
         write_openclaw_profile_config(openclaw_config, resolved_profile)
         env["OPENCLAW_CONFIG_PATH"] = str(openclaw_config)
     env["AGENT_EVAL_RUN_ID"] = result_root.name
-    env["AGENT_EVAL_AGENT_EXECUTABLE"] = executable or default_agent_command(agent)
+    env["AGENT_EVAL_AGENT_EXECUTABLE"] = agent_executable
 
     progress("validating", 15, "Validating Skill-Up configuration")
     validation = _execute_process(
@@ -373,7 +378,12 @@ def run_evaluation(
     trace_key = None
     if collect_database_trace and resolved_profile.api_base:
         try:
-            trace_key = create_trace_key(resolved_profile.api_base, provider_model, result_root.name)
+            trace_key = create_trace_key(
+                resolved_profile.api_base,
+                provider_model,
+                result_root.name,
+                resolve_config_secret(project_root, "LITELLM_MASTER_KEY"),
+            )
             if trace_key is not None:
                 for key_name in (
                     "LITELLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",

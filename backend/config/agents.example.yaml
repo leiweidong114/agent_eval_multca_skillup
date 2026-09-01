@@ -1,0 +1,9 @@
+# Copy the required entries to local.yaml. Both ${NAME} and %NAME% environment
+# placeholders are supported. Bare command names are resolved from PATH.
+agents:
+  codex:
+    executable: C:\Tools\codex\codex.exe
+  claude:
+    executable: C:\Tools\claude\claude.exe
+  qwen:
+    executable: C:\Tools\qwen\qwen.cmd

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "platform": "windows-amd64",
+  "python": {
+    "version": "3.12.10",
+    "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe",
+    "file": "python-3.12.10-amd64.exe"
+  },
+  "go": {
+    "version": "1.26.7",
+    "url": "https://go.dev/dl/go1.26.7.windows-amd64.zip",
+    "file": "go1.26.7.windows-amd64.zip"
+  },
+  "node": {
+    "version": "26.1.0",
+    "url": "https://nodejs.org/dist/v26.1.0/node-v26.1.0-win-x64.zip",
+    "file": "node-v26.1.0-win-x64.zip"
+  },
+  "git": {
+    "version": "2.41.0.windows.1",
+    "url": "https://github.com/git-for-windows/git/releases/download/v2.41.0.windows.1/PortableGit-2.41.0-64-bit.7z.exe",
+    "file": "PortableGit-2.41.0-64-bit.7z.exe"
+  },
+  "vc_redist": {
+    "url": "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+    "file": "VC_redist.x64.exe"
+  },
+  "multica": {
+    "repository": "https://github.com/multica-ai/multica.git",
+    "tag": "v0.4.36",
+    "commit": "c1a61e1e863eb62ddd7b5fd5ab5ff85391f212fd"
+  },
+  "skill_up": {
+    "repository": "https://github.com/alibaba/skill-up.git",
+    "tag": "v0.9.1",
+    "commit": "80c3147101f81017c66f882b767bdc532de5e74f"
+  }
+}

@@ -49,6 +49,18 @@ def load_model_config(project_root: Path) -> dict[str, Any]:
     )
 
 
+def resolve_config_secret(
+    project_root: Path,
+    name: str,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> str:
+    config = load_model_config(project_root)
+    secrets = config.get("secrets") or {}
+    source_environment = environ if environ is not None else os.environ
+    return str(source_environment.get(name) or secrets.get(name) or "").strip()
+
+
 def _normalized_base_url(value: str) -> tuple[str, str]:
     raw = value.strip().rstrip("/")
     parsed = urlsplit(raw)
