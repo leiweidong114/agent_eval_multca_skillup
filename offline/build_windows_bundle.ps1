@@ -35,7 +35,19 @@ function Get-Asset([object]$Entry, [string]$Subdirectory) {
     $cacheFile = Join-Path $CacheDirectory $Entry.file
     if (-not (Test-Path -LiteralPath $cacheFile)) {
         Write-Host "Downloading $($Entry.url)"
-        Invoke-WebRequest -Uri $Entry.url -OutFile $cacheFile
+        $partial = "$cacheFile.partial"
+        if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $Entry.url -OutFile $partial
+                Move-Item -LiteralPath $partial -Destination $cacheFile -Force
+                break
+            } catch {
+                if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+                if ($attempt -eq 3) { throw }
+                Start-Sleep -Seconds (2 * $attempt)
+            }
+        }
     }
     $destination = Join-Path $packageRoot "offline\assets\$Subdirectory"
     New-Item -ItemType Directory -Force -Path $destination | Out-Null
