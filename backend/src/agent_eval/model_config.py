@@ -82,6 +82,8 @@ def resolve_model_profile(
     model = (model_override or str(profile.get("model") or "")).strip()
     if not model:
         raise ValueError(f"Model profile has no model: {selected}")
+    if str(profile.get("type") or "").strip().lower() == "native":
+        return ResolvedModelProfile(selected, model, "", {}, ())
     api_base = str(profile.get("api_base") or "").strip()
     openai_base, anthropic_base = _normalized_base_url(api_base)
 
@@ -150,6 +152,11 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
         "api_key_configured": bool(os.environ.get(key_name) or secrets.get(key_name)),
         "profiles": sorted(profiles) if isinstance(profiles, dict) else [],
         "profile_models": profile_models,
+        "profile_types": {
+            name: str(value.get("type") or "compatible")
+            for name, value in profiles.items()
+            if isinstance(value, dict)
+        } if isinstance(profiles, dict) else {},
     }
 
 

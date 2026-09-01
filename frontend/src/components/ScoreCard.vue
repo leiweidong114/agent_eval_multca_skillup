@@ -17,6 +17,14 @@
       <div class="value">{{ fmt(scores.execution_stability) }}</div>
     </div>
     <div class="score-item">
+      <div class="label">Skill Quality</div>
+      <div class="value" :class="valueClass(scores.skill_quality_score)">{{ fmt(scores.skill_quality_score) }}</div>
+    </div>
+    <div class="score-item">
+      <div class="label">Model Trace</div>
+      <div class="value" :class="valueClass(scores.model_trace_score)">{{ fmt(scores.model_trace_score) }}</div>
+    </div>
+    <div class="score-item">
       <div class="label">Tokens</div>
       <div class="value muted">{{ scores.total_tokens }}</div>
     </div>

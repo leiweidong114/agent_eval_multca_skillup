@@ -1,7 +1,18 @@
-default_profile: litellm_minimax
+default_profile: native_codex
 
 profiles:
+  native_codex:
+    type: native
+    model: gpt-5.4
+  litellm_deepseek_flash:
+    model: deepseek-v4-flash
+    api_base: http://8.137.196.46/v1
+    api_key_env: LITELLM_API_KEY
+  litellm_deepseek_pro:
+    model: deepseek-v4-pro
+    api_base: http://8.137.196.46/v1
+    api_key_env: LITELLM_API_KEY
   litellm_minimax:
     model: MiniMax-M3
-    api_base: http://127.0.0.1:4000/v1
+    api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY

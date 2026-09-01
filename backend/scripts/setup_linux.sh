@@ -42,7 +42,7 @@ chmod +x "$BIN/multica-eval-runtime"
 if [ ! -x "$PYTHON" ]; then
   python3 -m venv --copies "$PYTHON_ENV"
 fi
-"$PYTHON" -m pip install -e ".[dev]"
+"$PYTHON" -m pip install -e ".[dev,web,database]"
 "$PYTHON" -m pytest
 "$PYTHON" -m agent_eval.cli doctor
 echo "LINUX_SETUP_OK"

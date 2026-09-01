@@ -87,6 +87,24 @@ def test_missing_virtual_key_is_rejected(tmp_path):
         resolve_model_profile(tmp_path, environ={})
 
 
+def test_native_profile_needs_no_gateway_key(tmp_path):
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "models.yaml").write_text(
+        """default_profile: native
+profiles:
+  native:
+    type: native
+    model: gpt-test
+""",
+        encoding="utf-8",
+    )
+    profile = resolve_model_profile(tmp_path, environ={}, agent="codex")
+    assert profile.model == "gpt-test"
+    assert profile.environment == {}
+    assert profile.agent_args == ()
+
+
 def test_openclaw_profile_config_uses_litellm_without_embedding_the_key(tmp_path):
     _write_config(tmp_path)
     profile = resolve_model_profile(

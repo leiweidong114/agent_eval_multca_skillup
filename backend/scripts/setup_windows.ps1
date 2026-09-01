@@ -60,7 +60,7 @@ $bootstrapPython = Get-Command python -ErrorAction Stop
 if (-not (Test-Path -LiteralPath $python)) {
     & $bootstrapPython.Source -m venv --copies $pythonEnv
 }
-& $python -m pip install -e ".[dev]"
+& $python -m pip install -e ".[dev,web,database]"
 if (-not $SkipTests) {
     & $python -m pytest
     if ($LASTEXITCODE -ne 0) { throw "Python tests failed" }

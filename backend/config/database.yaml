@@ -1,0 +1,15 @@
+database:
+  enabled: true
+  host: 8.137.196.46
+  port: 5432
+  name: litellm
+  user: litellm
+  url_env: DATABASE_URL
+  password_env: LITELLM_DATABASE_PASSWORD
+  sslmode: prefer
+  connect_timeout_seconds: 5
+  trace:
+    enabled: true
+    include_content: true
+    lookaround_seconds: 10
+    limit: 500

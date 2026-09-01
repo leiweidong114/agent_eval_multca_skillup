@@ -122,6 +122,9 @@
         <el-form-item label="基准对照">
           <el-switch v-model="form.benchmark" active-text="同时运行无 Skill 基线" />
         </el-form-item>
+        <el-form-item label="数据库轨迹">
+          <el-switch v-model="form.collect_database_trace" active-text="读取 LiteLLM 模型交互记录" />
+        </el-form-item>
 
         <el-form-item>
           <el-button type="primary" :loading="running" @click="run">
@@ -170,6 +173,7 @@ const form = reactive({
   timeout_seconds: 1800,
   max_turns: 12,
   benchmark: true,
+  collect_database_trace: true,
 })
 
 const agents = ref([])
@@ -240,6 +244,7 @@ function buildPayload() {
     timeout_seconds: form.timeout_seconds,
     max_turns: form.max_turns,
     benchmark: form.benchmark,
+    collect_database_trace: form.collect_database_trace,
     extra_args: [],
   }
 }
@@ -306,6 +311,7 @@ function reset() {
   form.timeout_seconds = 1800
   form.max_turns = 12
   form.benchmark = true
+  form.collect_database_trace = true
   result.value = null
 }
 

@@ -28,7 +28,7 @@
     <el-container>
       <el-header class="header">
         <span class="title">Agent Skill 评测平台</span>
-        <el-tag type="success" size="small">本地 · 无登录 · 无数据库</el-tag>
+        <el-tag type="success" size="small">本地评测 · PostgreSQL 过程数据</el-tag>
       </el-header>
       <el-main class="main">
         <router-view />

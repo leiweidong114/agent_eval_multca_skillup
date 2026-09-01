@@ -5,14 +5,17 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from agent_eval.database import fetch_model_interactions, summarize_model_interactions
 from agent_eval.model_config import resolve_model_profile, write_openclaw_profile_config
+from agent_eval.skill_quality import evaluate_skill_quality
 from agent_eval.runtime import (
     default_agent_command,
     find_multica_runtime,
@@ -205,6 +208,7 @@ def run_evaluation(
     output_dir: str | None = None,
     extra_args: list[str] | None = None,
     validate_only: bool = False,
+    collect_database_trace: bool = True,
 ) -> dict[str, Any]:
     source_skill = Path(skill_dir).resolve()
     if not (source_skill / "SKILL.md").is_file():
@@ -228,6 +232,7 @@ def run_evaluation(
     )
     staged_skill = result_root / "staging" / "skill"
     _copy_skill(source_skill, staged_skill)
+    skill_quality = evaluate_skill_quality(source_skill)
     cases_dir = staged_skill / "evals" / "cases"
     cases_dir.mkdir(parents=True, exist_ok=True)
 
@@ -303,6 +308,7 @@ def run_evaluation(
             "validated": True,
             "skill_up_exit_code": 0,
             "iterations": 0,
+            "skill_quality": skill_quality,
             "results": [],
         }
         (result_root / "evaluation-report.json").write_text(
@@ -323,6 +329,7 @@ def run_evaluation(
         "--format",
         "junit",
     ]
+    evaluation_started_at = datetime.now(timezone.utc).replace(tzinfo=None)
     completed = subprocess.run(
         command,
         cwd=project_root,
@@ -331,6 +338,7 @@ def run_evaluation(
         capture_output=True,
         check=False,
     )
+    evaluation_finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
     (result_root / "skill-up.stdout.log").write_text(completed.stdout, encoding="utf-8")
     (result_root / "skill-up.stderr.log").write_text(completed.stderr, encoding="utf-8")
     iteration_dirs = sorted(path for path in output.glob("iteration-*") if path.is_dir())
@@ -339,6 +347,34 @@ def run_evaluation(
         result_file = iteration / "result.json"
         if result_file.is_file():
             results.append(json.loads(result_file.read_text(encoding="utf-8")))
+    scores = aggregate_scores(results)
+    scores["skill_quality_score"] = skill_quality["score"]
+    database_trace: dict[str, Any] = {"status": "disabled"}
+    trace_file: str | None = None
+    if collect_database_trace:
+        try:
+            interactions: list[dict[str, Any]] = []
+            for attempt in range(3):
+                interactions = fetch_model_interactions(
+                    project_root,
+                    started_at=evaluation_started_at,
+                    finished_at=evaluation_finished_at,
+                    model=provider_model,
+                )
+                if interactions or attempt == 2:
+                    break
+                time.sleep(1)
+            database_trace = summarize_model_interactions(interactions)
+            scores["model_trace_score"] = database_trace["model_call_success_rate"]
+            trace_path = result_root / "model-interactions.json"
+            trace_path.write_text(
+                json.dumps(interactions, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            trace_file = str(trace_path)
+        except Exception as exc:
+            database_trace = {"status": "unavailable", "error": str(exc)}
+            scores["model_trace_score"] = None
+
     summary = {
         "run_id": result_root.name,
         "agent": agent,
@@ -349,7 +385,10 @@ def run_evaluation(
         "result_dir": str(result_root),
         "skill_up_exit_code": completed.returncode,
         "iterations": len(results),
-        "scores": aggregate_scores(results),
+        "scores": scores,
+        "skill_quality": skill_quality,
+        "database_trace": database_trace,
+        "database_trace_file": trace_file,
         "results": results,
     }
     (result_root / "evaluation-report.json").write_text(

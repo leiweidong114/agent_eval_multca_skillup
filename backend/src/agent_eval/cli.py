@@ -40,6 +40,12 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--output-dir")
     run.add_argument("--benchmark", action=argparse.BooleanOptionalAction, default=True)
     run.add_argument("--validate-only", action="store_true")
+    run.add_argument(
+        "--database-trace",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Collect matching LiteLLM interaction rows from PostgreSQL",
+    )
 
     commands.add_parser("doctor", help="Check the local skill-up and Multica runtime")
     commands.add_parser("agents", help="List Multica Agent backends and local CLI discovery")
@@ -91,6 +97,7 @@ def main() -> None:
         output_dir=args.output_dir,
         extra_args=args.agent_arg,
         validate_only=args.validate_only,
+        collect_database_trace=args.database_trace,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     raise SystemExit(0 if result["skill_up_exit_code"] == 0 else 1)

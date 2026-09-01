@@ -1,5 +1,12 @@
 <template>
   <div class="discovery">
+    <el-alert
+      :title="databaseTitle"
+      :type="database.status === 'ok' ? 'success' : 'warning'"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 16px"
+    />
     <el-row :gutter="16">
       <el-col :span="12">
         <el-card shadow="never">
@@ -52,10 +59,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchAgents, fetchSkills } from '../api'
+import { fetchAgents, fetchDatabaseHealth, fetchSkills } from '../api'
 
 const skills = ref([])
 const agents = ref([])
+const database = ref({ status: 'checking' })
+const databaseTitle = ref('正在检查 PostgreSQL 连接')
 
 async function loadSkills() {
   try {
@@ -72,9 +81,21 @@ async function loadAgents() {
     ElMessage.error(`获取 Agent 失败: ${e.message}`)
   }
 }
+async function loadDatabase() {
+  try {
+    database.value = await fetchDatabaseHealth()
+    databaseTitle.value = database.value.status === 'ok'
+      ? `PostgreSQL 已连接：${database.value.database}，交互记录 ${database.value.spend_log_count}`
+      : `PostgreSQL 未连接：${database.value.error || database.value.status}`
+  } catch (e) {
+    database.value = { status: 'error' }
+    databaseTitle.value = `PostgreSQL 检查失败：${e.message}`
+  }
+}
 onMounted(() => {
   loadSkills()
   loadAgents()
+  loadDatabase()
 })
 </script>
 

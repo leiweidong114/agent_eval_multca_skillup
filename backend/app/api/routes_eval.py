@@ -28,6 +28,7 @@ class RunRequest(BaseModel):
     max_turns: int = Field(default=12, ge=1)
     benchmark: bool = Field(default=True)
     extra_args: list[str] = Field(default_factory=list)
+    collect_database_trace: bool = Field(default=True)
 
 
 def _resolve_skill(name: str) -> Path:
@@ -58,6 +59,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         output_dir=str(RUNS_ROOT),
         extra_args=request.extra_args,
         validate_only=validate_only,
+        collect_database_trace=request.collect_database_trace,
     )
     return result
 

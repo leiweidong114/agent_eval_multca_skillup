@@ -1,11 +1,12 @@
 # agent_eval_multca_skillup
 
-一个本地、无 Multica 登录、无数据库依赖的 Agent Skill 评测工具。默认通过本机 LiteLLM 使用 MiniMax 模型：
+一个本地、无 Multica 登录的 Agent Skill 评测工具。支持 Agent 原生模型认证或远程 LiteLLM，并可直接读取 LiteLLM PostgreSQL 交互数据参与过程评测：
 
 - Skill-Up 负责隔离 Skill、执行用例、断言、基准对照和生成 JSON/HTML/JUnit 报告。
 - Multica 的开源 Agent backend 负责统一调用不同 Agent CLI。
 - 本项目不启动 Multica Server，不调用 Multica 登录、Issue 或数据库服务。
 - 发给 Agent 的系统提示词固定为空；单条用例 Prompt 按原始字节内容传递，不注入 Multica 默认提示词。
+- PostgreSQL 只作为可选的只读轨迹数据源；数据库暂时不可用不会阻断结果评测。
 
 ## 项目结构（server_dev 分支，前后端分离）
 
@@ -45,6 +46,8 @@ agent_eval_multca_skillup/
 | GET | /api/agents | 支持的 Agent 列表 |
 | GET | /api/skills | 可用 Skill 列表 |
 | GET | /api/skills/{name}/cases | 某 Skill 的用例列表 |
+| GET | /api/model-config | 非敏感模型配置 |
+| GET | /api/database/health | PostgreSQL 直连状态与交互记录数 |
 | POST | /api/run | 触发评测运行 |
 | POST | /api/validate | 仅校验配置不完整运行 |
 | GET | /api/runs | 历史评测记录 |
@@ -79,18 +82,25 @@ agent-eval CLI
         -> 指定的 Agent CLI + 指定模型
 ```
 
-Agent CLI 自身可能需要本地安装和配置；这属于 Agent 运行环境，不是 Multica 登录。本项目不会读取 PostgreSQL。默认模型流量发送到配置的 LiteLLM 服务。
+Agent CLI 自身可能需要本地安装和配置；这属于 Agent 运行环境，不是 Multica 登录。评测可按模型和运行时间窗口关联 PostgreSQL `LiteLLM_SpendLogs`，原始匹配记录写入本次运行目录的 `model-interactions.json`。
 
-## LiteLLM / MiniMax 模型配置
+## 模型配置
 
 默认配置位于 `backend/config/models.yaml`：
 
 ```yaml
-default_profile: litellm_minimax
+default_profile: native_codex
 profiles:
+  native_codex:
+    type: native
+    model: gpt-5.4
+  litellm_deepseek_flash:
+    model: deepseek-v4-flash
+    api_base: http://8.137.196.46/v1
+    api_key_env: LITELLM_API_KEY
   litellm_minimax:
     model: MiniMax-M3
-    api_base: http://127.0.0.1:4000/v1
+    api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
 ```
 
@@ -110,6 +120,28 @@ secrets:
 Codex 还会自动获得 `model_provider=litellm` 的命令行配置，避免已有 ChatGPT 登录覆盖
 LiteLLM 地址。OpenClaw/JustDo 会继续使用 Agent ID `main`，并由评测端生成临时
 LiteLLM provider 配置；配置只引用 `${LITELLM_API_KEY}`，不会包含真实 Key。
+
+## PostgreSQL 配置
+
+非敏感连接参数位于 `backend/config/database.yaml`。密码通过环境变量提供：
+
+```powershell
+$env:LITELLM_DATABASE_PASSWORD = "数据库密码"
+```
+
+也可在被 Git 忽略的 `backend/config/local.yaml` 中配置：
+
+```yaml
+secrets:
+  LITELLM_API_KEY: sk-your-virtual-key
+  LITELLM_DATABASE_PASSWORD: your-database-password
+```
+
+如果运行环境已经提供完整 `DATABASE_URL`，它优先于分项配置。数据库用户只需对 `LiteLLM_SpendLogs` 具有只读权限。健康检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/database/health
+```
 
 ## Windows 安装
 
@@ -154,7 +186,7 @@ Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `backend/.runt
 .\backend\.runtime\windows\python\Scripts\agent-eval.exe run `
   --skill .\backend\skills\example-marker `
   --agent codex `
-  --profile litellm_minimax `
+  --profile litellm_deepseek_flash `
   --case .\backend\skills\example-marker\evals\cases\marker.yaml `
   --agent-executable C:\path\to\codex.exe `
   --parallelism 2 `
@@ -168,7 +200,7 @@ Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `backend/.runt
 .\backend\.runtime\windows\python\Scripts\agent-eval.exe run `
   --skill C:\skills\my-skill `
   --agent claude `
-  --profile litellm_minimax `
+  --profile litellm_deepseek_flash `
   --prompt "执行这个任务" `
   --must-contain "expected marker" `
   --must-not-contain "forbidden text" `
@@ -241,6 +273,7 @@ expect:
 runs/<时间>__<skill>__<agent>-<model>__<id>/
   staging/skill/            # 隔离副本与本次 eval.yaml
   skill-up/                 # Skill-Up JSON、HTML、JUnit、日志和 transcript
+  model-interactions.json   # PostgreSQL 中与本次运行匹配的模型交互
   evaluation-report.json    # 本项目统一汇总
 ```
 
@@ -250,6 +283,8 @@ runs/<时间>__<skill>__<agent>-<model>__<id>/
 - `baseline_score`：无 Skill 基准的断言通过率；未启用 benchmark 时为 `null`。
 - `skill_gain`：`task_score - baseline_score`，衡量 Skill 带来的净提升。
 - `execution_stability`：有 Skill 用例中成功完成评测流程的比例；PASS 和普通断言 FAIL 都算完成，运行错误/超时不算。
+- `skill_quality_score`：对 Skill 名称、描述、流程、约束、产物、异常处理和验证说明的透明结构评分。
+- `model_trace_score`：数据库匹配模型调用的成功率；未走 LiteLLM 或没有匹配记录时为 `null`。
 - `total_tokens`、`total_duration_ms`：所有本次执行的资源统计。
 
 默认 `--benchmark` 会同时运行有 Skill 和无 Skill 两组。只验证任务结果、不做基线时使用 `--no-benchmark`。增加 `--iterations N` 可用于稳定性评测。

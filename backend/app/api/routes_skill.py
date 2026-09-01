@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from agent_eval.database import database_health
 from agent_eval.model_config import describe_model_config
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
@@ -54,6 +55,12 @@ def list_agents() -> list[dict[str, str | bool | None]]:
 def get_model_config() -> dict[str, object]:
     """Return non-secret model defaults used by the CLI and Web UI."""
     return describe_model_config(BACKEND_ROOT)
+
+
+@router.get("/database/health")
+def get_database_health() -> dict[str, object]:
+    """Check direct PostgreSQL access without exposing credentials."""
+    return database_health(BACKEND_ROOT)
 
 
 @router.get("/skills")
