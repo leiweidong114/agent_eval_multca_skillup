@@ -18,8 +18,9 @@ class EvaluationJobManager:
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
         self._cancel: dict[str, threading.Event] = {}
+        self._max_workers = max(1, int(os.environ.get("AGENT_EVAL_WORKERS", "2")))
         self._executor = ThreadPoolExecutor(
-            max_workers=max(1, int(os.environ.get("AGENT_EVAL_WORKERS", "2"))),
+            max_workers=self._max_workers,
             thread_name_prefix="agent-eval",
         )
         self._state_dir = RUNS_ROOT / "_jobs"
@@ -42,10 +43,14 @@ class EvaluationJobManager:
         )
 
     def submit(self, request: dict[str, Any], skill_dir: Path) -> dict[str, Any]:
-        job_id = uuid.uuid4().hex
+        task_id = uuid.uuid4().hex
+        job_id = task_id  # Backward-compatible alias for existing clients.
         now = datetime.now().isoformat()
         job = {
-            "job_id": job_id, "status": "queued", "phase": "queued", "progress": 0,
+            "job_id": job_id, "task_id": task_id,
+            "client_task_id": request.get("client_task_id"),
+            "user_id": request.get("user_id", "local-user"),
+            "status": "queued", "phase": "queued", "progress": 0,
             "message": "Waiting for a worker", "created_at": now, "updated_at": now,
             "skill": skill_dir.name, "agent": request.get("agent"),
             "model": request.get("model"), "profile": request.get("profile"),
@@ -84,7 +89,10 @@ class EvaluationJobManager:
                 benchmark=request.get("benchmark", True), output_dir=str(RUNS_ROOT),
                 extra_args=request.get("extra_args"), validate_only=False,
                 collect_database_trace=request.get("collect_database_trace", True),
-                run_id=job_id, progress_callback=on_progress, cancel_event=cancel,
+                task_id=job_id, progress_callback=on_progress, cancel_event=cancel,
+                user_id=request.get("user_id", "local-user"),
+                client_task_id=request.get("client_task_id"),
+                run_llm_judge_enabled=request.get("llm_judge", True),
             )
             self._update(job_id, status="completed", phase="completed", progress=100, result=result)
         except EvaluationCancelled as exc:
@@ -92,9 +100,25 @@ class EvaluationJobManager:
         except Exception as exc:
             self._update(job_id, status="failed", phase="failed", message="Evaluation failed", error=str(exc))
 
-    def list(self) -> list[dict[str, Any]]:
+    def list(self, user_id: str | None = None) -> list[dict[str, Any]]:
         with self._lock:
-            return sorted((dict(item) for item in self._jobs.values()), key=lambda x: x["created_at"], reverse=True)
+            items = (dict(item) for item in self._jobs.values())
+            if user_id is not None:
+                items = (item for item in items if item.get("user_id") == user_id)
+            return sorted(items, key=lambda x: x["created_at"], reverse=True)
+
+    def capacity(self) -> dict[str, Any]:
+        with self._lock:
+            running = sum(item.get("status") == "running" for item in self._jobs.values())
+            queued = sum(item.get("status") == "queued" for item in self._jobs.values())
+        return {
+            "top_level_workers": self._max_workers,
+            "running_jobs": running,
+            "queued_jobs": queued,
+            "per_job_case_parallelism_max": 16,
+            "scheduler": "local_thread_pool_plus_skill_up",
+            "uses_multica_server_scheduler": False,
+        }
 
     def get(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:

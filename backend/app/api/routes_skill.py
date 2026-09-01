@@ -3,11 +3,13 @@ from __future__ import annotations
 import shutil
 import os
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from agent_eval.database import database_health
+from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.model_config import describe_model_config
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
@@ -49,7 +51,7 @@ def _scan_skills(root: Path) -> list[dict[str, str]]:
 
 
 @router.get("/agents")
-def list_agents() -> list[dict[str, str | bool | None]]:
+def list_agents() -> list[dict[str, Any]]:
     """List supported Multica Agent backends and local CLI discovery."""
     result: list[dict[str, str | bool | None]] = []
     for agent in SUPPORTED_AGENTS:
@@ -59,6 +61,7 @@ def list_agents() -> list[dict[str, str | bool | None]]:
                 "agent": agent,
                 "default_command": command,
                 "detected_executable": shutil.which(command),
+                "evaluation_contract": describe_agent_contract(agent),
             }
         )
     return result

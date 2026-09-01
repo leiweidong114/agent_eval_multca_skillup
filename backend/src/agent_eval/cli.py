@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from agent_eval.runner import run_evaluation
+from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.model_config import describe_model_config
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
@@ -24,6 +25,9 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run", help="Evaluate one Skill with a chosen Agent and model")
     run.add_argument("--skill", required=True)
+    run.add_argument("--user-id", default="local-cli")
+    run.add_argument("--task-id", help="Optional caller-provided unique task id")
+    run.add_argument("--client-task-id", help="Optional business-side correlation id")
     run.add_argument("--agent", required=True)
     run.add_argument("--model", help="Override the model from the selected profile")
     run.add_argument("--profile", help="Model profile from config/models.yaml")
@@ -46,6 +50,12 @@ def _parser() -> argparse.ArgumentParser:
         default=True,
         help="Collect matching LiteLLM interaction rows from PostgreSQL",
     )
+    run.add_argument(
+        "--llm-judge",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run the configured LiteLLM judge in addition to deterministic rules",
+    )
 
     commands.add_parser("doctor", help="Check the local skill-up and Multica runtime")
     commands.add_parser("agents", help="List Multica Agent backends and local CLI discovery")
@@ -63,6 +73,7 @@ def main() -> None:
                     "agent": agent,
                     "default_command": command,
                     "detected_executable": shutil.which(command),
+                    "evaluation_contract": describe_agent_contract(agent),
                 }
             )
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -98,6 +109,10 @@ def main() -> None:
         extra_args=args.agent_arg,
         validate_only=args.validate_only,
         collect_database_trace=args.database_trace,
+        user_id=args.user_id,
+        task_id=args.task_id,
+        client_task_id=args.client_task_id,
+        run_llm_judge_enabled=args.llm_judge,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     raise SystemExit(0 if result["skill_up_exit_code"] == 0 else 1)

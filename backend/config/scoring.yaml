@@ -1,0 +1,36 @@
+schema_version: 1
+
+# Final score = weighted sum of the three dimensions. Each dimension combines
+# deterministic rules with an optional LLM assessment. If the judge is
+# unavailable, the rule score remains authoritative and the run still finishes.
+dimensions:
+  result:
+    weight: 0.50
+    rule_weight: 0.65
+    llm_weight: 0.35
+  process:
+    weight: 0.30
+    rule_weight: 0.60
+    llm_weight: 0.40
+  skill_quality:
+    weight: 0.20
+    rule_weight: 0.55
+    llm_weight: 0.45
+
+process_rules:
+  execution_stability_weight: 0.45
+  model_success_weight: 0.20
+  tool_completion_weight: 0.20
+  error_free_weight: 0.15
+
+llm_judge:
+  enabled: true
+  required: false
+  # This is the strongest LiteLLM profile currently declared by the project.
+  # Override it in config/local.yaml without changing committed configuration.
+  profile: litellm_deepseek_pro
+  model: deepseek-v4-pro
+  timeout_seconds: 120
+  max_evidence_chars: 60000
+  temperature: 0
+
