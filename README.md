@@ -7,6 +7,7 @@
 - 本项目不启动 Multica Server，不调用 Multica 登录、Issue 或数据库服务。
 - 发给 Agent 的系统提示词固定为空；单条用例 Prompt 按原始字节内容传递，不注入 Multica 默认提示词。
 - PostgreSQL 作为指定模型硬校验的数据源；默认要求数据库精确确认当前任务实际调用了指定模型。
+- 内嵌 Prism Eval 模型与题库评测子系统，支持标准/私有题库、模型与 Agent 接入、实验对比、逐题证据和导出。
 
 ## 项目结构（dev 分支，前后端分离）
 
@@ -60,6 +61,29 @@ agent_eval_multca_skillup/
 | GET/POST | /api/schematic/example、/api/schematic/generate | 框图示例与完整原理图流水线 |
 | POST | /api/schematic/judge | 对外部生成的原理图 JSON 做专项评分 |
 | GET | /api/schematic/projects/{id} | 读取可在网页打开的原理图工程 |
+| GET/POST | /prism/api/benchmarks、/prism/api/benchmarks/import | Prism 题库目录与离线导入 |
+| GET/POST | /prism/api/providers、/prism/api/experiments | 模型/Agent 接入与题库实验 |
+| GET | /prism/api/experiments/{id}/results、/comparison | 逐题证据与统计比较 |
+
+### 模型与题库评测
+
+网页导航中的“模型与题库评测”会打开内嵌 Prism Eval。该模块与 Skill 评测共享同一个 FastAPI 服务，但使用独立的 SQLite 数据、加密密钥、题库快照和结果证据目录：
+
+```text
+backend/model_eval_data/
+  maeval.db
+  secret.key
+  evaluation-results/
+```
+
+本地集成模式继承当前项目的无登录边界，并以本地管理员身份运行。可在题库管理页导入 JSON/JSONL 题库，在“模型与 Agent”中配置接入，然后从“新建评测”选择题库、模型、赛道、抽样与预算发起实验。可通过 `MODEL_AGENT_EVAL_DATA_DIR` 把数据目录迁移到其他受控位置。
+
+从旧 `model-agent-eval` 数据库迁移已安装的公开题库时，可以运行下面的脚本。它只复制公开题库、题目与版本指纹，不复制用户、密码、API Key、模型配置、实验或历史结果：
+
+```powershell
+python backend/scripts/import_model_eval_benchmarks.py `
+  --source-db D:\AI_FOR_WORLD\14_AI_workspace\common_tools\model-agent-eval\data\maeval.db
+```
 
 ### 启动方式
 

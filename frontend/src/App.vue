@@ -1,5 +1,6 @@
 <template>
-  <el-container class="layout">
+  <router-view v-if="$route.meta.fullscreen" />
+  <el-container v-else class="layout">
     <el-aside width="220px" class="aside">
       <div class="logo">
         <el-icon size="26"><Monitor /></el-icon>
@@ -27,6 +28,9 @@
         </el-menu-item>
         <el-menu-item index="/schematic">
           <el-icon><Connection /></el-icon><span>原理图评测</span>
+        </el-menu-item>
+        <el-menu-item index="/model-eval">
+          <el-icon><Collection /></el-icon><span>模型与题库评测</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
