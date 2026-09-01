@@ -11,6 +11,8 @@ $paths = @(
     (Join-Path $toolchains "git\cmd")
 ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 $env:PATH = ($paths -join ";") + ";" + $env:PATH
+$env:NODE_PATH = Join-Path $projectRoot "offline\skill-node-tools\node_modules"
+$env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $projectRoot "offline\assets\playwright-browsers"
 Set-Location $projectRoot
 Write-Host "Offline development shell ready at $projectRoot"
 Write-Host "Python: $(& python --version 2>&1)"

@@ -28,5 +28,6 @@ frontend/.vite/
 
 # Offline build downloads and release artifacts
 offline/assets/
+offline/skill-node-tools/node_modules/
 .offline-cache/
 dist-offline/

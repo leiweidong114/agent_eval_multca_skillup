@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +78,25 @@ def run_doctor(project_root: Path, *, agent: str | None = None) -> dict[str, Any
             "status": "ok" if not selected or selected["available"] else "warning",
             "required": False,
             "detail": selected or {"available_agents": [item["agent"] for item in agents if item["available"]]},
+        }
+    )
+    skill_modules = ["defusedxml", "lxml", "openpyxl", "pandas", "markitdown", "playwright"]
+    missing_modules = [name for name in skill_modules if importlib.util.find_spec(name) is None]
+    checks.append(
+        {
+            "name": "skill_python_dependencies",
+            "status": "ok" if not missing_modules else "warning",
+            "required": False,
+            "detail": {"missing": missing_modules},
+        }
+    )
+    native_tools = {name: shutil.which(name) for name in ("soffice", "pandoc", "pdftoppm")}
+    checks.append(
+        {
+            "name": "optional_document_tools",
+            "status": "ok" if all(native_tools.values()) else "warning",
+            "required": False,
+            "detail": native_tools,
         }
     )
     ok = not any(item["required"] and item["status"] == "error" for item in checks)

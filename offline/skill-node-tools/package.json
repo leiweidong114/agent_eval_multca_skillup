@@ -1,0 +1,9 @@
+{
+  "name": "agent-eval-offline-skill-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node modules used by bundled evaluation Skills",
+  "dependencies": {
+    "docx": "9.5.1"
+  }
+}

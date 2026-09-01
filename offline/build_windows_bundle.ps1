@@ -93,6 +93,10 @@ try {
     & $python -m pip install --upgrade pip setuptools wheel
     & $python -m pip install -r (Join-Path $packageRoot "offline\python-requirements.in")
     if ($LASTEXITCODE -ne 0) { throw "Python dependency resolution failed." }
+    $playwrightBrowsers = Join-Path $packageRoot "offline\assets\playwright-browsers"
+    $env:PLAYWRIGHT_BROWSERS_PATH = $playwrightBrowsers
+    & $python -m playwright install chromium
+    if ($LASTEXITCODE -ne 0) { throw "Playwright Chromium download failed." }
     $pythonAssetRoot = Join-Path $packageRoot "offline\assets\python"
     $requirementsLock = Join-Path $pythonAssetRoot "requirements.lock"
     & $python -m pip freeze --exclude-editable | Where-Object { $_ -notmatch '^agent-eval-' } | Set-Content -Encoding utf8 $requirementsLock
@@ -152,6 +156,13 @@ try {
         Pop-Location
         $env:PATH = $oldPath
     }
+    Push-Location (Join-Path $packageRoot "offline\skill-node-tools")
+    try {
+        & $npm install --cache $npmCache --prefer-online --no-audit --package-lock-only
+        if ($LASTEXITCODE -ne 0) { throw "Skill Node dependency lock failed." }
+        & $npm ci --cache $npmCache --prefer-online --no-audit
+        if ($LASTEXITCODE -ne 0) { throw "Skill Node dependency installation failed." }
+    } finally { Pop-Location }
 
     & (Join-Path $packageRoot "scripts\bootstrap_offline.ps1") -SkipTests:$SkipTests
     if ($LASTEXITCODE -ne 0) { throw "Packaged runtime bootstrap failed." }
@@ -200,4 +211,5 @@ try {
     }
     if ($null -ne $originalPythonPath) { $env:PYTHONPATH = $originalPythonPath }
     Remove-Item Env:PYTHONNOUSERSITE -ErrorAction SilentlyContinue
+    Remove-Item Env:PLAYWRIGHT_BROWSERS_PATH -ErrorAction SilentlyContinue
 }

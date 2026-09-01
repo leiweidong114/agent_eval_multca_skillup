@@ -6,3 +6,10 @@ python-multipart==0.0.20
 psycopg[binary]==3.2.9
 pytest==8.3.5
 httpx==0.28.1
+# Runtime dependencies used by the bundled docx/xlsx/webapp-testing Skills.
+defusedxml==0.7.1
+lxml==6.0.1
+openpyxl==3.1.5
+pandas==2.3.3
+markitdown[all]==0.1.4
+playwright==1.55.0
