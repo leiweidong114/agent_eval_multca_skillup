@@ -291,6 +291,16 @@ Linux 将入口替换为 `backend/.runtime/linux/python/bin/agent-eval`，参数
 
 当前可选 Agent 包含 Multica 原生 backend，以及映射到 OpenClaw backend 的 `justdo` 入口。运行 `agent-eval agents` 可查看当前机器实际探测到的可执行文件。
 
+`agent-eval agents` 和 `GET /api/agents` 同时返回 `capabilities`。其中
+`specified_model_and_skill_evaluation=true` 才表示本地评测链路能同时注入指定 Skill 和选择
+指定模型。Pinned Multica v0.4.36 的已知限制如下：
+
+- `mcode`、`qwenpaw`、`zeroclaw` 的模型由 Agent 自身配置管理，不能按评测任务覆盖；默认的模型硬校验会提前拒绝。只有明确接受该限制时才使用 `--no-require-model-verification`。
+- `dim`、`hermes`、`zeroclaw` 尚无本地直连评测运行时可用的 Skill 注入适配器，不能用于 Skill 评测。
+- `detected_executable=null` 表示当前机器未安装对应 CLI，不能据“支持列表中有名称”宣称已经通过在线评测。
+
+这些限制在创建运行目录和调用模型前检查，避免产出模型或 Skill 实际未生效的假阳性报告。
+
 ### 使用 JustDo Agent
 
 JustDo 提供兼容 OpenClaw CLI 的本地 Agent launcher。保持 JustDo 运行或驻留托盘，

@@ -12,6 +12,7 @@ from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.model_config import describe_model_config, resolve_config_secret
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
+    agent_capabilities,
     default_agent_command,
 )
 from app.config import BACKEND_ROOT, SKILLS_ROOT
@@ -60,6 +61,7 @@ def list_agents() -> list[dict[str, Any]]:
                 "agent": agent,
                 "default_command": command,
                 "detected_executable": shutil.which(command),
+                "capabilities": agent_capabilities(agent),
                 "evaluation_contract": describe_agent_contract(agent),
             }
         )

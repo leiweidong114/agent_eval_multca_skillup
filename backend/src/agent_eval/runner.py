@@ -38,12 +38,14 @@ from agent_eval.scoring import (
     load_scoring_config,
 )
 from agent_eval.runtime import (
+    agent_capabilities,
     backend_agent,
     default_agent_command,
     find_multica_runtime,
     find_skill_up,
     normalize_agent,
     skill_target,
+    validate_evaluation_capabilities,
 )
 
 
@@ -307,6 +309,10 @@ def run_evaluation(
     if not case_files and not prompt:
         raise ValueError("Pass at least one --case or --prompt")
     requested_agent = normalize_agent(agent)
+    validate_evaluation_capabilities(
+        requested_agent, require_model_selection=require_model_verification
+    )
+    capabilities = agent_capabilities(requested_agent)
     agent = backend_agent(requested_agent)
     resolved_profile = resolve_model_profile(
         project_root,
@@ -409,6 +415,7 @@ def run_evaluation(
             "created_at": datetime.now(timezone.utc).isoformat(),
             "agent": requested_agent,
             "agent_backend": agent,
+            "agent_capabilities": capabilities,
             "model": model,
             "model_profile": resolved_profile.name,
             "provider_model": provider_model,
@@ -595,6 +602,7 @@ def run_evaluation(
         "status": evaluation_status,
         "agent": requested_agent,
         "agent_backend": agent,
+        "agent_capabilities": capabilities,
         "model": model,
         "model_profile": resolved_profile.name,
         "provider_model": provider_model,

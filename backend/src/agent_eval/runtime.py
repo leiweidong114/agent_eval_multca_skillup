@@ -75,6 +75,12 @@ SKILL_ROOTS = {
     "traecli": ".traecli/skills",
 }
 
+# Limitations of the pinned Multica v0.4.36 backends. Keeping these explicit
+# prevents discovery and preflight checks from advertising a contract that the
+# underlying Agent cannot honour.
+RUNTIME_MANAGED_MODEL_AGENTS = frozenset({"mcode", "qwenpaw", "zeroclaw"})
+UNSUPPORTED_SKILL_INJECTION_AGENTS = frozenset({"dim", "hermes", "zeroclaw"})
+
 
 def normalize_agent(value: str) -> str:
     normalized = AGENT_ALIASES.get(value.strip().lower(), value.strip().lower())
@@ -109,8 +115,46 @@ def backend_agent(agent: str) -> str:
 
 
 def skill_target(agent: str, skill_name: str) -> str:
-    root = SKILL_ROOTS.get(normalize_agent(agent), ".agents/skills")
+    normalized = normalize_agent(agent)
+    if normalized in UNSUPPORTED_SKILL_INJECTION_AGENTS:
+        raise ValueError(
+            f"Agent {normalized!r} has no direct Skill injection adapter in the local "
+            "evaluation runtime"
+        )
+    root = SKILL_ROOTS[normalized]
     return f"{root}/{skill_name}"
+
+
+def agent_capabilities(agent: str) -> dict[str, object]:
+    normalized = normalize_agent(agent)
+    model_selection = normalized not in RUNTIME_MANAGED_MODEL_AGENTS
+    skill_injection = normalized not in UNSUPPORTED_SKILL_INJECTION_AGENTS
+    return {
+        "agent": normalized,
+        "backend_agent": backend_agent(normalized),
+        "model_selection": model_selection,
+        "model_source": "request" if model_selection else "runtime_managed",
+        "skill_injection": skill_injection,
+        "skill_root": SKILL_ROOTS.get(normalized) if skill_injection else None,
+        "specified_model_and_skill_evaluation": model_selection and skill_injection,
+    }
+
+
+def validate_evaluation_capabilities(
+    agent: str, *, require_model_selection: bool = True
+) -> None:
+    capabilities = agent_capabilities(agent)
+    if not capabilities["skill_injection"]:
+        raise ValueError(
+            f"Agent {capabilities['agent']!r} cannot be evaluated with a specified Skill: "
+            "the local runtime has no direct Skill injection adapter"
+        )
+    if require_model_selection and not capabilities["model_selection"]:
+        raise ValueError(
+            f"Agent {capabilities['agent']!r} cannot be evaluated with a specified model: "
+            "the model is managed by the Agent runtime; use "
+            "--no-require-model-verification only when that limitation is acceptable"
+        )
 
 
 def find_skill_up(project_root: Path) -> Path:

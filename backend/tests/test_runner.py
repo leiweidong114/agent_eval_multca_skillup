@@ -6,6 +6,7 @@ from threading import Event
 import pytest
 
 from agent_eval.runner import EvaluationCancelled, _execute_process, aggregate_scores, build_eval_config
+from agent_eval.runtime import SUPPORTED_AGENTS, agent_capabilities, backend_agent
 
 
 def test_eval_config_uses_local_multica_without_auth_or_database(tmp_path):
@@ -30,6 +31,35 @@ def test_eval_config_uses_local_multica_without_auth_or_database(tmp_path):
     assert "database" not in encoded
     assert "litellm" not in encoded
     assert "system_prompt" not in encoded
+
+
+def test_specified_model_and_skill_config_matrix_covers_every_capable_agent(tmp_path):
+    capable = []
+    for agent in SUPPORTED_AGENTS:
+        if not agent_capabilities(agent)["specified_model_and_skill_evaluation"]:
+            continue
+        capable.append(agent)
+        config = build_eval_config(
+            agent=backend_agent(agent),
+            model="matrix-model",
+            executable="ignored-by-config",
+            runtime_binary=tmp_path / "multica-eval-runtime.exe",
+            skill_name="matrix-skill",
+            case_paths=[Path("evals/cases/matrix.yaml")],
+            parallelism=1,
+            timeout_seconds=30,
+            max_turns=2,
+            benchmark=False,
+            extra_args=[],
+        )
+        assert config["engine"]["model"]["name"] == "matrix-model"
+        assert config["skills"][0]["target"].endswith("/matrix-skill")
+
+    assert set(capable) == {
+        agent
+        for agent in SUPPORTED_AGENTS
+        if agent not in {"dim", "hermes", "mcode", "qwenpaw", "zeroclaw"}
+    }
 
 
 def test_eval_config_matches_justdo_openclaw_bridge_contract(tmp_path):

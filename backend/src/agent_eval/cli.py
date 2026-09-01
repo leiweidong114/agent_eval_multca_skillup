@@ -25,6 +25,7 @@ from agent_eval.model_config import (
 )
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
+    agent_capabilities,
     backend_agent,
     default_agent_command,
     find_multica_runtime,
@@ -100,6 +101,23 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _check_agent(args: argparse.Namespace) -> dict[str, object]:
+    capabilities: dict[str, object] | None = None
+    try:
+        capabilities = agent_capabilities(args.agent)
+    except ValueError as exc:
+        return {
+            "status": "unsupported_contract",
+            "agent": args.agent,
+            "capabilities": capabilities,
+            "error": str(exc),
+        }
+    if not capabilities["model_selection"]:
+        return {
+            "status": "unsupported_contract",
+            "agent": args.agent,
+            "capabilities": capabilities,
+            "error": "The Agent runtime does not support selecting a model per request",
+        }
     runtime_agent = backend_agent(args.agent)
     profile = resolve_model_profile(
         PROJECT_ROOT,
@@ -220,6 +238,7 @@ def main() -> None:
                     "agent": agent,
                     "default_command": command,
                     "detected_executable": shutil.which(command),
+                    "capabilities": agent_capabilities(agent),
                     "evaluation_contract": describe_agent_contract(agent),
                 }
             )

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent_eval.runtime import agent_capabilities
+
 
 TELEMETRY_SCHEMA_VERSION = "agent-eval-telemetry-v1"
 
@@ -18,8 +20,10 @@ REQUIRED_AGENT_EVIDENCE = (
 
 
 def describe_agent_contract(agent: str) -> dict[str, Any]:
+    capabilities = agent_capabilities(agent)
     return {
         "agent": agent,
+        "capabilities": capabilities,
         "schema_version": TELEMETRY_SCHEMA_VERSION,
         "required_for_certification": list(REQUIRED_AGENT_EVIDENCE),
         "normalized_channel": {
@@ -38,7 +42,11 @@ def describe_agent_contract(agent: str) -> dict[str, Any]:
         },
         "certification_policy": {
             "stable_invocation": "A live case must pass repeatedly with the selected model",
-            "model_selection": "Requested and observed model identities must match when observable",
+            "model_selection": (
+                "Requested and observed model identities must match when observable"
+                if capabilities["model_selection"]
+                else "Unsupported: model is managed by the Agent runtime"
+            ),
             "telemetry": "A dedicated probe must force at least one tool call and verify required evidence",
         },
     }
