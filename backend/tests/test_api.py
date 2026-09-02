@@ -56,3 +56,54 @@ def test_run_request_supports_single_and_joint_skill_payloads():
     assert legacy.skills == ["example-marker"]
     assert joint.skill == "example-marker"
     assert joint.skills == ["example-marker", "schematic-generation"]
+
+
+def test_skill_files_can_be_read_without_escaping_the_skill_root():
+    response = client.get("/api/skills/example-marker/files/SKILL.md")
+    assert response.status_code == 200
+    assert response.json()["kind"] == "text"
+    assert "example-marker" in response.json()["content"]
+
+    escaped = client.get("/api/skills/example-marker/files/../config/models.yaml")
+    assert escaped.status_code in {400, 404}
+
+
+def test_batch_rejects_duplicate_combinations_before_queueing():
+    response = client.post(
+        "/api/batches",
+        json={
+            "name": "duplicates",
+            "targets": [
+                {"agent": "codex", "model": "gpt-5.4", "profile": "native_codex"},
+                {"agent": "codex", "model": "gpt-5.4", "profile": "native_codex"},
+            ],
+            "base_request": {"skill": "example-marker", "prompt": "test"},
+        },
+    )
+    assert response.status_code == 400
+    assert "unique" in response.json()["detail"]
+
+
+def test_batch_queues_unique_agent_model_combinations(monkeypatch):
+    captured = {}
+
+    def fake_submit(requests, skill_dir, *, name):
+        captured.update(requests=requests, skill_dir=skill_dir, name=name)
+        return {"batch_id": "batch-test", "total_jobs": len(requests)}
+
+    monkeypatch.setattr("app.api.routes_eval.job_manager.submit_batch", fake_submit)
+    response = client.post(
+        "/api/batches",
+        json={
+            "name": "matrix",
+            "targets": [
+                {"agent": "codex", "model": "gpt-5.4", "profile": "native_codex"},
+                {"agent": "codex", "model": "gpt-5.5", "profile": "native_codex"},
+            ],
+            "base_request": {"skill": "example-marker", "prompt": "test"},
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == {"batch_id": "batch-test", "total_jobs": 2}
+    assert captured["name"] == "matrix"
+    assert [item["model"] for item in captured["requests"]] == ["gpt-5.4", "gpt-5.5"]

@@ -31,18 +31,27 @@
           <el-form-item label="任务名称">
             <el-input v-model="form.name" placeholder="用于在结果中心快速识别" />
           </el-form-item>
-          <el-form-item label="执行 Agent">
+          <el-form-item label="评测方式">
+            <el-radio-group v-model="form.batchMode" @change="setDefaults"><el-radio-button :value="false">单组评测</el-radio-button><el-radio-button :value="true">批量对比</el-radio-button></el-radio-group>
+            <div class="field-help">批量模式会运行所选 Agent × 模型的全部组合，并生成横向对比报告。</div>
+          </el-form-item>
+          <el-form-item v-if="!form.batchMode" label="执行 Agent">
             <el-select v-model="form.agent" filterable placeholder="选择本机 Agent">
-              <el-option v-for="agent in availableAgents" :key="agent.agent" :value="agent.agent" :label="agentLabel(agent)" :disabled="agentDisabled(agent)" />
+              <el-option v-for="agent in availableAgents" :key="agent.agent" :value="agent.agent" :label="agentLabel(agent)" :disabled="agentDisabled(agent)"><span class="status-option"><i class="availability-dot" :class="agentAvailable(agent)?'available':'unavailable'"/>{{agent.agent}}<small>{{agentAvailable(agent)?'可用':'不可用'}}</small></span></el-option>
             </el-select>
           </el-form-item>
-          <el-form-item label="运行模型">
+          <el-form-item v-if="!form.batchMode" label="运行模型">
             <el-select v-model="form.modelKey" filterable placeholder="选择模型" @change="onModelChange">
               <el-option v-for="model in availableModels" :key="modelKey(model)" :value="modelKey(model)" :label="modelLabel(model)">
-                <span>{{ model.id }}</span><span class="option-meta">{{ model.source }} · {{ model.profile }}</span>
+                <span class="status-option"><i class="availability-dot" :class="modelAvailable(model)?'available':'unavailable'"/>{{ model.id }}<small>{{modelAvailable(model)?'可用':'不可用'}}</small></span>
               </el-option>
             </el-select>
           </el-form-item>
+          <template v-else>
+            <el-form-item label="参评 Agent（可多选）"><el-select v-model="form.agents" multiple filterable collapse-tags placeholder="选择多个 Agent"><el-option v-for="agent in availableAgents" :key="agent.agent" :value="agent.agent" :label="agent.agent" :disabled="agentDisabled(agent)"><span class="status-option"><i class="availability-dot" :class="agentAvailable(agent)?'available':'unavailable'"/>{{agent.agent}}<small>{{agentAvailable(agent)?'可用':'不可用'}}</small></span></el-option></el-select></el-form-item>
+            <el-form-item label="参评模型（可多选）"><el-select v-model="form.modelKeys" multiple filterable collapse-tags placeholder="选择多个模型"><el-option v-for="model in availableModels" :key="modelKey(model)" :value="modelKey(model)" :label="model.id"><span class="status-option"><i class="availability-dot" :class="modelAvailable(model)?'available':'unavailable'"/>{{model.id}}<small>{{modelAvailable(model)?'可用':'不可用'}}</small></span></el-option></el-select></el-form-item>
+            <el-alert class="combination-note" type="success" :closable="false" show-icon :title="`将创建 ${batchTargets.length} 个 Agent × 模型评测组合`"/>
+          </template>
         </div>
 
         <template v-if="form.type === 'skill'">
@@ -101,7 +110,7 @@
 
         <div class="submit-row">
           <div class="selection-summary">
-            <b>{{ currentType.name }}</b><span>{{ form.agent || '未选 Agent' }}</span><span>{{ selectedModel?.id || '未选模型' }}</span>
+            <b>{{ currentType.name }}</b><span v-if="form.batchMode">{{batchTargets.length}} 个对比组合</span><template v-else><span>{{ form.agent || '未选 Agent' }}</span><span>{{ selectedModel?.id || '未选模型' }}</span></template>
           </div>
           <el-button type="primary" size="large" :loading="running" @click="submit">{{ running ? '评测运行中' : '开始评测' }}</el-button>
         </div>
@@ -124,7 +133,7 @@ import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } f
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Cpu, DataAnalysis, MagicStick } from '@element-plus/icons-vue'
-import { fetchAgents, fetchBenchmarks, fetchJob, fetchModels, fetchSkillCases, fetchSkills, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment } from '../api'
+import { fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModels, fetchSkillCases, fetchSkills, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -134,7 +143,7 @@ const types = [
   { id: 'skill', name: 'Skill 评测', description: '单 Skill 或多 Skill 联合任务评测', icon: markRaw(MagicStick) },
 ]
 const normalizeType = (value) => ['schematic', 'question', 'skill'].includes(value) ? value : ''
-const form = reactive({ type: normalizeType(route.query.type), name: '', agent: '', modelKey: '', skills: [], prompt: '', cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, baseline: true })
+const form = reactive({ type: normalizeType(route.query.type), name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, baseline: true })
 const agents = ref([])
 const models = ref([])
 const skills = ref([])
@@ -143,6 +152,7 @@ const cases = ref([])
 const running = ref(false)
 const job = ref(null)
 const resultId = ref(null)
+const resultRouteType = ref('')
 let timer
 
 const step = computed(() => job.value ? 2 : form.type ? 1 : 0)
@@ -151,6 +161,7 @@ const installedBenchmarks = computed(() => benchmarks.value.filter(item => item.
 const selectedBenchmark = computed(() => benchmarks.value.find(item => item.id === form.benchmarkId))
 const modelKey = model => `${model.profile || 'default'}::${model.id}`
 const selectedModel = computed(() => models.value.find(item => modelKey(item) === form.modelKey))
+const selectedModels = computed(() => models.value.filter(item => form.modelKeys.includes(modelKey(item))))
 const availableModels = computed(() => form.type === 'question' ? models.value.filter(item => item.source === 'litellm' || item.source === 'configured') : models.value)
 const availableAgents = computed(() => {
   if (form.type !== 'question') return agents.value
@@ -158,16 +169,23 @@ const availableAgents = computed(() => {
   return [direct, ...agents.value.filter(item => item.agent === 'codex')]
 })
 const isTerminal = computed(() => ['completed', 'failed', 'cancelled', 'canceled'].includes(job.value?.status))
+const batchTargets = computed(() => {
+  if (!form.batchMode) return form.agent && selectedModel.value ? [{ agent: form.agent, model: selectedModel.value.id, profile: selectedModel.value.profile }] : []
+  return form.agents.flatMap(agent => selectedModels.value.map(model => ({ agent, model: model.id, profile: model.profile })))
+})
 
 function selectType(type) { form.type = type; job.value = null; router.replace({ query: { type } }); setDefaults() }
 function agentLabel(agent) { return `${agent.agent}${agent.detected_executable ? ' · 可用' : ' · 未检测到'}` }
-function agentDisabled(agent) { return agent.agent !== 'direct' && (!agent.detected_executable || (form.type !== 'question' && agent.capabilities?.skill_injection === false)) }
+function agentAvailable(agent) { return (agent.agent === 'direct' || !!agent.detected_executable) && !agentDisabled(agent) }
+function agentDisabled(agent) { return (form.type === 'question' && selectedBenchmark.value?.task_type === 'repository_agent' && agent.agent !== 'codex') || (agent.agent !== 'direct' && (!agent.detected_executable || (form.type !== 'question' && (agent.capabilities?.skill_injection === false || agent.capabilities?.specified_model_and_skill_evaluation === false)))) }
 function modelLabel(model) { return `${model.id} · ${model.source === 'litellm' ? 'LiteLLM' : model.source}` }
+function modelAvailable(model) { return model.source === 'litellm' || model.source === 'native' }
 function onModelChange() {}
 function onBenchmarkChange() {
   if (selectedBenchmark.value) form.sampleLimit = Math.min(20, selectedBenchmark.value.item_count)
   if (selectedBenchmark.value?.task_type === 'repository_agent') form.agent = 'codex'
   else if (!['direct', 'codex'].includes(form.agent)) form.agent = 'direct'
+  if (form.batchMode && selectedBenchmark.value?.task_type === 'repository_agent') form.agents = ['codex']
 }
 async function onSkillsChange() {
   form.skills = form.skills.slice(0, 8); form.cases = []; cases.value = []
@@ -179,19 +197,26 @@ function setDefaults() {
   const possibleAgents = availableAgents.value.filter(item => !agentDisabled(item))
   if (!possibleAgents.some(item => item.agent === form.agent)) form.agent = possibleAgents[0]?.agent || ''
   if (!availableModels.value.some(item => modelKey(item) === form.modelKey)) form.modelKey = availableModels.value[0] ? modelKey(availableModels.value[0]) : ''
+  form.agents = form.agents.filter(name => possibleAgents.some(item => item.agent === name))
+  form.modelKeys = form.modelKeys.filter(key => availableModels.value.some(item => modelKey(item) === key))
+  if (form.batchMode && !form.agents.length) form.agents = possibleAgents.slice(0, 2).map(item => item.agent)
+  if (form.batchMode && !form.modelKeys.length) form.modelKeys = availableModels.value.slice(0, 2).map(modelKey)
   if (form.type === 'schematic') form.name ||= '原理图生成评测'
   if (form.type === 'skill') form.name ||= 'Skill 能力评测'
   if (form.type === 'question') form.name ||= '题库能力评测'
 }
 function validateForm() {
   if (!form.type) return '请先选择评测类型'
-  if (!form.agent) return '请选择可用 Agent'
-  if (!selectedModel.value) return '请选择运行模型'
+  if (form.batchMode && batchTargets.value.length < 2) return '批量评测至少需要两个不同的 Agent × 模型组合'
+  if (form.batchMode && batchTargets.value.length > 32) return '单次批量评测最多支持 32 个组合'
+  if (!form.batchMode && !form.agent) return '请选择可用 Agent'
+  if (!form.batchMode && !selectedModel.value) return '请选择运行模型'
   if (form.type === 'skill' && !form.skills.length) return '请至少选择一个 Skill'
   if (form.type === 'skill' && !form.prompt.trim() && !form.cases.length) return '请填写 Prompt 或选择 Skill 自带用例'
   if (form.type === 'schematic' && !form.prompt.trim()) return '请填写原理图需求 Prompt'
   if (form.type === 'question' && !form.benchmarkId) return '请选择题库'
   if (form.type === 'question' && selectedBenchmark.value?.task_type === 'repository_agent' && form.agent !== 'codex') return '仓库修复题库需要选择 Codex Agent'
+  if (form.type === 'question' && form.batchMode && selectedBenchmark.value?.task_type === 'repository_agent' && form.agents.some(agent => agent !== 'codex')) return '仓库修复题库仅支持 Codex Agent'
   return ''
 }
 async function submit() {
@@ -206,21 +231,29 @@ async function submit() {
 }
 async function submitAgentRun() {
   const selectedSkills = form.type === 'schematic' ? ['schematic-generation'] : form.skills
-  const response = await triggerRun({ evaluation_type: form.type, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, agent: form.agent, profile: selectedModel.value.profile, model: selectedModel.value.id, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: 12, benchmark: form.baseline, collect_database_trace: selectedModel.value.source === 'litellm', require_model_verification: selectedModel.value.source === 'litellm', llm_judge: true })
-  resultId.value = response.job_id; job.value = response; pollAgentJob(response.job_id)
+  const base = { evaluation_type: form.type, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: 12, benchmark: form.baseline, collect_database_trace: true, require_model_verification: true, llm_judge: true }
+  if (form.batchMode) {
+    const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })
+    resultId.value = response.batch_id; resultRouteType.value = 'batch'; job.value = response; pollBatch(response.batch_id)
+  } else {
+    const response = await triggerRun({ ...base, agent: form.agent, profile: selectedModel.value.profile, model: selectedModel.value.id, collect_database_trace: selectedModel.value.source === 'litellm', require_model_verification: selectedModel.value.source === 'litellm' })
+    resultId.value = response.job_id; resultRouteType.value = form.type; job.value = response; pollAgentJob(response.job_id)
+  }
 }
 async function submitQuestion() {
   const repo = selectedBenchmark.value?.task_type === 'repository_agent'
-  const provider = await ensureAutoProvider({ agent: form.agent, model: selectedModel.value.id, profile: selectedModel.value.profile, task_kind: repo ? 'repo' : 'direct' })
-  const experiment = await createExperiment({ name: form.name, provider_ids: [provider.id], benchmark_ids: [form.benchmarkId], repeats: form.repeats, sample_limit: form.sampleLimit, concurrency: form.concurrency, allow_unsafe_code: false, track: repo ? 'native_agent' : 'model_direct', random_seed: 42, sampling_strategy: 'stratified', budget: { timeout_seconds_per_task: form.timeout, max_output_tokens: 4096 } })
-  resultId.value = experiment.id; job.value = experiment; pollExperiment(experiment.id)
+  const targets = form.batchMode ? batchTargets.value : [{ agent: form.agent, model: selectedModel.value.id, profile: selectedModel.value.profile }]
+  const providers = await Promise.all(targets.map(target => ensureAutoProvider({ ...target, task_kind: repo ? 'repo' : 'direct' })))
+  const experiment = await createExperiment({ name: form.name, provider_ids: [...new Set(providers.map(item => item.id))], benchmark_ids: [form.benchmarkId], repeats: form.repeats, sample_limit: form.sampleLimit, concurrency: form.concurrency, allow_unsafe_code: false, track: repo ? 'native_agent' : 'model_direct', random_seed: 42, sampling_strategy: 'stratified', budget: { timeout_seconds_per_task: form.timeout, max_output_tokens: 4096 } })
+  resultId.value = experiment.id; resultRouteType.value = 'question'; job.value = experiment; pollExperiment(experiment.id)
 }
 function schedule(fn) { clearTimeout(timer); timer = setTimeout(fn, 1200) }
 async function pollAgentJob(id) { try { job.value = await fetchJob(id); if (!isTerminal.value) schedule(() => pollAgentJob(id)); else running.value = false } catch (error) { running.value = false; ElMessage.error(error.message) } }
+async function pollBatch(id) { try { job.value = await fetchBatch(id); job.value.phase = '批量对比评测'; job.value.message = `已完成 ${job.value.completed_jobs||0} / ${job.value.total_jobs||0} 个组合`; if (!isTerminal.value) schedule(() => pollBatch(id)); else running.value = false } catch (error) { running.value = false; ElMessage.error(error.message) } }
 async function pollExperiment(id) { try { const data = await fetchExperiment(id); const total = Math.max(1, (data.selected_items || 1) * (data.repeats || 1)); data.progress = data.status === 'completed' ? 100 : Math.round(((data.completed_jobs || data.summary?.count || 0) / total) * 100); data.phase = '题库评测'; data.message = `已完成 ${data.completed_jobs || data.summary?.count || 0} / ${total} 个任务`; job.value = data; if (!isTerminal.value) schedule(() => pollExperiment(id)); else running.value = false } catch (error) { running.value = false; ElMessage.error(error.message) } }
 function statusText(status) { return ({ queued: '排队中', running: '运行中', completed: '已完成', failed: '失败', cancelled: '已取消', canceled: '已取消' })[status] || status || '准备中' }
 function statusType(status) { return status === 'completed' ? 'success' : status === 'failed' ? 'danger' : status?.includes('cancel') ? 'info' : 'warning' }
-function openResult() { router.push(`/results/${form.type}/${resultId.value}`) }
+function openResult() { router.push(`/results/${resultRouteType.value||form.type}/${resultId.value}`) }
 function resetRun() { job.value = null; resultId.value = null; running.value = false }
 
 onMounted(async () => {
@@ -238,5 +271,5 @@ onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <style scoped>
-.steps{width:440px;background:transparent}.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.type-card{position:relative;display:grid;grid-template-columns:42px 1fr;grid-template-rows:auto auto;text-align:left;gap:3px 12px;padding:16px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);cursor:pointer}.type-card strong{font-size:15px}.type-card small{color:var(--muted);line-height:1.5}.type-icon{grid-row:1/3;width:40px;height:40px;display:grid;place-items:center;border-radius:8px;background:var(--brand-soft);color:var(--brand);font-size:19px}.check{position:absolute;right:10px;top:10px;color:var(--accent);opacity:0}.active .check{opacity:1}.panel-title,.progress-head,.submit-row{display:flex;justify-content:space-between;align-items:center}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 13px}.common-fields>:first-child{grid-column:1/-1}.prism-form :deep(.el-form-item){margin-bottom:17px}.prism-form :deep(.el-form-item__label){padding-bottom:6px;color:var(--muted);font-size:11px}.field-help{font-size:11px;color:var(--muted);margin-top:6px}.option-meta{float:right;color:var(--muted);margin-left:20px;font-size:11px}.runtime-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.submit-row{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}.selection-summary{display:flex;gap:10px;align-items:center}.selection-summary span{font-size:12px;color:var(--muted);padding-left:10px;border-left:1px solid var(--line)}.progress-head h3{margin:4px 0}.progress-head p{margin:0 0 18px;color:var(--muted)}.result-actions{margin-top:18px}@media(max-width:900px){.steps{display:none}.type-grid,.form-grid,.runtime-grid{grid-template-columns:1fr}.common-fields>:first-child{grid-column:auto}.submit-row{align-items:flex-end}.selection-summary{flex-direction:column;align-items:flex-start}.type-grid{gap:8px}}
+.steps{width:440px;background:transparent}.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.type-card{position:relative;display:grid;grid-template-columns:42px 1fr;grid-template-rows:auto auto;text-align:left;gap:3px 12px;padding:16px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);cursor:pointer}.type-card strong{font-size:15px}.type-card small{color:var(--muted);line-height:1.5}.type-icon{grid-row:1/3;width:40px;height:40px;display:grid;place-items:center;border-radius:8px;background:var(--brand-soft);color:var(--brand);font-size:19px}.check{position:absolute;right:10px;top:10px;color:var(--accent);opacity:0}.active .check{opacity:1}.panel-title,.progress-head,.submit-row{display:flex;justify-content:space-between;align-items:center}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 13px}.common-fields>:first-child{grid-column:1/-1}.prism-form :deep(.el-form-item){margin-bottom:17px}.prism-form :deep(.el-form-item__label){padding-bottom:6px;color:var(--muted);font-size:11px}.field-help{font-size:11px;color:var(--muted);margin-top:6px}.option-meta{float:right;color:var(--muted);margin-left:20px;font-size:11px}.status-option{display:flex;align-items:center;gap:8px;width:100%}.status-option small{margin-left:auto;color:var(--muted)}.availability-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.availability-dot.available{background:#22a06b;box-shadow:0 0 0 3px rgba(34,160,107,.13)}.availability-dot.unavailable{background:#dc4c4c;box-shadow:0 0 0 3px rgba(220,76,76,.12)}.combination-note{grid-column:1/-1;margin-bottom:16px}.runtime-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.submit-row{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}.selection-summary{display:flex;gap:10px;align-items:center}.selection-summary span{font-size:12px;color:var(--muted);padding-left:10px;border-left:1px solid var(--line)}.progress-head h3{margin:4px 0}.progress-head p{margin:0 0 18px;color:var(--muted)}.result-actions{margin-top:18px}@media(max-width:900px){.steps{display:none}.type-grid,.form-grid,.runtime-grid{grid-template-columns:1fr}.common-fields>:first-child{grid-column:auto}.submit-row{align-items:flex-end}.selection-summary{flex-direction:column;align-items:flex-start}.type-grid{gap:8px}}
 </style>

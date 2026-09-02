@@ -3,6 +3,8 @@ from __future__ import annotations
 import shutil
 import subprocess
 import time
+import base64
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -128,7 +130,10 @@ def get_model_config() -> dict[str, object]:
 @router.get("/models")
 def list_models() -> dict[str, object]:
     """Return models discovered from LiteLLM plus configured native fallbacks."""
-    return discover_available_models(BACKEND_ROOT)
+    result = discover_available_models(BACKEND_ROOT)
+    excluded = {"deepseek", "deepseek-v4-flash", "deepseek-v4-pro"}
+    result["models"] = [item for item in result.get("models", []) if item.get("id") not in excluded]
+    return result
 
 
 @router.post("/models/test")
@@ -284,3 +289,33 @@ def get_skill(skill_name: str) -> dict[str, object]:
             if path.is_file()
         )[:500],
     }
+
+
+@router.get("/skills/{skill_name}/files/{file_path:path}")
+def get_skill_file(skill_name: str, file_path: str) -> dict[str, object]:
+    """Return one safely resolved Skill file for the built-in file reader."""
+    skill_dir = resolve_skill(skill_name)
+    if skill_dir is None:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_name}")
+    root = skill_dir.resolve()
+    target = (root / file_path).resolve()
+    if target != root and root not in target.parents:
+        raise HTTPException(status_code=400, detail="File path escapes the Skill directory")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="Skill file not found")
+    if target.stat().st_size > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File is larger than the 2 MB preview limit")
+    data = target.read_bytes()
+    mime_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    try:
+        content = data.decode("utf-8")
+        return {"path": file_path, "kind": "text", "mime_type": mime_type, "content": content}
+    except UnicodeDecodeError:
+        if mime_type.startswith("image/"):
+            return {
+                "path": file_path,
+                "kind": "image",
+                "mime_type": mime_type,
+                "content": base64.b64encode(data).decode("ascii"),
+            }
+        return {"path": file_path, "kind": "binary", "mime_type": mime_type, "size": len(data)}

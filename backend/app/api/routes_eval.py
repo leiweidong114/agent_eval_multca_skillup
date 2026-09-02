@@ -54,6 +54,18 @@ class RunRequest(BaseModel):
         return self
 
 
+class BatchTarget(BaseModel):
+    agent: str
+    model: str
+    profile: str
+
+
+class BatchRunRequest(BaseModel):
+    name: str = Field(default="批量评测", min_length=1, max_length=200)
+    targets: list[BatchTarget] = Field(min_length=2, max_length=32)
+    base_request: dict[str, object]
+
+
 def _resolve_skill(name: str) -> Path:
     skill_dir = resolve_skill(name)
     if skill_dir is None:
@@ -138,6 +150,48 @@ def get_job(job_id: str) -> dict[str, object]:
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.post("/batches")
+def create_batch(request: BatchRunRequest) -> dict[str, object]:
+    """Queue the Cartesian Agent/model combinations as one comparison batch."""
+    try:
+        normalized: list[RunRequest] = []
+        seen: set[tuple[str, str, str]] = set()
+        for target in request.targets:
+            key = (target.agent, target.model, target.profile)
+            if key in seen:
+                continue
+            seen.add(key)
+            run = RunRequest(**request.base_request, **target.model_dump())
+            validate_evaluation_capabilities(
+                run.agent,
+                require_model_selection=run.require_model_verification,
+            )
+            normalized.append(run)
+        if len(normalized) < 2:
+            raise ValueError("Batch evaluation requires at least two unique Agent/model combinations")
+        skill_dir = _resolve_request_skill(normalized[0])
+        return job_manager.submit_batch(
+            [item.model_dump() for item in normalized],
+            skill_dir,
+            name=request.name,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/batches")
+def list_batches(user_id: str | None = None) -> list[dict[str, object]]:
+    return job_manager.list_batches(user_id=user_id)
+
+
+@router.get("/batches/{batch_id}")
+def get_batch(batch_id: str) -> dict[str, object]:
+    batch = job_manager.get_batch(batch_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return batch
 
 
 @router.post("/jobs/{job_id}/cancel")

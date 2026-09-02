@@ -12,9 +12,9 @@
 
     <div class="runtime-summary">
       <div><span class="dot" :class="{on:detectedAgents.length}"/><p><b>{{detectedAgents.length}} / {{agents.length}}</b><small>本机发现 Agent</small></p></div>
-      <div><span class="dot" :class="{on:verifiedAgentCount}"/><p><b>{{verifiedAgentCount}}</b><small>已验证 Agent</small></p></div>
-      <div><span class="dot" :class="{on:verifiedModelCount}"/><p><b>{{verifiedModelCount}} / {{models.length}}</b><small>已验证模型</small></p></div>
-      <div><span class="dot" :class="{on:database.ok}"/><p><b>{{database.ok?'正常':'未连接'}}</b><small>评测轨迹数据库</small></p></div>
+      <div><span class="dot" :class="{on:verifiedAgentCount}"/><p><b>{{verifiedAgentCount}}</b><small>可用 Agent</small></p></div>
+      <div><span class="dot" :class="{on:verifiedModelCount}"/><p><b>{{verifiedModelCount}} / {{models.length}}</b><small>可用模型</small></p></div>
+      <div><span class="dot" :class="{on:databaseConnected}"/><p><b>{{databaseConnected?'正常':'未连接'}}</b><small>评测轨迹数据库</small></p></div>
     </div>
 
     <el-card shadow="never" class="panel">
@@ -23,7 +23,6 @@
         <el-table-column label="Agent" width="150"><template #default="{row}"><b>{{row.agent}}</b></template></el-table-column>
         <el-table-column label="可用状态" width="130"><template #default="{row}"><el-tag :type="healthType(agentHealth[row.agent], row.detected_executable)">{{healthLabel(agentHealth[row.agent], row.detected_executable)}}</el-tag></template></el-table-column>
         <el-table-column prop="detected_executable" label="本地路径" min-width="260"><template #default="{row}"><code>{{row.detected_executable||row.default_command}}</code><small v-if="agentHealth[row.agent]?.message" class="health-message">{{agentHealth[row.agent].message}}</small></template></el-table-column>
-        <el-table-column label="能力" min-width="230"><template #default="{row}"><div class="tags"><el-tag v-for="cap in capabilityTags(row)" :key="cap" effect="plain" size="small">{{cap}}</el-tag></div></template></el-table-column>
         <el-table-column label="操作" width="120" align="right"><template #default="{row}"><el-button link type="primary" :disabled="!row.detected_executable" :loading="testingAgent===row.agent" @click="testOneAgent(row)">立即测试</el-button></template></el-table-column>
       </el-table>
     </el-card>
@@ -34,7 +33,6 @@
       <el-table :data="filteredModels" max-height="560">
         <el-table-column prop="id" label="模型" min-width="250"><template #default="{row}"><b>{{row.id}}</b><small v-if="modelHealth[modelKey(row)]?.message" class="health-message">{{modelHealth[modelKey(row)].message}}</small></template></el-table-column>
         <el-table-column label="可用状态" width="130"><template #default="{row}"><el-tag :type="healthType(modelHealth[modelKey(row)])">{{healthLabel(modelHealth[modelKey(row)])}}</el-tag></template></el-table-column>
-        <el-table-column prop="profile" label="配置 Profile" min-width="170"/>
         <el-table-column label="来源" width="120"><template #default="{row}"><el-tag effect="plain">{{row.source}}</el-tag></template></el-table-column>
         <el-table-column label="耗时" width="100"><template #default="{row}">{{duration(modelHealth[modelKey(row)])}}</template></el-table-column>
         <el-table-column label="操作" width="120" align="right"><template #default="{row}"><el-button link type="primary" :loading="testingModel===modelKey(row)" @click="testOneModel(row)">立即测试</el-button></template></el-table-column>
@@ -53,14 +51,14 @@ const agents=ref([]),modelData=ref({models:[],gateways:[],errors:[]}),database=r
 const agentHealth=ref({}),modelHealth=ref({}),testingAgent=ref(''),testingModel=ref(''),testingAgents=ref(false),testingModels=ref(false)
 const models=computed(()=>modelData.value.models||[])
 const detectedAgents=computed(()=>agents.value.filter(x=>x.detected_executable))
-const verifiedAgentCount=computed(()=>Object.values(agentHealth.value).filter(x=>x?.ok===true).length)
-const verifiedModelCount=computed(()=>Object.values(modelHealth.value).filter(x=>x?.ok===true).length)
+const verifiedAgentCount=computed(()=>agents.value.filter(x=>agentHealth.value[x.agent]?.ok??!!x.detected_executable).length)
+const verifiedModelCount=computed(()=>models.value.filter(x=>modelHealth.value[modelKey(x)]?.ok??x.source==='litellm').length)
+const databaseConnected=computed(()=>database.value.status==='ok'||database.value.ok===true)
 const rank=(health,fallback=false)=>health?.ok===true?0:health?.ok===false?2:fallback?0:1
 const sortedAgents=computed(()=>[...agents.value].sort((a,b)=>rank(agentHealth.value[a.agent],!!a.detected_executable)-rank(agentHealth.value[b.agent],!!b.detected_executable)||a.agent.localeCompare(b.agent)))
 const modelKey=row=>`${row.profile||'default'}::${row.id}`
 const filteredModels=computed(()=>[...models.value].filter(x=>`${x.id} ${x.profile} ${x.owned_by}`.toLowerCase().includes(keyword.value.toLowerCase())).sort((a,b)=>rank(modelHealth.value[modelKey(a)],a.source==='litellm')-rank(modelHealth.value[modelKey(b)],b.source==='litellm')||a.id.localeCompare(b.id)))
 
-function capabilityTags(row){const c=row.capabilities||{};return Object.entries(c).filter(([,v])=>v===true).map(([k])=>({skill_injection:'Skill 注入',model_selection:'模型选择',structured_output:'结构化输出',repository_tasks:'仓库任务'}[k]||k)).slice(0,5)}
 function healthLabel(health,detected=false){if(health?.ok===true)return'可用';if(health?.ok===false)return'不可用';return detected?'已发现':'待检测'}
 function healthType(health,detected=false){if(health?.ok===true)return'success';if(health?.ok===false)return'danger';return detected?'warning':'info'}
 function duration(health){return health?.duration_ms!=null?`${health.duration_ms} ms`:'—'}
