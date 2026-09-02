@@ -84,6 +84,23 @@ def test_claude_uses_bare_mode_and_bearer_auth(tmp_path):
     assert profile.environment["ANTHROPIC_API_KEY"] == "virtual-key"
 
 
+def test_opencode_uses_agent_specific_gateway_model(tmp_path):
+    _write_config(tmp_path)
+    path = tmp_path / "config" / "models.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + "    gateway_models:\n      opencode: MiniMax-M3-no-thinking\n",
+        encoding="utf-8",
+    )
+    profile = resolve_model_profile(
+        tmp_path,
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+        agent="opencode",
+    )
+    assert profile.model_for_agent("opencode") == "litellm/MiniMax-M3-no-thinking"
+    assert '"MiniMax-M3-no-thinking"' in profile.environment["OPENCODE_CONFIG_CONTENT"]
+
+
 def test_local_config_overrides_model_without_committing_a_key(tmp_path):
     _write_config(tmp_path)
     (tmp_path / "config" / "local.yaml").write_text(

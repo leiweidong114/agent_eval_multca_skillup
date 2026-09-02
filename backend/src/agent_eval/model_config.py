@@ -39,7 +39,7 @@ class ResolvedModelProfile:
             # of resolving a similarly named model from the user's Token Plan.
             return f"custom-local:{self.model}"
         if agent == "opencode" and self.api_base:
-            return f"litellm/{self.model}"
+            return f"litellm/{self.gateway_model_for_agent(agent)}"
         return self.model
 
     def gateway_model_for_agent(self, agent: str) -> str:
