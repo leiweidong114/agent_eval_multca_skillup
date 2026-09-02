@@ -206,6 +206,9 @@ def resolve_model_profile(
     if agent == "claude":
         # Prevent user keychain/apiKeyHelper settings from overriding the
         # gateway credentials supplied for this isolated evaluation process.
+        # Session-title and other background traffic can reject non-Anthropic
+        # gateway aliases after the actual task has already completed.
+        environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         agent_args = ("--bare",)
     elif agent == "codex":
         # Codex with an existing ChatGPT login otherwise keeps using the
