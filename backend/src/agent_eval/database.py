@@ -210,10 +210,22 @@ def _json_value(value: Any) -> Any:
 _SENSITIVE_KEYS = {"authorization", "api_key", "apikey", "password", "secret", "token"}
 
 
+def _sensitive_key(key: str) -> bool:
+    normalized = key.lower()
+    return (
+        normalized in _SENSITIVE_KEYS
+        or "password" in normalized
+        or "authorization" in normalized
+        or "secret" in normalized
+        or ("api_key" in normalized and not normalized.endswith("_alias"))
+        or normalized.endswith("_token")
+    )
+
+
 def _sanitize(value: Any, *, max_chars: int) -> Any:
     if isinstance(value, dict):
         return {
-            key: "[REDACTED]" if key.lower() in _SENSITIVE_KEYS else _sanitize(item, max_chars=max_chars)
+            key: "[REDACTED]" if _sensitive_key(key) else _sanitize(item, max_chars=max_chars)
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -264,6 +276,92 @@ def fetch_model_interactions(
         _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=config.max_content_chars)
         for row in rows
     ]
+
+
+def search_conversation_interactions(
+    project_root: Path,
+    *,
+    user_id: str | None = None,
+    session_id: str | None = None,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Search LiteLLM request/response content by user or conversation session."""
+    user_id = (user_id or "").strip()
+    session_id = (session_id or "").strip()
+    if not user_id and not session_id:
+        raise ValueError("Provide user_id or session_id")
+    config = resolve_database_config(project_root)
+    if not config.enabled:
+        return {"status": "disabled", "interactions": [], "sessions": []}
+    clauses: list[str] = []
+    parameters: list[Any] = []
+    if user_id:
+        clauses.append('''(
+            "user" = %s or end_user = %s
+            or metadata->>'user_api_key_user_id' = %s
+            or metadata->'spend_logs_metadata'->>'user_api_key_user_id' = %s
+        )''')
+        parameters.extend([user_id, user_id, user_id, user_id])
+    if session_id:
+        clauses.append('''(
+            session_id = %s
+            or metadata->>'session_id' = %s
+            or proxy_server_request->'metadata'->>'session_id' = %s
+            or end_user like %s
+        )''')
+        parameters.extend([session_id, session_id, session_id, f'%"session_id":"{session_id}"%'])
+    query = f'''select request_id, call_type, "user" as user_id, end_user,
+        "startTime" as start_time, "endTime" as end_time, model, model_group,
+        custom_llm_provider, session_id, status, agent_id, request_duration_ms,
+        prompt_tokens, completion_tokens, total_tokens, spend,
+        messages, response, proxy_server_request, metadata
+        from "LiteLLM_SpendLogs"
+        where {' and '.join(clauses)}
+        order by "startTime" asc
+        limit %s'''
+    safe_limit = max(1, min(int(limit), config.limit, 1000))
+    psycopg, dict_row = _driver()
+    with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query, (*parameters, safe_limit))
+            rows = cursor.fetchall()
+    interactions = [
+        _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=config.max_content_chars)
+        for row in rows
+    ]
+    session_map: dict[str, dict[str, Any]] = {}
+    for row in interactions:
+        sid = str(row.get("session_id") or "未记录会话 ID")
+        item = session_map.setdefault(
+            sid,
+            {
+                "session_id": sid,
+                "user_id": row.get("user_id"),
+                "agent_id": row.get("agent_id"),
+                "models": set(),
+                "interaction_count": 0,
+                "total_tokens": 0,
+                "started_at": row.get("start_time"),
+                "finished_at": row.get("end_time"),
+            },
+        )
+        if row.get("model"):
+            item["models"].add(str(row["model"]))
+        item["interaction_count"] += 1
+        item["total_tokens"] += int(row.get("total_tokens") or 0)
+        item["finished_at"] = row.get("end_time") or item["finished_at"]
+    sessions = []
+    for item in session_map.values():
+        item["models"] = sorted(item["models"])
+        sessions.append(item)
+    return {
+        "status": "ok",
+        "query": {"user_id": user_id or None, "session_id": session_id or None},
+        "count": len(interactions),
+        "sessions": sessions,
+        "interactions": interactions,
+        "truncated": len(interactions) >= safe_limit,
+    }
 
 
 def summarize_model_interactions(

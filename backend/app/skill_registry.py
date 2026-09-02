@@ -14,6 +14,7 @@ from app.config import SKILLS_ROOT
 
 
 REGISTRY_ROOT = SKILLS_ROOT / ".registry"
+COMPOSED_ROOT = SKILLS_ROOT.parent / ".runtime" / "composed-skills"
 MAX_ARCHIVE_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED_BYTES = 50 * 1024 * 1024
 MAX_FILES = 500
@@ -124,6 +125,55 @@ def resolve_skill(identifier: str) -> Path | None:
     if candidate != root and root in candidate.parents and (candidate / "SKILL.md").is_file():
         return candidate
     return None
+
+
+def compose_skills(identifiers: list[str]) -> Path:
+    """Build a deterministic Skill bundle that delegates to multiple Skills."""
+    if not 2 <= len(identifiers) <= 8:
+        raise ValueError("Combined evaluation requires between 2 and 8 Skills")
+    resolved: list[tuple[str, Path]] = []
+    hasher = hashlib.sha256()
+    for identifier in identifiers:
+        path = resolve_skill(identifier)
+        if path is None:
+            raise ValueError(f"Skill not found: {identifier}")
+        skill_md = (path / "SKILL.md").read_bytes()
+        hasher.update(identifier.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(skill_md)
+        resolved.append((identifier, path))
+    bundle_name = f"combined-{hasher.hexdigest()[:12]}"
+    destination = COMPOSED_ROOT / bundle_name
+    if (destination / "SKILL.md").is_file():
+        return destination
+    temporary = COMPOSED_ROOT / f".{bundle_name}-{datetime.now().timestamp():.0f}"
+    temporary.mkdir(parents=True, exist_ok=False)
+    lines = [
+        "---",
+        f"name: {bundle_name}",
+        "description: Coordinate multiple selected Skills for one evaluation task.",
+        "---",
+        "",
+        "# Combined Skill Evaluation",
+        "",
+        "Use every relevant sub-Skill below to complete the user's task. Read each",
+        "sub-Skill's `SKILL.md` before acting, reconcile overlapping instructions,",
+        "and produce one coherent final result.",
+        "",
+        "## Selected Skills",
+        "",
+    ]
+    for index, (identifier, source) in enumerate(resolved, start=1):
+        folder = f"{index:02d}-{re.sub(r'[^A-Za-z0-9._-]+', '-', identifier)}"
+        shutil.copytree(source, temporary / "skills" / folder)
+        lines.append(f"- `{identifier}`: `skills/{folder}/SKILL.md`")
+    (temporary / "SKILL.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    COMPOSED_ROOT.mkdir(parents=True, exist_ok=True)
+    try:
+        temporary.replace(destination)
+    except FileExistsError:
+        shutil.rmtree(temporary, ignore_errors=True)
+    return destination
 
 
 def delete_skill_version(name: str, version: str) -> bool:

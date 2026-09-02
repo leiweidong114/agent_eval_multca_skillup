@@ -8,6 +8,9 @@ backend/config/local.yaml
 backend/config/secrets.env
 backend/schematic_projects/
 backend/skills/.registry/
+backend/model_eval_data/
+frontend/vite.stdout.log
+frontend/vite.stderr.log
 
 # Python
 .venv/

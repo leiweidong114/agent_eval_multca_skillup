@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Prism Eval · 模型与 Agent 评测</title>
+  <link rel="stylesheet" href="/prism/assets/styles.css?v=0.10.0">
+  <link rel="stylesheet" href="/prism/assets/enterprise.css?v=0.10.0">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><span class="brand-mark">P</span><div><strong>PRISM EVAL</strong><small>MODEL × AGENT LAB</small></div></div>
+  <nav>
+    <button data-route="home" class="active"><span>⌂</span>首页</button>
+    <button data-route="dashboard"><span>▥</span>数据总览</button>
+    <button data-route="new"><span>＋</span>新建评测</button>
+    <button data-route="history"><span>◷</span>运行中心</button>
+    <button data-route="benchmarks"><span>▦</span>题库管理</button>
+    <button data-route="providers"><span>◇</span>模型与 Agent</button>
+    <button data-route="audit"><span>≡</span>审计日志</button>
+    <button data-route="settings"><span>⚙</span>设置</button>
+    <div class="nav-section admin-only">平台管理</div>
+    <button data-route="admin" id="admin-nav"><span>▤</span>使用统计</button>
+    <button data-route="users" id="users-nav"><span>♙</span>用户管理</button>
+  </nav>
+  <div class="side-foot"><span id="local-dot" class="dot"></span><div>服务运行状态<small id="runtime">检测中</small></div></div>
+</aside>
+<main>
+  <header>
+    <div><span id="page-kicker" class="eyebrow">PRISM ENTERPRISE</span><h1 id="page-title">首页</h1><p id="page-subtitle">模型与 Agent 评测控制台</p></div>
+    <div class="header-actions"><span id="current-user" class="user-chip"></span><button class="secondary" id="logout" hidden>退出</button><button class="primary" data-route="new">＋ 发起评测</button></div>
+  </header>
+  <section id="app" aria-live="polite"></section>
+</main>
+<div id="toast" role="status"></div>
+<div id="login-screen" hidden>
+  <section class="login-intro"><div class="brand login-brand"><span class="brand-mark">P</span><div><strong>PRISM EVAL</strong><small>ENTERPRISE EDITION</small></div></div><div><span class="eyebrow">TRUSTED MODEL DECISIONS</span><h1>用证据选择模型，<br>用标准评估 Agent。</h1><p>统一管理题库、模型、Agent、运行证据和企业审计，让每一次技术选型都可复现、可解释。</p></div><div class="login-proof"><span>标准题库</span><span>公平赛道</span><span>结果隔离</span><span>离线部署</span></div></section>
+  <form id="login-form" class="login-card"><div><span class="eyebrow">WELCOME BACK</span><h1>登录评测平台</h1><p>使用平台账号继续</p></div><label>用户名<input name="username" autocomplete="username" required autofocus></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">登录</button><p id="login-error" class="form-error"></p><small>内网部署可对接企业统一身份认证</small></form>
+</div>
+<script src="/prism/assets/app.js?v=0.10.0"></script>
+</body>
+</html>

@@ -328,6 +328,8 @@ def run_evaluation(
     task_id: str | None = None,
     client_task_id: str | None = None,
     run_llm_judge_enabled: bool = True,
+    evaluation_type: str = "skill",
+    selected_skills: list[str] | None = None,
 ) -> dict[str, Any]:
     def progress(phase: str, percent: int, message: str) -> None:
         if cancel_event is not None and cancel_event.is_set():
@@ -346,6 +348,7 @@ def run_evaluation(
         raise FileNotFoundError(f"SKILL.md was not found under {source_skill}")
     if not case_files and not prompt:
         raise ValueError("Pass at least one --case or --prompt")
+    selected_skills = selected_skills or [source_skill.name]
     requested_agent = normalize_agent(agent)
     validate_evaluation_capabilities(
         requested_agent, require_model_selection=require_model_verification
@@ -484,6 +487,8 @@ def run_evaluation(
             "model_profile": resolved_profile.name,
             "provider_model": provider_model,
             "skill": str(source_skill),
+            "skills": selected_skills,
+            "evaluation_type": evaluation_type,
             "result_dir": str(result_root),
             "validated": True,
             "skill_up_exit_code": 0,
@@ -711,6 +716,8 @@ def run_evaluation(
             "agent": agent,
             "requested_model": model,
             "skill": source_skill.name,
+            "skills": selected_skills,
+            "evaluation_type": evaluation_type,
         },
         "deterministic_scores": scores,
         "process_metrics": process_metrics,
@@ -758,6 +765,8 @@ def run_evaluation(
         "provider_model": provider_model,
         "gateway_model": gateway_model,
         "skill": str(source_skill),
+        "skills": selected_skills,
+        "evaluation_type": evaluation_type,
         "result_dir": str(result_root),
         "skill_up_exit_code": completed.returncode,
         "iterations": len(results),

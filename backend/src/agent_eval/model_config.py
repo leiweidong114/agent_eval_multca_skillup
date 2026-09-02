@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlsplit, urlunsplit
 
 import yaml
+import httpx
 
 
 @dataclass(frozen=True)
@@ -18,8 +19,8 @@ class ResolvedModelProfile:
     api_base: str
     environment: dict[str, str]
     agent_args: tuple[str, ...]
-    agent_models: dict[str, str]
-    gateway_models: dict[str, str]
+    agent_models: dict[str, str] = field(default_factory=dict)
+    gateway_models: dict[str, str] = field(default_factory=dict)
 
     def model_for_agent(self, agent: str) -> str:
         configured = self.agent_models.get(agent)
@@ -285,6 +286,84 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
             for name, value in profiles.items()
             if isinstance(value, dict)
         } if isinstance(profiles, dict) else {},
+    }
+
+
+def discover_available_models(
+    project_root: Path,
+    *,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, Any]:
+    """Read LiteLLM's OpenAI-compatible model catalog without exposing keys."""
+    config = load_model_config(project_root)
+    profiles = config.get("profiles") or {}
+    models: dict[str, dict[str, Any]] = {}
+    gateways: dict[str, list[str]] = {}
+    errors: list[dict[str, str]] = []
+    if not isinstance(profiles, dict):
+        profiles = {}
+    for name, value in profiles.items():
+        if not isinstance(value, dict):
+            continue
+        configured_model = str(value.get("model") or "").strip()
+        if str(value.get("type") or "").lower() == "native":
+            if configured_model:
+                models.setdefault(
+                    configured_model,
+                    {"id": configured_model, "source": "native", "profiles": []},
+                )["profiles"].append(name)
+            continue
+        api_base = str(value.get("api_base") or "").strip()
+        if not api_base:
+            continue
+        openai_base, _ = _normalized_base_url(api_base)
+        gateways.setdefault(openai_base, []).append(name)
+        if configured_model:
+            models.setdefault(
+                configured_model,
+                {"id": configured_model, "source": "configured", "profiles": []},
+            )["profiles"].append(name)
+    with httpx.Client(timeout=8.0, transport=transport) as client:
+        for base_url, profile_names in gateways.items():
+            first = profiles[profile_names[0]]
+            key_name = str(first.get("api_key_env") or "LITELLM_API_KEY")
+            api_key = resolve_config_secret(project_root, key_name)
+            if not api_key:
+                errors.append({"api_base": base_url, "error": f"{key_name} is not configured"})
+                continue
+            try:
+                response = client.get(
+                    f"{base_url}/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                rows = payload.get("data", []) if isinstance(payload, dict) else []
+                for row in rows:
+                    model_id = str(row.get("id") or "").strip() if isinstance(row, dict) else ""
+                    if not model_id:
+                        continue
+                    item = models.setdefault(
+                        model_id,
+                        {"id": model_id, "source": "litellm", "profiles": []},
+                    )
+                    item["source"] = "litellm"
+                    item["owned_by"] = row.get("owned_by")
+                    item["profiles"] = sorted(set(item["profiles"] + profile_names))
+            except (httpx.HTTPError, ValueError) as exc:
+                errors.append({"api_base": base_url, "error": str(exc)})
+    default_profile = str(config.get("default_profile") or "")
+    result = sorted(models.values(), key=lambda item: (item["source"] != "litellm", item["id"].lower()))
+    for item in result:
+        item["profiles"] = sorted(set(item["profiles"]))
+        item["profile"] = (
+            default_profile if default_profile in item["profiles"] else (item["profiles"][0] if item["profiles"] else None)
+        )
+    return {
+        "models": result,
+        "litellm_available": any(item["source"] == "litellm" for item in result),
+        "gateways": [{"api_base": base, "profiles": names} for base, names in gateways.items()],
+        "errors": errors,
     }
 
 

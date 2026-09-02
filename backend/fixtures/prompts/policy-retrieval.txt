@@ -1,0 +1,31 @@
+The following archive contains policy revisions. Later revision numbers supersede
+earlier revisions only for the same region. Drafts never supersede active rules.
+
+Region North, revision 1, active 2024-01-01:
+Retain diagnostic logs for 30 days. Approval threshold is 2,000 credits.
+
+Region South, revision 3, active 2024-06-10:
+Retain diagnostic logs for 45 days. Approval threshold is 3,500 credits.
+
+Region West, revision 2, active 2025-02-01:
+Retain diagnostic logs for 60 days. Approval threshold is 4,000 credits.
+
+Region North, revision 4, draft 2025-03-15:
+Retain diagnostic logs for 120 days. Approval threshold is 6,000 credits.
+
+Region East, revision 1, active 2025-04-20:
+Retain diagnostic logs for 20 days. Approval threshold is 1,800 credits.
+
+Region North, revision 3, active 2025-05-01:
+Retain diagnostic logs for 75 days. Approval threshold is 5,000 credits.
+
+Region South, revision 4, draft 2025-05-11:
+Retain diagnostic logs for 90 days. Approval threshold is 7,000 credits.
+
+Region West, revision 5, active 2025-06-01:
+Retain diagnostic logs for 90 days. Approval threshold is 4,500 credits.
+
+Question: Under the latest active North policy, how many days are logs retained,
+and what is the approval threshold?
+
+Output exactly: DAYS|CREDITS

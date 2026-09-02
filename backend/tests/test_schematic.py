@@ -38,3 +38,10 @@ def test_schematic_api_returns_openable_project_url():
     judged = client.post("/api/schematic/judge", json={"diagram": diagram, "schematic": generated["schematic"]})
     assert judged.status_code == 200
     assert judged.json()["score"] == 100
+
+
+def test_schematic_interaction_search_requires_an_identifier():
+    client = TestClient(app)
+    response = client.get("/api/schematic/interactions")
+    assert response.status_code == 400
+    assert "user_id or session_id" in response.json()["detail"]

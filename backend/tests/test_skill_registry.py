@@ -29,3 +29,20 @@ def test_uploaded_skill_rejects_path_traversal(tmp_path, monkeypatch):
     monkeypatch.setattr(registry, "REGISTRY_ROOT", tmp_path / ".registry")
     with pytest.raises(ValueError, match="unsafe path"):
         registry.upload_skill("demo", bundle({"../SKILL.md": "bad"}))
+
+
+def test_compose_skills_builds_a_deterministic_joint_bundle(tmp_path, monkeypatch):
+    monkeypatch.setattr(registry, "SKILLS_ROOT", tmp_path / "skills")
+    monkeypatch.setattr(registry, "COMPOSED_ROOT", tmp_path / ".runtime" / "composed")
+    for name in ("alpha", "beta"):
+        skill = registry.SKILLS_ROOT / name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+
+    first = registry.compose_skills(["alpha", "beta"])
+    second = registry.compose_skills(["alpha", "beta"])
+
+    assert first == second
+    assert (first / "SKILL.md").is_file()
+    assert (first / "skills" / "01-alpha" / "SKILL.md").read_text(encoding="utf-8") == "# alpha\n"
+    assert "02-beta/SKILL.md" in (first / "SKILL.md").read_text(encoding="utf-8")

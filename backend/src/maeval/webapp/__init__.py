@@ -1,0 +1,2 @@
+"""Local web evaluation platform."""
+
