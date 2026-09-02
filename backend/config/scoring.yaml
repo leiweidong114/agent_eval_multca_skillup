@@ -26,10 +26,10 @@ process_rules:
 llm_judge:
   enabled: true
   required: false
-  # Use the requested OpenCode MiniMax deployment for consistent Agent judging.
+  # Use the validated GLM deployment for consistent Agent judging.
   # Override it in config/local.yaml without changing committed configuration.
-  profile: litellm_opencode_go_minimax_2_7
-  model: opencode-go/minimax-m2.7
+  profile: litellm_glm_4_7
+  model: glm-4.7
   timeout_seconds: 120
   max_evidence_chars: 60000
   temperature: 0
