@@ -44,7 +44,7 @@ def test_failed_evaluations_are_not_ranked_even_when_they_have_scores():
     batch = manager.get_batch("batch-test")
 
     assert batch is not None
-    assert batch["status"] == "completed"
+    assert batch["status"] == "failed"
     assert batch["best"] is None
     assert "rank" not in batch["results"][0]
     assert batch["results"][0]["failure"]["category"] == "gateway_quota_exhausted"
@@ -76,3 +76,4 @@ def test_only_completed_evaluations_receive_a_rank():
     assert batch["best"]["agent"] == "codex"
     assert batch["best"]["rank"] == 1
     assert "rank" not in batch["results"][0]
+    assert batch["status"] == "partial_failed"

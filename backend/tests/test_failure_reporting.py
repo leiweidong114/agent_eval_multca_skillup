@@ -20,6 +20,7 @@ def test_opencode_usage_limit_has_actionable_reset_information():
     assert "5 小时" in failure["detail"]
     assert "启用可用余额" in failure["suggested_action"]
     assert "opencode.ai" not in failure["technical_detail"]
+    assert failure["technical_detail"] == "5-hour usage limit reached. Resets in 2hr 38min"
 
 
 def test_failure_reporting_redacts_api_keys():

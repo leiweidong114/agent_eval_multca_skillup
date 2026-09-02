@@ -176,7 +176,7 @@ const availableAgents = computed(() => {
   const direct = { agent: 'direct', detected_executable: 'LiteLLM API', capabilities: {} }
   return [direct, ...agents.value.filter(item => item.agent === 'codex')]
 })
-const isTerminal = computed(() => ['completed', 'failed', 'cancelled', 'canceled'].includes(job.value?.status))
+const isTerminal = computed(() => ['completed', 'partial_failed', 'failed', 'cancelled', 'canceled'].includes(job.value?.status))
 const batchTargets = computed(() => {
   if (!form.batchMode) return form.agent && selectedModel.value ? [{ agent: form.agent, model: selectedModel.value.id, profile: selectedModel.value.profile }] : []
   return form.agents.flatMap(agent => selectedModels.value.map(model => ({ agent, model: model.id, profile: model.profile })))
@@ -259,9 +259,9 @@ async function submitQuestion() {
 }
 function schedule(fn) { clearTimeout(timer); timer = setTimeout(fn, 1200) }
 async function pollAgentJob(id) { try { job.value = await fetchJob(id); if (!isTerminal.value) schedule(() => pollAgentJob(id)); else running.value = false } catch (error) { running.value = false; ElMessage.error(error.message) } }
-async function pollBatch(id) { try { job.value = await fetchBatch(id); job.value.phase = '批量对比评测'; job.value.message = `已完成 ${job.value.completed_jobs||0} / ${job.value.total_jobs||0} 个组合`; if (!isTerminal.value) schedule(() => pollBatch(id)); else running.value = false } catch (error) { running.value = false; ElMessage.error(error.message) } }
+async function pollBatch(id) { try { job.value = await fetchBatch(id); job.value.phase = '批量对比评测'; job.value.message = `已结束 ${job.value.completed_jobs||0} / ${job.value.total_jobs||0} 个组合`; if (!isTerminal.value) schedule(() => pollBatch(id)); else running.value = false } catch (error) { running.value = false; ElMessage.error(error.message) } }
 async function pollExperiment(id) { try { const data = await fetchExperiment(id); const total = Math.max(1, (data.selected_items || 1) * (data.repeats || 1)); data.progress = data.status === 'completed' ? 100 : Math.round(((data.completed_jobs || data.summary?.count || 0) / total) * 100); data.phase = '题库评测'; data.message = `已完成 ${data.completed_jobs || data.summary?.count || 0} / ${total} 个任务`; job.value = data; if (!isTerminal.value) schedule(() => pollExperiment(id)); else running.value = false } catch (error) { running.value = false; ElMessage.error(error.message) } }
-function statusText(status) { return ({ queued: '排队中', running: '运行中', completed: '已完成', failed: '失败', cancelled: '已取消', canceled: '已取消' })[status] || status || '准备中' }
+function statusText(status) { return ({ queued: '排队中', running: '运行中', completed: '已完成', partial_failed: '部分失败', failed: '失败', cancelled: '已取消', canceled: '已取消' })[status] || status || '准备中' }
 function statusType(status) { return status === 'completed' ? 'success' : status === 'failed' ? 'danger' : status?.includes('cancel') ? 'info' : 'warning' }
 function openResult() { router.push(`/results/${resultRouteType.value||form.type}/${resultId.value}`) }
 function resetRun() { job.value = null; resultId.value = null; running.value = false }

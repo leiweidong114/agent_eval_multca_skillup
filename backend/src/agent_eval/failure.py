@@ -15,6 +15,15 @@ def _safe_text(value: str, *, limit: int = 1200) -> str:
 
 
 def _upstream_message(text: str) -> str:
+    usage_limit = re.search(
+        r"((?:\d+[- ]hour\s+)?usage limit reached\.?\s*"
+        r"Resets? in\s+\d+\s*(?:hr|hour|hours|min|minute|minutes)"
+        r"(?:\s+\d+\s*(?:min|minute|minutes))?)",
+        text,
+        flags=re.I,
+    )
+    if usage_limit:
+        return _safe_text(usage_limit.group(1))
     patterns = (
         r'"message"\s*:\s*"((?:\\.|[^"\\])+)"',
         r"['\"]message['\"]\s*:\s*['\"]([^'\"]+)['\"]",

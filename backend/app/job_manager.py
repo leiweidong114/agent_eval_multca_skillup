@@ -257,8 +257,16 @@ class EvaluationJobManager:
         )
         for index, row in enumerate(ranked, 1):
             row["rank"] = index
+        if jobs and completed == len(jobs):
+            successful = sum(job.get("status") == "completed" for job in jobs)
+            batch_status = (
+                "completed" if successful == len(jobs)
+                else ("partial_failed" if successful else "failed")
+            )
+        else:
+            batch_status = "running" if any(job.get("status") == "running" for job in jobs) else "queued"
         batch.update(
-            status="completed" if jobs and completed == len(jobs) else ("running" if any(job.get("status") == "running" for job in jobs) else "queued"),
+            status=batch_status,
             progress=round(sum(float(job.get("progress") or 0) for job in jobs) / len(jobs)) if jobs else 0,
             completed_jobs=completed,
             total_jobs=len(jobs),
