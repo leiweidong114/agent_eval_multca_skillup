@@ -233,7 +233,12 @@ class EvaluationJobManager:
                 "error": job.get("error") or (job.get("message") if job.get("status") == "failed" else None),
             })
         ranked = sorted(
-            (row for row in rows if row.get("overall_score") is not None),
+            (
+                row
+                for row in rows
+                if row.get("status") == "completed"
+                and row.get("overall_score") is not None
+            ),
             key=lambda row: float(row["overall_score"]),
             reverse=True,
         )
