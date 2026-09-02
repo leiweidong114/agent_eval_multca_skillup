@@ -208,6 +208,11 @@ def resolve_model_profile(
         # gateway credentials supplied for this isolated evaluation process.
         # Session-title and other background traffic can reject non-Anthropic
         # gateway aliases after the actual task has already completed.
+        # Keep Claude's own model identity on a family alias; the per-run
+        # compatibility proxy rewrites every HTTP request to gateway_model.
+        environment["ANTHROPIC_DEFAULT_SONNET_MODEL"] = "sonnet"
+        environment["ANTHROPIC_DEFAULT_OPUS_MODEL"] = "opus"
+        environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "haiku"
         environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         agent_args = ("--bare",)
     elif agent == "codex":
