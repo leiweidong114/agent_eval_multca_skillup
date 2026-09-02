@@ -1,0 +1,90 @@
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "17px", "fontFamily": "Microsoft YaHei, Arial, sans-serif"}, "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 54}}}%%
+flowchart TB
+    subgraph clients["入口层"]
+        direction LR
+        ui["Vue / Vite 前端<br/>选择 Agent、模型、Profile、任务参数<br/>查看进度、轨迹、评分与报告"]
+        cli["agent-eval 命令行<br/>doctor / agents / check-agent / run"]
+        apiuser["自动化或第三方调用方"]
+    end
+
+    subgraph server["后端服务层"]
+        direction LR
+        rest["FastAPI REST API<br/>/api/agents · /api/models · /api/run · /api/batches"]
+        jobs["Job Manager / 批次调度器<br/>全局 AGENT_EVAL_WORKERS<br/>任务内 parallelism × iterations"]
+        core["共享评测核心<br/>任务准备 · Runner · 证据归一化"]
+        score["评分引擎<br/>确定性规则 + LLM Judge<br/>Skill / 轨迹 / 结果评分"]
+    end
+
+    subgraph config["配置与参数"]
+        direction LR
+        profiles["模型 Profile<br/>public model · api_base · api_key_env<br/>agent_models · gateway_models"]
+        evalcfg["评测参数<br/>skill · case · prompt · agent · model<br/>timeout · max_turns · benchmark"]
+        evidence["证据开关<br/>database_trace<br/>require_model_verification<br/>llm_judge（必须开启模型推理）"]
+        scorecfg["scoring.yaml<br/>规则、权重与 Judge 配置"]
+    end
+
+    subgraph runtime["隔离执行层：Skill-Up + Multica"]
+        direction LR
+        staging["每次运行的临时工作区<br/>安装 Skill · 放入用例 · 注入隔离配置"]
+        adapter["Agent 适配器 / 协议代理<br/>OpenAI Chat · Responses · Anthropic<br/>流式、工具、reasoning 与 final 归一化"]
+        agents["本机六个 Agent<br/>Codex · Claude Code · OpenCode<br/>OpenClaw · CodeBuddy · Qwen"]
+        transcript["统一运行证据<br/>消息 · token · 工具调用 · subagent · 最终结果"]
+    end
+
+    subgraph modelplane["模型与可核验观测面"]
+        direction LR
+        trace["运行级 trace key<br/>短期子 Key · 仅限目标模型<br/>alias 绑定 run_id，结束后删除"]
+        gateway["LiteLLM Gateway<br/>模型发现 · 协议路由 · 统一调用"]
+        llm["上游模型服务<br/>例如 GLM-4.7（保留推理）"]
+        db[("LiteLLM PostgreSQL<br/>模型、token、延迟、费用、错误")]
+    end
+
+    subgraph outputs["结果层"]
+        direction LR
+        files["归档与报告<br/>JSON · HTML · JUnit · 原始轨迹"]
+        resultapi["结果 API / 前端详情页<br/>Agent、模型、工具、subagent、Judge 状态"]
+    end
+
+    ui -->|"HTTP / JSON"| rest
+    apiuser -->|"HTTP / JSON"| rest
+    rest --> jobs
+    jobs --> core
+    cli -->|"直接调用同一 Python 核心"| core
+
+    profiles --> rest
+    profiles --> core
+    evalcfg --> rest
+    evalcfg --> core
+    evidence --> core
+    scorecfg --> score
+
+    core --> staging
+    staging --> adapter
+    adapter --> agents
+    agents -->|"模型请求"| gateway
+    core -->|"创建 / 回收"| trace
+    trace -->|"按运行注入 Agent 进程"| agents
+    gateway --> llm
+    gateway -->|"SpendLogs"| db
+    agents --> transcript
+    db -->|"按 trace alias 精确查询"| core
+    transcript --> core
+    core --> score
+    score -->|"Judge 也经 LiteLLM 调用"| gateway
+    score --> files
+    files --> resultapi
+    resultapi --> rest
+
+    classDef entry fill:#ECFDF5,stroke:#10B981,color:#064E3B,stroke-width:2px;
+    classDef service fill:#EFF6FF,stroke:#2563EB,color:#1E3A8A,stroke-width:2px;
+    classDef cfg fill:#F5F3FF,stroke:#7C3AED,color:#4C1D95,stroke-width:2px;
+    classDef run fill:#F8FAFC,stroke:#475569,color:#0F172A,stroke-width:2px;
+    classDef model fill:#FFF7ED,stroke:#EA580C,color:#7C2D12,stroke-width:2px;
+    classDef output fill:#FFFBEB,stroke:#D97706,color:#78350F,stroke-width:2px;
+    class ui,cli,apiuser entry;
+    class rest,jobs,core,score service;
+    class profiles,evalcfg,evidence,scorecfg cfg;
+    class staging,adapter,agents,transcript run;
+    class trace,gateway,llm,db model;
+    class files,resultapi output;
+    linkStyle default stroke:#334155,stroke-width:2px;
