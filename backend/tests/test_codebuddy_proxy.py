@@ -103,3 +103,45 @@ def test_proxy_retries_429_and_forces_the_gateway_model():
     assert all(item["model"] == "opencode-go/minimax-m2.7" for item in received)
     assert stats["retry_count"] == 1
     assert stats["status_counts"] == {"200": 1, "429": 1}
+
+
+def test_proxy_restores_client_model_in_anthropic_response():
+    received: list[dict[str, object]] = []
+
+    class Upstream(BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+        def do_POST(self) -> None:
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            received.append(json.loads(body))
+            response = json.dumps({"type": "message", "model": "glm-4.7-anthropic"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+    upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+    thread.start()
+    host, port = upstream.server_address[:2]
+    try:
+        with CodeBuddyCompatibilityProxy(
+            f"http://{host}:{port}", forced_model="glm-4.7-anthropic"
+        ) as proxy:
+            request = Request(
+                f"{proxy.anthropic_base_url}/v1/messages",
+                data=json.dumps({"model": "sonnet", "messages": []}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(request) as response:
+                payload = json.loads(response.read())
+    finally:
+        upstream.shutdown()
+        upstream.server_close()
+        thread.join(timeout=5)
+
+    assert received[0]["model"] == "glm-4.7-anthropic"
+    assert payload["model"] == "sonnet"

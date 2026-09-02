@@ -411,6 +411,7 @@ def verify_requested_model(
         group = str(row.get("model_group") or "").lower()
         return (
             group in groups
+            or model in groups
             or model == expected_model.lower()
             or model.endswith(f"/{expected_leaf}")
         )

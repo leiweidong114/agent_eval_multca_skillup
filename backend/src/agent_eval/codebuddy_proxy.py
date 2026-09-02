@@ -18,6 +18,37 @@ HOP_BY_HOP_HEADERS = frozenset(
 )
 
 
+def _restore_client_model(body: bytes, content_type: str, forced: str, client: str) -> bytes:
+    """Hide an internal gateway alias from clients that validate model ids."""
+    def restore(value: object) -> object:
+        if isinstance(value, dict):
+            return {
+                key: client if key == "model" and item == forced else restore(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [restore(item) for item in value]
+        return value
+
+    try:
+        if "text/event-stream" not in content_type.lower():
+            return json.dumps(restore(json.loads(body)), ensure_ascii=False).encode("utf-8")
+        output: list[str] = []
+        for line in body.decode("utf-8").splitlines(keepends=True):
+            prefix, separator, raw = line.partition("data: ")
+            if not separator:
+                output.append(line)
+                continue
+            suffix = "\n" if raw.endswith("\n") else ""
+            data = raw.rstrip("\r\n")
+            if data and data != "[DONE]":
+                data = json.dumps(restore(json.loads(data)), ensure_ascii=False)
+            output.append(f"{prefix}{separator}{data}{suffix}")
+        return "".join(output).encode("utf-8")
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        return body
+
+
 def _retry_after(value: str | None) -> float | None:
     if not value:
         return None
@@ -116,9 +147,11 @@ class CodeBuddyCompatibilityProxy:
             def do_POST(self) -> None:
                 length = int(self.headers.get("Content-Length") or "0")
                 body = self.rfile.read(length)
+                client_model: str | None = None
                 try:
                     payload = json.loads(body)
                     if owner.forced_model and isinstance(payload, dict) and "model" in payload:
+                        client_model = str(payload["model"])
                         payload["model"] = owner.forced_model
                     messages = payload.get("messages") or [] if isinstance(payload, dict) else []
                     if (
@@ -145,6 +178,7 @@ class CodeBuddyCompatibilityProxy:
                     if key.lower() not in HOP_BY_HOP_HEADERS
                 }
                 headers["Content-Length"] = str(len(body))
+                headers["Accept-Encoding"] = "identity"
                 headers.setdefault("Idempotency-Key", f"agent-eval-{uuid.uuid4().hex}")
 
                 last_error: Exception | None = None
@@ -159,6 +193,13 @@ class CodeBuddyCompatibilityProxy:
                         response = connection.getresponse()
                         response_body = response.read()
                         response_headers = list(response.getheaders())
+                        if owner.forced_model and client_model and client_model != owner.forced_model:
+                            response_body = _restore_client_model(
+                                response_body,
+                                response.getheader("Content-Type") or "",
+                                owner.forced_model,
+                                client_model,
+                            )
                         retryable = response.status in RETRYABLE_STATUS_CODES
                         owner._record(
                             request=attempt == 0,

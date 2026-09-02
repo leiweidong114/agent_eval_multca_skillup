@@ -100,6 +100,22 @@ def test_requested_model_verification_requires_exact_successful_match():
     assert weak["warning"]
 
 
+def test_requested_model_verification_accepts_gateway_model_alias():
+    rows = [{
+        "request_id": "req-alias", "status": "success",
+        "model": "glm-4.7-anthropic", "model_group": "",
+        "model_id": "deployment-glm",
+    }]
+    result = verify_requested_model(
+        rows,
+        expected_model="glm-4.7",
+        accepted_model_groups=["glm-4.7-anthropic", "sonnet"],
+        exact=True,
+    )
+    assert result["verified"] is True
+    assert result["mismatches"] == []
+
+
 def test_requested_model_verification_reports_mismatch():
     result = verify_requested_model(
         [{"request_id": "req-2", "status": "success", "model": "openai/gpt-4.1", "model_group": "gpt-4.1"}],
