@@ -15,6 +15,7 @@ from agent_eval.runner import (
     run_evaluation,
 )
 from app.config import BACKEND_ROOT, RUNS_ROOT
+from agent_eval.failure import describe_evaluation_failure
 
 
 class EvaluationJobManager:
@@ -145,27 +146,38 @@ class EvaluationJobManager:
                 selected_skills=request.get("skills") or [skill_dir.name],
             )
             status = "completed" if result.get("status", "completed") == "completed" else "failed"
+            failure = result.get("failure") if status == "failed" else None
+            failure_message = (
+                failure.get("detail") or failure.get("summary")
+                if isinstance(failure, dict)
+                else None
+            )
             self._update(
                 job_id, status=status, phase=status, progress=100, result=result,
-                message="Evaluation completed" if status == "completed" else "Evaluation failed",
+                failure=failure,
+                error=failure_message,
+                message="Evaluation completed" if status == "completed" else (failure_message or "Evaluation failed"),
             )
         except EvaluationCancelled as exc:
             self._update(job_id, status="cancelled", phase="cancelled", message=str(exc))
         except EvaluationInfrastructureError as exc:
+            failure = describe_evaluation_failure(str(exc)) or {}
+            failure.update(category=exc.category, retryable=exc.retryable)
             self._update(
                 job_id,
                 status="failed",
                 phase="infrastructure_failed",
-                message=str(exc),
-                error=str(exc),
-                failure={
-                    "category": exc.category,
-                    "retryable": exc.retryable,
-                    "summary": str(exc),
-                },
+                message=failure.get("detail") or str(exc),
+                error=failure.get("detail") or str(exc),
+                failure=failure,
             )
         except Exception as exc:
-            self._update(job_id, status="failed", phase="failed", message="Evaluation failed", error=str(exc))
+            failure = describe_evaluation_failure(str(exc))
+            self._update(
+                job_id, status="failed", phase="failed",
+                message=(failure or {}).get("detail") or "Evaluation failed",
+                error=(failure or {}).get("detail") or str(exc), failure=failure,
+            )
 
     def list(self, user_id: str | None = None) -> list[dict[str, Any]]:
         with self._lock:
@@ -230,6 +242,7 @@ class EvaluationJobManager:
                 "skill_quality_score": scores.get("skill_quality_dimension_score"),
                 "duration_ms": scores.get("total_duration_ms"),
                 "total_tokens": scores.get("total_tokens"),
+                "failure": job.get("failure") or result.get("failure"),
                 "error": job.get("error") or (job.get("message") if job.get("status") == "failed" else None),
             })
         ranked = sorted(

@@ -32,6 +32,7 @@ from agent_eval.model_config import (
 )
 from agent_eval.skill_quality import evaluate_skill_quality
 from agent_eval.litellm_trace import TraceKeyError, create_trace_key, delete_trace_key
+from agent_eval.failure import describe_evaluation_failure
 from agent_eval.agent_contract import assess_agent_contract
 from agent_eval.llm_judge import run_llm_judge
 from agent_eval.scoring import (
@@ -93,23 +94,7 @@ def _retryable_infrastructure_message(value: str) -> bool:
 
 
 def classify_evaluation_failure(text: str, returncode: int) -> dict[str, Any] | None:
-    if returncode == 0:
-        return None
-    lowered = text.lower()
-    rules = (
-        (("quota exceeded", "usage limit", "usage has reached", "insufficient quota"), "gateway_quota_exhausted", False),
-        (("429", "rate limit", "too many requests", "token plan"), "gateway_rate_limited", True),
-        (("500", "502", "503", "504", "gateway_transport_error"), "gateway_server_error", True),
-        (("timeout", "timed out", "connection reset", "connection refused", "temporarily unavailable"), "gateway_unavailable", True),
-        (("401", "unauthorized", "invalid api key", "authentication"), "gateway_authentication", False),
-        (("403", "forbidden"), "gateway_authorization", False),
-        (("unrecognized_model", "model not found", "unknown model"), "model_incompatible", False),
-        (("doctor --fix", "legacy workspace"), "agent_workspace_invalid", False),
-    )
-    for markers, category, retryable in rules:
-        if any(marker in lowered for marker in markers):
-            return {"category": category, "retryable": retryable, "summary": category}
-    return {"category": "agent_execution_failed", "retryable": False, "summary": "Agent execution failed"}
+    return describe_evaluation_failure(text, returncode=returncode)
 
 
 def _execute_process(
@@ -755,20 +740,27 @@ def run_evaluation(
         "skill_md": (source_skill / "SKILL.md").read_text(encoding="utf-8")[:30000],
         "skill_up_results": results,
     }
-    llm_judge = (
-        run_llm_judge(
+    if not run_llm_judge_enabled:
+        llm_judge = {"status": "disabled_by_request"}
+    elif evaluation_status != "completed":
+        llm_judge = {
+            "status": "skipped_due_to_execution_failure",
+            "reason": "Agent execution did not produce a valid result for LLM judging",
+            "failure": failure,
+        }
+    else:
+        llm_judge = run_llm_judge(
             project_root=project_root,
             scoring_config=scoring_config,
             evidence=llm_evidence,
         )
-        if run_llm_judge_enabled
-        else {"status": "disabled_by_request"}
-    )
     scoring = combine_dimensions(
         rule_dimensions=rule_dimensions,
         llm_judge=llm_judge,
         config=scoring_config,
     )
+    scoring["valid_for_ranking"] = evaluation_status == "completed"
+    scoring["diagnostic_only"] = evaluation_status != "completed"
     scores["overall_score"] = scoring["overall_score"]
     scores["result_dimension_score"] = scoring["dimensions"]["result"]["score"]
     scores["process_dimension_score"] = scoring["dimensions"]["process"]["score"]

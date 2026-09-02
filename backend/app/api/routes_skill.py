@@ -13,6 +13,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from agent_eval.database import database_health
+from agent_eval.failure import describe_evaluation_failure
 from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.model_config import (
     describe_model_config,
@@ -189,12 +190,22 @@ def test_model(request: ModelTestRequest) -> dict[str, object]:
             "message": "模型响应正常",
         }
     except (ValueError, httpx.HTTPError) as exc:
+        if isinstance(exc, httpx.HTTPStatusError):
+            failure = describe_evaluation_failure(
+                exc.response.text, status_code=exc.response.status_code,
+                component="model_probe",
+            )
+        else:
+            failure = describe_evaluation_failure(
+                str(exc), component="model_probe"
+            )
         return {
             "ok": False,
             "model": request.model,
             "profile": request.profile,
             "duration_ms": round((time.perf_counter() - started) * 1000),
-            "message": str(exc)[:500],
+            "message": (failure or {}).get("detail") or str(exc)[:500],
+            "failure": failure,
         }
 
 
