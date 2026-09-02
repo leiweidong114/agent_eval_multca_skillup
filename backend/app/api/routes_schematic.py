@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from agent_eval.database import search_conversation_interactions
 from app.config import BACKEND_ROOT
 
 
@@ -27,6 +28,23 @@ class DiagramRequest(BaseModel):
 class JudgeRequest(BaseModel):
     diagram: DiagramRequest
     schematic: dict[str, Any]
+
+
+@router.get("/interactions")
+def search_interactions(
+    user_id: str | None = None,
+    session_id: str | None = None,
+    limit: int = 500,
+) -> dict[str, Any]:
+    try:
+        return search_conversation_interactions(
+            BACKEND_ROOT,
+            user_id=user_id,
+            session_id=session_id,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _project(project_id: str) -> Path:

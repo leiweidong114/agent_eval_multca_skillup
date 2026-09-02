@@ -4,6 +4,7 @@ import HomeView from '../views/HomeView.vue'
 const routes = [
   { path: '/', name: 'home', component: HomeView, meta: { title: '首页', description: '统一查看评测资产、运行状态与关键结果' } },
   { path: '/evaluations/new', name: 'new-evaluation', component: () => import('../views/NewEvaluation.vue'), meta: { title: '新建评测', description: '创建原理图、题库或单/多 Skill 联合评测' } },
+  { path: '/schematic-overview', name: 'schematic-overview', component: () => import('../views/SchematicOverview.vue'), meta: { title: '原理图生成总览', description: '按用户或会话查看完整的用户、Agent 与工具交互轨迹' } },
   { path: '/benchmarks', name: 'benchmarks', component: () => import('../views/BenchmarkManager.vue'), meta: { title: '题库管理', description: '查看标准题库、私有题库及题目内容' } },
   { path: '/skills', name: 'skills', component: () => import('../views/SkillCatalog.vue'), meta: { title: 'Skill 管理', description: '查看、上传和管理当前支持评测的 Skill' } },
   { path: '/results', name: 'results', component: () => import('../views/ResultsView.vue'), meta: { title: '评测结果', description: '按评测类型查看历史任务与结果' } },

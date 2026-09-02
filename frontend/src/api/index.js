@@ -39,6 +39,7 @@ export const cleanupRetention = () => data(http.post('/privacy/retention/cleanup
 export const fetchSchematicExample = () => data(http.get('/schematic/example'))
 export const generateSchematic = (payload) => data(http.post('/schematic/generate', payload))
 export const fetchSchematicProject = (id) => data(http.get(`/schematic/projects/${id}`))
+export const fetchSchematicInteractions = (params) => data(http.get('/schematic/interactions', { params }))
 
 export const fetchPrismDashboard = () => data(prism.get('/dashboard'))
 export const fetchBenchmarks = () => data(prism.get('/benchmarks'))

@@ -5,6 +5,7 @@ import pytest
 
 from agent_eval.database import (
     DatabaseConfigurationError,
+    _sanitize,
     resolve_database_config,
     summarize_model_interactions,
     verify_requested_model,
@@ -107,3 +108,12 @@ def test_requested_model_verification_reports_mismatch():
     assert result["verified"] is False
     assert result["reason"] == "requested_model_mismatch"
     assert result["mismatches"][0]["request_id"] == "req-2"
+
+
+def test_interaction_content_redacts_nested_credentials():
+    result = _sanitize(
+        {"metadata": {"user_api_key": "secret", "user_api_key_alias": "eval-run"}},
+        max_chars=100,
+    )
+    assert result["metadata"]["user_api_key"] == "[REDACTED]"
+    assert result["metadata"]["user_api_key_alias"] == "eval-run"
