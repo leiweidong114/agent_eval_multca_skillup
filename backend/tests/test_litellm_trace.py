@@ -28,6 +28,25 @@ def test_trace_key_retries_rate_limit(monkeypatch):
     assert key.alias == "agent-eval-run-a"
 
 
+def test_trace_key_uses_community_compatible_payload(monkeypatch):
+    captured = {}
+
+    def success(*args, **kwargs):
+        captured.update(kwargs)
+        return _response(200, {"key": "sk-run"})
+
+    monkeypatch.setattr(httpx, "post", success)
+
+    create_trace_key(
+        "http://gateway/v1", "model-a", "run-a", master_key="sk-master"
+    )
+
+    assert captured["json"]["key_alias"] == "agent-eval-run-a"
+    assert captured["json"]["models"] == ["model-a"]
+    assert captured["json"]["metadata"] == {"agent_eval_run_id": "run-a"}
+    assert "tags" not in captured["json"]
+
+
 def test_trace_key_does_not_retry_forbidden(monkeypatch):
     calls = 0
 

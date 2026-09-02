@@ -94,7 +94,6 @@ def create_trace_key(
             "duration": "1h",
             "models": [model],
             "metadata": {"agent_eval_run_id": run_id},
-            "tags": ["agent-eval", f"run:{run_id}"],
         },
     )
     key = str(response.json().get("key") or "")
