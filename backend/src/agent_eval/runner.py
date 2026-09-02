@@ -217,6 +217,35 @@ def aggregate_scores(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def attach_session_evidence(iteration_dir: Path, result: dict[str, Any]) -> dict[str, Any]:
+    """Add the raw Agent transcript to each summarized Skill-Up case."""
+    sessions: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for path in iteration_dir.rglob("session-result.json"):
+        relative = path.relative_to(iteration_dir).parts
+        if len(relative) < 3:
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            sessions.setdefault((relative[0], relative[1]), []).append(payload)
+
+    for case in result.get("case_results", []):
+        if not isinstance(case, dict):
+            continue
+        key = (
+            str(case.get("case_id") or ""),
+            str(case.get("configuration") or "with_skill"),
+        )
+        evidence = sessions.get(key) or []
+        if len(evidence) == 1:
+            case["session_result"] = evidence[0]
+        elif evidence:
+            case["session_results"] = evidence
+    return result
+
+
 def build_eval_config(
     *,
     agent: str,
@@ -609,7 +638,8 @@ def run_evaluation(
     for iteration in iteration_dirs:
         result_file = iteration / "result.json"
         if result_file.is_file():
-            results.append(json.loads(result_file.read_text(encoding="utf-8")))
+            result = json.loads(result_file.read_text(encoding="utf-8"))
+            results.append(attach_session_evidence(iteration, result))
     scores = aggregate_scores(results)
     scores["skill_quality_score"] = skill_quality["score"]
     database_trace: dict[str, Any] = {"status": "disabled"}

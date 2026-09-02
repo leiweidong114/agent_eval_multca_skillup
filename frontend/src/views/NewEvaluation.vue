@@ -101,6 +101,13 @@
         </template>
 
         <el-divider content-position="left">运行参数</el-divider>
+        <el-alert
+          v-if="form.type !== 'question' && modelConfig.llm_judge"
+          :type="modelConfig.llm_judge.enabled ? 'success' : 'warning'"
+          :closable="false"
+          show-icon
+          :title="modelConfig.llm_judge.enabled ? `LLM Judge：${modelConfig.llm_judge.model}（${modelConfig.llm_judge.profile}）` : 'LLM Judge 已在评分配置中关闭'"
+        />
         <div class="form-grid runtime-grid">
           <el-form-item label="并行度"><el-input-number v-model="form.concurrency" :min="1" :max="16" /></el-form-item>
           <el-form-item v-if="form.type !== 'question'" label="迭代次数"><el-input-number v-model="form.iterations" :min="1" :max="20" /></el-form-item>
@@ -133,7 +140,7 @@ import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } f
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Cpu, DataAnalysis, MagicStick } from '@element-plus/icons-vue'
-import { fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModels, fetchSkillCases, fetchSkills, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun } from '../api'
+import { fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModelConfig, fetchModels, fetchSkillCases, fetchSkills, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -148,6 +155,7 @@ const agents = ref([])
 const models = ref([])
 const skills = ref([])
 const benchmarks = ref([])
+const modelConfig = ref({})
 const cases = ref([])
 const running = ref(false)
 const job = ref(null)
@@ -257,11 +265,12 @@ function openResult() { router.push(`/results/${resultRouteType.value||form.type
 function resetRun() { job.value = null; resultId.value = null; running.value = false }
 
 onMounted(async () => {
-  const results = await Promise.allSettled([fetchAgents(), fetchModels(), fetchSkills(), fetchBenchmarks()])
+  const results = await Promise.allSettled([fetchAgents(), fetchModels(), fetchSkills(), fetchBenchmarks(), fetchModelConfig()])
   agents.value = results[0].status === 'fulfilled' ? results[0].value : []
   models.value = results[1].status === 'fulfilled' ? results[1].value.models || [] : []
   skills.value = results[2].status === 'fulfilled' ? results[2].value.skills || [] : []
   benchmarks.value = results[3].status === 'fulfilled' ? results[3].value : []
+  modelConfig.value = results[4].status === 'fulfilled' ? results[4].value : {}
   form.benchmarkId = installedBenchmarks.value[0]?.id || ''
   setDefaults()
 })

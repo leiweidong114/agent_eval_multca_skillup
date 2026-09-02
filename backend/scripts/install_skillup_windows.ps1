@@ -19,12 +19,12 @@ if ($actualCommit -ne $expectedCommit) {
     throw "Unexpected Skill-Up source commit: $actualCommit"
 }
 
-git -C $source apply --check $patch 2>$null
+git -C $source apply --check --ignore-space-change --ignore-whitespace $patch 2>$null
 if ($LASTEXITCODE -eq 0) {
-    git -C $source apply $patch
+    git -C $source apply --ignore-space-change --ignore-whitespace $patch
     if ($LASTEXITCODE -ne 0) { throw "Failed to apply Skill-Up Windows patch" }
 } else {
-    git -C $source apply --reverse --check $patch 2>$null
+    git -C $source apply --reverse --check --ignore-space-change --ignore-whitespace $patch 2>$null
     if ($LASTEXITCODE -ne 0) {
         throw "Skill-Up source is neither clean nor already patched"
     }

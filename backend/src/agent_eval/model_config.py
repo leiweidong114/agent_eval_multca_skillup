@@ -87,8 +87,9 @@ def _normalized_base_url(value: str) -> tuple[str, str]:
     return openai_base.rstrip("/"), anthropic_base.rstrip("/")
 
 
-def _codebuddy_custom_model(model: str) -> str | None:
-    leaf = model.rsplit("/", 1)[-1].lower()
+def _codebuddy_custom_model(model: str) -> str:
+    raw_leaf = model.rsplit("/", 1)[-1]
+    leaf = raw_leaf.lower()
     known = {
         "minimax-m3": "MiniMax-M3",
         "minimax-m2.7": "MiniMax-M2.7",
@@ -96,8 +97,12 @@ def _codebuddy_custom_model(model: str) -> str | None:
         "minimax-m2.1": "MiniMax-M2.1",
         "grok-4.5": "grok-4.5",
     }
-    resolved = known.get(leaf)
-    return f"custom-local:{resolved}" if resolved else None
+    # CodeBuddy loads this alias from the isolated models.json generated for
+    # each run. Known ids retain their canonical spelling; any other LiteLLM
+    # deployment can safely use its leaf id because the compatibility proxy
+    # rewrites it to the full gateway model id before forwarding the request.
+    resolved = known.get(leaf, raw_leaf)
+    return f"custom-local:{resolved}"
 
 
 def resolve_model_profile(
@@ -152,13 +157,8 @@ def resolve_model_profile(
     if agent == "codebuddy":
         derived_codebuddy_model = _codebuddy_custom_model(model)
         if model_override:
-            if not derived_codebuddy_model:
-                raise ValueError(
-                    f"CodeBuddy has no custom-local CLI alias for model override {model!r}; "
-                    "add a supported alias or use a compatible profile"
-                )
             agent_models["codebuddy"] = derived_codebuddy_model
-        elif "codebuddy" not in agent_models and derived_codebuddy_model:
+        elif "codebuddy" not in agent_models:
             agent_models["codebuddy"] = derived_codebuddy_model
     gateway_model = gateway_models.get(agent or "", model)
 

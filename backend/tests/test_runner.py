@@ -9,6 +9,7 @@ from agent_eval.runner import (
     EvaluationCancelled,
     _execute_process,
     aggregate_scores,
+    attach_session_evidence,
     build_eval_config,
     classify_evaluation_failure,
 )
@@ -150,6 +151,24 @@ def test_aggregate_scores_handles_error_cases_without_grading():
     assert scores["task_score"] is None
     assert scores["execution_stability"] == 0
     assert scores["with_skill_cases"] == 1
+
+
+def test_session_evidence_is_attached_to_matching_case(tmp_path):
+    session_dir = tmp_path / "marker" / "with_skill" / "outputs" / "agent" / "run"
+    session_dir.mkdir(parents=True)
+    (session_dir / "session-result.json").write_text(
+        '{"final_message":"OK","transcript":[{"role":"tool_call"}]}',
+        encoding="utf-8",
+    )
+    result = {
+        "case_results": [
+            {"case_id": "marker", "configuration": "with_skill"}
+        ]
+    }
+
+    enriched = attach_session_evidence(tmp_path, result)
+
+    assert enriched["case_results"][0]["session_result"]["final_message"] == "OK"
 
 
 def test_background_process_can_be_cancelled(tmp_path):

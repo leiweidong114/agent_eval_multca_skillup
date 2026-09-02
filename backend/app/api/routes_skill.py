@@ -25,6 +25,7 @@ from agent_eval.runtime import (
     agent_capabilities,
     default_agent_command,
 )
+from agent_eval.scoring import load_scoring_config
 from app.config import BACKEND_ROOT, SKILLS_ROOT
 from app.skill_registry import (
     delete_skill_version,
@@ -124,7 +125,16 @@ def test_agent(agent_name: str) -> dict[str, object]:
 @router.get("/model-config")
 def get_model_config() -> dict[str, object]:
     """Return non-secret model defaults used by the CLI and Web UI."""
-    return describe_model_config(BACKEND_ROOT)
+    result = describe_model_config(BACKEND_ROOT)
+    judge = (load_scoring_config(BACKEND_ROOT).get("llm_judge") or {}).copy()
+    result["llm_judge"] = {
+        key: judge.get(key)
+        for key in (
+            "enabled", "required", "profile", "model", "timeout_seconds",
+            "max_evidence_chars", "temperature",
+        )
+    }
+    return result
 
 
 @router.get("/models")

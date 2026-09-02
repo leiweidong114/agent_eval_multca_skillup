@@ -19,6 +19,10 @@ def test_health_and_discovery_endpoints():
     assert any(item["agent"] == "justdo" for item in agents.json())
     skills = client.get("/api/skills")
     assert skills.status_code == 200
+    model_config = client.get("/api/model-config")
+    assert model_config.status_code == 200
+    assert model_config.json()["llm_judge"]["profile"] == "litellm_deepseek_pro"
+    assert model_config.json()["llm_judge"]["model"] == "deepseek-v4-pro"
 
 
 def test_database_health_never_exposes_credentials_or_crashes():

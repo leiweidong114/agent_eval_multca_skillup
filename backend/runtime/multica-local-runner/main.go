@@ -165,6 +165,27 @@ func writeResult(path string, result sessionResult) error {
 	return os.WriteFile(path, encoded, 0o644)
 }
 
+func appendTerminalMessages(
+	transcript []transcriptMessage,
+	telemetry map[string]any,
+	finalOutput string,
+) []transcriptMessage {
+	if encoded, marshalErr := json.Marshal(telemetry); marshalErr == nil {
+		transcript = append(transcript, transcriptMessage{
+			Role: "assistant", Turn: 1, Content: "AGENT_EVAL_TELEMETRY_JSON:" + string(encoded),
+		})
+	}
+	// Skill-Up grades the last assistant transcript entry. Keep telemetry in
+	// the transcript for process scoring, but make the Agent's actual answer
+	// terminal so result assertions see the response instead of the marker.
+	if strings.TrimSpace(finalOutput) != "" {
+		transcript = append(transcript, transcriptMessage{
+			Role: "assistant", Turn: 1, Content: finalOutput,
+		})
+	}
+	return transcript
+}
+
 func main() {
 	var inputPath, outputPath, agentName, model, executable string
 	var timeoutSeconds, maxTurns int
@@ -297,11 +318,7 @@ func main() {
 		"models":             models,
 		"message_counts":     messageCounts,
 	}
-	if encoded, marshalErr := json.Marshal(telemetry); marshalErr == nil {
-		transcript = append(transcript, transcriptMessage{
-			Role: "assistant", Turn: 1, Content: "AGENT_EVAL_TELEMETRY_JSON:" + string(encoded),
-		})
-	}
+	transcript = appendTerminalMessages(transcript, telemetry, final.Output)
 	exitCode := 1
 	if final.Status == "completed" {
 		exitCode = 0

@@ -15,6 +15,7 @@
       <div><span class="dot" :class="{on:verifiedAgentCount}"/><p><b>{{verifiedAgentCount}}</b><small>可用 Agent</small></p></div>
       <div><span class="dot" :class="{on:verifiedModelCount}"/><p><b>{{verifiedModelCount}} / {{models.length}}</b><small>可用模型</small></p></div>
       <div><span class="dot" :class="{on:databaseConnected}"/><p><b>{{databaseConnected?'正常':'未连接'}}</b><small>评测轨迹数据库</small></p></div>
+      <div><span class="dot" :class="{on:modelConfig.llm_judge?.enabled}"/><p><b>{{modelConfig.llm_judge?.model||'未配置'}}</b><small>LLM Judge 模型</small></p></div>
     </div>
 
     <el-card shadow="never" class="panel">
@@ -42,9 +43,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
-import { fetchAgents, fetchDatabaseHealth, fetchModels } from '../api'
+import { fetchAgents, fetchDatabaseHealth, fetchModelConfig, fetchModels } from '../api'
 
-const agents=ref([]),modelData=ref({models:[],gateways:[],errors:[]}),database=ref({}),keyword=ref(''),loading=ref(false)
+const agents=ref([]),modelData=ref({models:[],gateways:[],errors:[]}),database=ref({}),modelConfig=ref({}),keyword=ref(''),loading=ref(false)
 const models=computed(()=>modelData.value.models||[])
 const detectedAgents=computed(()=>agents.value.filter(x=>x.detected_executable))
 const verifiedAgentCount=computed(()=>detectedAgents.value.length)
@@ -53,10 +54,11 @@ const databaseConnected=computed(()=>database.value.status==='ok'||database.valu
 const sortedAgents=computed(()=>[...agents.value].sort((a,b)=>Number(!a.detected_executable)-Number(!b.detected_executable)||a.agent.localeCompare(b.agent)))
 const filteredModels=computed(()=>[...models.value].filter(x=>`${x.id} ${x.profile} ${x.owned_by}`.toLowerCase().includes(keyword.value.toLowerCase())).sort((a,b)=>Number(a.source!=='litellm')-Number(b.source!=='litellm')||a.id.localeCompare(b.id)))
 
-async function load(){loading.value=true;const r=await Promise.allSettled([fetchAgents(),fetchModels(),fetchDatabaseHealth()]);agents.value=r[0].status==='fulfilled'?r[0].value:[];modelData.value=r[1].status==='fulfilled'?r[1].value:{models:[],gateways:[],errors:[{error:r[1].reason?.message}]};database.value=r[2].status==='fulfilled'?r[2].value:{};if(r.every(x=>x.status==='rejected'))ElMessage.error('无法读取运行环境');loading.value=false}
+async function load(){loading.value=true;const r=await Promise.allSettled([fetchAgents(),fetchModels(),fetchDatabaseHealth(),fetchModelConfig()]);agents.value=r[0].status==='fulfilled'?r[0].value:[];modelData.value=r[1].status==='fulfilled'?r[1].value:{models:[],gateways:[],errors:[{error:r[1].reason?.message}]};database.value=r[2].status==='fulfilled'?r[2].value:{};modelConfig.value=r[3].status==='fulfilled'?r[3].value:{};if(r.every(x=>x.status==='rejected'))ElMessage.error('无法读取运行环境');loading.value=false}
 onMounted(load)
 </script>
 
 <style scoped>
 .runtime-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.runtime-summary>div{display:flex;align-items:center;gap:13px;padding:18px;background:var(--surface);border:1px solid var(--line);border-radius:13px}.runtime-summary p{display:flex;flex-direction:column;margin:0}.runtime-summary b{font-size:20px}.runtime-summary small,.panel-title span{color:var(--muted)}.dot{width:12px;height:12px;border-radius:50%;background:#a6adba;box-shadow:0 0 0 5px rgba(166,173,186,.12)}.dot.on{background:#25a66a;box-shadow:0 0 0 5px rgba(37,166,106,.12)}.panel-title,.toolbar,.tags{display:flex;align-items:center;justify-content:space-between;gap:10px}.panel-title>div{display:flex;flex-direction:column;gap:3px}.toolbar{margin-bottom:16px}.toolbar .el-input{max-width:360px}.tags{justify-content:flex-start;flex-wrap:wrap}code{font-size:12px;color:var(--muted)}.health-message{display:block;margin-top:5px;color:var(--muted);line-height:1.4;word-break:break-word}@media(max-width:800px){.runtime-summary{grid-template-columns:repeat(2,1fr)}}
+.runtime-summary{grid-template-columns:repeat(5,1fr)}
 </style>

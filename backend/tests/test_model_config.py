@@ -153,13 +153,13 @@ def test_codebuddy_uses_exact_gateway_model_id(tmp_path):
     )
     assert minimax_27.model_for_agent("codebuddy") == "custom-local:MiniMax-M2.7"
 
-    with pytest.raises(ValueError, match="no custom-local CLI alias"):
-        resolve_model_profile(
-            tmp_path,
-            model_override="unsupported/provider-model",
-            environ={"TEST_LITELLM_KEY": "virtual-key"},
-            agent="codebuddy",
-        )
+    arbitrary = resolve_model_profile(
+        tmp_path,
+        model_override="unsupported/provider-model",
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+        agent="codebuddy",
+    )
+    assert arbitrary.model_for_agent("codebuddy") == "custom-local:provider-model"
 
 
 def test_codebuddy_profile_config_uses_litellm_without_embedding_the_key(tmp_path):
