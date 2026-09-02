@@ -84,6 +84,24 @@ def test_claude_uses_bare_mode_and_bearer_auth(tmp_path):
     assert profile.environment["ANTHROPIC_API_KEY"] == "virtual-key"
 
 
+def test_codex_can_use_chat_completions_for_compatible_gateways(tmp_path):
+    _write_config(tmp_path)
+    path = tmp_path / "config" / "models.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "    api_key_env: TEST_LITELLM_KEY\n",
+            "    api_key_env: TEST_LITELLM_KEY\n    codex_wire_api: chat\n",
+        ),
+        encoding="utf-8",
+    )
+    profile = resolve_model_profile(
+        tmp_path,
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+        agent="codex",
+    )
+    assert 'model_providers.litellm.wire_api="chat"' in profile.agent_args
+
+
 def test_local_config_overrides_model_without_committing_a_key(tmp_path):
     _write_config(tmp_path)
     (tmp_path / "config" / "local.yaml").write_text(

@@ -24,6 +24,7 @@ profiles:
     model: glm-4.7
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
+    codex_wire_api: chat
     agent_models:
       claude: sonnet
       codebuddy: custom-local:glm-4.7
