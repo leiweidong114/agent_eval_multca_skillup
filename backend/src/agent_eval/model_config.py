@@ -356,8 +356,20 @@ def discover_available_models(
     result = sorted(models.values(), key=lambda item: (item["source"] != "litellm", item["id"].lower()))
     for item in result:
         item["profiles"] = sorted(set(item["profiles"]))
+        exact_profiles = [
+            name
+            for name in item["profiles"]
+            if isinstance(profiles.get(name), dict)
+            and str(profiles[name].get("model") or "").strip() == item["id"]
+        ]
         item["profile"] = (
-            default_profile if default_profile in item["profiles"] else (item["profiles"][0] if item["profiles"] else None)
+            default_profile
+            if default_profile in exact_profiles
+            else (
+                exact_profiles[0]
+                if exact_profiles
+                else (default_profile if default_profile in item["profiles"] else (item["profiles"][0] if item["profiles"] else None))
+            )
         )
     return {
         "models": result,

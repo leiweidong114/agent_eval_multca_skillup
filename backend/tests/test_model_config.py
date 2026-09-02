@@ -214,3 +214,26 @@ def test_discovers_litellm_models_and_keeps_profile_mapping(tmp_path, monkeypatc
     discovered = next(item for item in result["models"] if item["id"] == "gateway/model-a")
     assert discovered["profile"] == "minimax"
     assert discovered["owned_by"] == "test"
+
+
+def test_discovered_model_prefers_the_profile_configured_for_its_exact_id(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    config_path = tmp_path / "config" / "models.yaml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8")
+        + "\n  exact:\n"
+        + "    type: compatible\n"
+        + "    model: gateway/model-a\n"
+        + "    api_base: https://litellm.example/v1\n"
+        + "    api_key_env: TEST_LITELLM_KEY\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TEST_LITELLM_KEY", "virtual-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [{"id": "gateway/model-a"}]})
+
+    result = discover_available_models(tmp_path, transport=httpx.MockTransport(handler))
+    discovered = next(item for item in result["models"] if item["id"] == "gateway/model-a")
+
+    assert discovered["profile"] == "exact"

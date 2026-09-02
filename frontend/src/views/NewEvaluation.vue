@@ -204,11 +204,13 @@ async function onSkillsChange() {
 function setDefaults() {
   const possibleAgents = availableAgents.value.filter(item => !agentDisabled(item))
   if (!possibleAgents.some(item => item.agent === form.agent)) form.agent = possibleAgents[0]?.agent || ''
-  if (!availableModels.value.some(item => modelKey(item) === form.modelKey)) form.modelKey = availableModels.value[0] ? modelKey(availableModels.value[0]) : ''
+  const judge = modelConfig.value.llm_judge || {}
+  const preferredModel = availableModels.value.find(item => item.id === judge.model && (!judge.profile || item.profile === judge.profile))
+  if (!availableModels.value.some(item => modelKey(item) === form.modelKey)) form.modelKey = preferredModel ? modelKey(preferredModel) : (availableModels.value[0] ? modelKey(availableModels.value[0]) : '')
   form.agents = form.agents.filter(name => possibleAgents.some(item => item.agent === name))
   form.modelKeys = form.modelKeys.filter(key => availableModels.value.some(item => modelKey(item) === key))
   if (form.batchMode && !form.agents.length) form.agents = possibleAgents.slice(0, 2).map(item => item.agent)
-  if (form.batchMode && !form.modelKeys.length) form.modelKeys = availableModels.value.slice(0, 2).map(modelKey)
+  if (form.batchMode && !form.modelKeys.length) form.modelKeys = preferredModel ? [modelKey(preferredModel)] : availableModels.value.slice(0, 2).map(modelKey)
   if (form.type === 'schematic') form.name ||= '原理图生成评测'
   if (form.type === 'skill') form.name ||= 'Skill 能力评测'
   if (form.type === 'question') form.name ||= '题库能力评测'
