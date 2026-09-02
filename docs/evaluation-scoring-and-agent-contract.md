@@ -60,6 +60,21 @@ scoring:
 
 任何指标都必须同时报告值、来源和可用性，不能把缺失值当作 0。
 
+## 外部依赖故障语义
+
+Claude、CodeBuddy 和 OpenClaw 的 LiteLLM HTTP 请求使用单任务本地代理。连接超时、
+断连及 429/500/502/503/504 最多尝试 4 次，使用相同的 `Idempotency-Key`，遵守
+`Retry-After` 并指数退避。401/403、模型不存在和额度耗尽不重试，因为它们需要修改
+凭据、模型配置或账号额度。重试耗尽后任务状态为 `failed`，并在 `failure.category` 和
+`failure.retryable` 中区分暂态基础设施故障与确定性配置/Agent 故障；不得把这类失败计为
+模型能力得分为 0。
+
+PostgreSQL 健康检查和 SpendLogs 查询对连接类暂态错误重试 4 次。开启模型硬校验时采用
+fail-closed：Agent 启动前必须确认 PostgreSQL 可用并成功创建 run-scoped LiteLLM virtual
+key；运行后必须按该 key alias 查到成功且模型一致的记录。缺少 Master Key、创建 Key
+返回 403、数据库不可用或没有精确记录都不能退化为时间窗口匹配。只有显式关闭硬校验的
+诊断运行才允许保留 `matched_unattributed`。
+
 ## 新 Agent 上线门槛
 
 新增 Agent 不能只把名字加入列表。合并前必须完成：

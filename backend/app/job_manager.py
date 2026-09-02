@@ -9,7 +9,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from agent_eval.runner import EvaluationCancelled, run_evaluation
+from agent_eval.runner import (
+    EvaluationCancelled,
+    EvaluationInfrastructureError,
+    run_evaluation,
+)
 from app.config import BACKEND_ROOT, RUNS_ROOT
 
 
@@ -105,6 +109,19 @@ class EvaluationJobManager:
             )
         except EvaluationCancelled as exc:
             self._update(job_id, status="cancelled", phase="cancelled", message=str(exc))
+        except EvaluationInfrastructureError as exc:
+            self._update(
+                job_id,
+                status="failed",
+                phase="infrastructure_failed",
+                message=str(exc),
+                error=str(exc),
+                failure={
+                    "category": exc.category,
+                    "retryable": exc.retryable,
+                    "summary": str(exc),
+                },
+            )
         except Exception as exc:
             self._update(job_id, status="failed", phase="failed", message="Evaluation failed", error=str(exc))
 

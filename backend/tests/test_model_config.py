@@ -21,6 +21,10 @@ profiles:
     model: MiniMax-M3
     api_base: http://127.0.0.1:4000/v1
     api_key_env: TEST_LITELLM_KEY
+    agent_models:
+      claude: sonnet
+      codebuddy: custom-local:MiniMax-M3
+      openclaw: main
 """,
         encoding="utf-8",
     )
@@ -75,7 +79,7 @@ def test_claude_uses_bare_mode_and_bearer_auth(tmp_path):
 
     assert profile.agent_args == ("--bare",)
     assert profile.model_for_agent("claude") == "sonnet"
-    assert "ANTHROPIC_API_KEY" not in profile.environment
+    assert profile.environment["ANTHROPIC_API_KEY"] == "virtual-key"
 
 
 def test_local_config_overrides_model_without_committing_a_key(tmp_path):
@@ -136,7 +140,7 @@ def test_codebuddy_uses_exact_gateway_model_id(tmp_path):
         agent="codebuddy",
     )
 
-    assert profile.model_for_agent("codebuddy") == "custom-local:opencode-go/minimax-m3"
+    assert profile.model_for_agent("codebuddy") == "custom-local:MiniMax-M3"
     assert profile.model_for_agent("claude") == "sonnet"
 
     minimax_27 = resolve_model_profile(
@@ -145,7 +149,15 @@ def test_codebuddy_uses_exact_gateway_model_id(tmp_path):
         environ={"TEST_LITELLM_KEY": "virtual-key"},
         agent="codebuddy",
     )
-    assert minimax_27.model_for_agent("codebuddy") == "custom-local:opencode-go/minimax-m2.7"
+    assert minimax_27.model_for_agent("codebuddy") == "custom-local:MiniMax-M2.7"
+
+    with pytest.raises(ValueError, match="no custom-local CLI alias"):
+        resolve_model_profile(
+            tmp_path,
+            model_override="unsupported/provider-model",
+            environ={"TEST_LITELLM_KEY": "virtual-key"},
+            agent="codebuddy",
+        )
 
 
 def test_codebuddy_profile_config_uses_litellm_without_embedding_the_key(tmp_path):
@@ -161,7 +173,7 @@ def test_codebuddy_profile_config_uses_litellm_without_embedding_the_key(tmp_pat
     write_codebuddy_profile_config(path, profile)
     content = path.read_text(encoding="utf-8")
 
-    assert '"id": "opencode-go/minimax-m2.7"' in content
+    assert '"id": "MiniMax-M2.7"' in content
     assert '"url": "http://127.0.0.1:4000/v1/chat/completions"' in content
     assert '"apiKey": "${LITELLM_API_KEY}"' in content
     assert "virtual-key" not in content

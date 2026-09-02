@@ -18,8 +18,13 @@ class ResolvedModelProfile:
     api_base: str
     environment: dict[str, str]
     agent_args: tuple[str, ...]
+    agent_models: dict[str, str]
+    gateway_models: dict[str, str]
 
     def model_for_agent(self, agent: str) -> str:
+        configured = self.agent_models.get(agent)
+        if configured:
+            return configured
         if agent == "openclaw":
             return "main"
         if agent == "claude" and self.api_base:
@@ -35,6 +40,10 @@ class ResolvedModelProfile:
         if agent == "opencode" and self.api_base:
             return f"litellm/{self.model}"
         return self.model
+
+    def gateway_model_for_agent(self, agent: str) -> str:
+        """Model id emitted on the Agent's HTTP request to LiteLLM."""
+        return self.gateway_models.get(agent) or self.model
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -77,6 +86,19 @@ def _normalized_base_url(value: str) -> tuple[str, str]:
     return openai_base.rstrip("/"), anthropic_base.rstrip("/")
 
 
+def _codebuddy_custom_model(model: str) -> str | None:
+    leaf = model.rsplit("/", 1)[-1].lower()
+    known = {
+        "minimax-m3": "MiniMax-M3",
+        "minimax-m2.7": "MiniMax-M2.7",
+        "minimax-m2.5": "MiniMax-M2.5",
+        "minimax-m2.1": "MiniMax-M2.1",
+        "grok-4.5": "grok-4.5",
+    }
+    resolved = known.get(leaf)
+    return f"custom-local:{resolved}" if resolved else None
+
+
 def resolve_model_profile(
     project_root: Path,
     *,
@@ -98,7 +120,7 @@ def resolve_model_profile(
     if not model:
         raise ValueError(f"Model profile has no model: {selected}")
     if str(profile.get("type") or "").strip().lower() == "native":
-        return ResolvedModelProfile(selected, model, "", {}, ())
+        return ResolvedModelProfile(selected, model, "", {}, (), {}, {})
     api_base = str(profile.get("api_base") or "").strip()
     openai_base, anthropic_base = _normalized_base_url(api_base)
 
@@ -112,6 +134,33 @@ def resolve_model_profile(
             "or config/local.yaml"
         )
 
+    agent_models = profile.get("agent_models") or {}
+    gateway_models = profile.get("gateway_models") or {}
+    if not isinstance(agent_models, dict) or not isinstance(gateway_models, dict):
+        raise ValueError(f"agent_models and gateway_models must be mappings: {selected}")
+    agent_models = {
+        str(name).strip().lower(): str(value).strip()
+        for name, value in agent_models.items()
+        if str(name).strip() and str(value).strip()
+    }
+    gateway_models = {
+        str(name).strip().lower(): str(value).strip()
+        for name, value in gateway_models.items()
+        if str(name).strip() and str(value).strip()
+    }
+    if agent == "codebuddy":
+        derived_codebuddy_model = _codebuddy_custom_model(model)
+        if model_override:
+            if not derived_codebuddy_model:
+                raise ValueError(
+                    f"CodeBuddy has no custom-local CLI alias for model override {model!r}; "
+                    "add a supported alias or use a compatible profile"
+                )
+            agent_models["codebuddy"] = derived_codebuddy_model
+        elif "codebuddy" not in agent_models and derived_codebuddy_model:
+            agent_models["codebuddy"] = derived_codebuddy_model
+    gateway_model = gateway_models.get(agent or "", model)
+
     # Multica backends launch different Agent CLIs. These aliases cover the
     # OpenAI-compatible and Anthropic-compatible conventions used by them.
     environment = {
@@ -121,17 +170,15 @@ def resolve_model_profile(
         "ANTHROPIC_API_KEY": api_key,
         "ANTHROPIC_AUTH_TOKEN": api_key,
         "ANTHROPIC_BASE_URL": anthropic_base,
-        "ANTHROPIC_DEFAULT_SONNET_MODEL": model,
-        "ANTHROPIC_DEFAULT_OPUS_MODEL": model,
-        "ANTHROPIC_DEFAULT_HAIKU_MODEL": model,
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": gateway_model,
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": gateway_model,
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": gateway_model,
         "MINIMAX_API_KEY": api_key,
         "MINIMAX_BASE_URL": openai_base,
     }
-    if agent == "claude":
-        # LiteLLM virtual keys are bearer tokens. Claude Code gives
-        # ANTHROPIC_API_KEY precedence and would send it as x-api-key, so use
-        # ANTHROPIC_AUTH_TOKEN exclusively for this backend.
-        environment.pop("ANTHROPIC_API_KEY")
+    # Claude Code 2.1.248 --bare explicitly authenticates with
+    # ANTHROPIC_API_KEY. Keep both Anthropic forms: LiteLLM accepts x-api-key
+    # while older Claude releases may still prefer the bearer token variable.
     environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(
         {
             "provider": {
@@ -143,8 +190,8 @@ def resolve_model_profile(
                         "apiKey": "{env:LITELLM_API_KEY}",
                     },
                     "models": {
-                        model: {
-                            "name": model,
+                        gateway_model: {
+                            "name": gateway_model,
                             "reasoning": True,
                             "limit": {"context": 200000, "output": 32000},
                         }
@@ -174,7 +221,9 @@ def resolve_model_profile(
             "-c",
             'model_providers.litellm.wire_api="responses"',
         )
-    return ResolvedModelProfile(selected, model, api_base, environment, agent_args)
+    return ResolvedModelProfile(
+        selected, model, api_base, environment, agent_args, agent_models, gateway_models
+    )
 
 
 def load_env_secrets(project_root: Path) -> dict[str, str]:
@@ -244,9 +293,11 @@ def write_openclaw_profile_config(
     profile: ResolvedModelProfile,
     *,
     workspace: Path | None = None,
+    api_base_override: str | None = None,
 ) -> None:
-    openai_base, _ = _normalized_base_url(profile.api_base)
-    primary = f"litellm/{profile.model}"
+    openai_base, _ = _normalized_base_url(api_base_override or profile.api_base)
+    gateway_model = profile.gateway_model_for_agent("openclaw")
+    primary = f"litellm/{gateway_model}"
     config = {
         "models": {
             "mode": "replace",
@@ -259,8 +310,8 @@ def write_openclaw_profile_config(
                     "timeoutSeconds": 1800,
                     "models": [
                         {
-                            "id": profile.model,
-                            "name": profile.model,
+                            "id": gateway_model,
+                            "name": gateway_model,
                             "api": "openai-completions",
                             "input": ["text"],
                             "compat": {"supportsUsageInStreaming": True},
@@ -297,11 +348,12 @@ def write_codebuddy_profile_config(
 ) -> None:
     """Write an isolated OpenAI-compatible CodeBuddy model without persisting a key."""
     openai_base, _ = _normalized_base_url(profile.api_base)
+    cli_model = profile.model_for_agent("codebuddy").removeprefix("custom-local:")
     config = {
         "models": [
             {
-                "id": profile.model,
-                "name": profile.model,
+                "id": cli_model,
+                "name": cli_model,
                 "vendor": "LiteLLM",
                 "url": endpoint or f"{openai_base}/chat/completions",
                 "apiKey": "${LITELLM_API_KEY}",

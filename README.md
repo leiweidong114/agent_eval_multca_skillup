@@ -135,7 +135,7 @@ secrets:
 
 运行时会为不同 Agent CLI 同时提供 OpenAI 兼容变量
 `OPENAI_BASE_URL`/`OPENAI_API_KEY` 和 Anthropic 兼容变量
-`ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`。虚拟 Key 不会写入生成的
+`ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`。虚拟 Key 不会写入生成的
 `eval.yaml`、评测报告或 Git。可通过修改 `models.yaml` 添加多个 profile，运行时用
 `--profile <name>` 选择；`--model` 仅用于临时覆盖该 profile 的默认模型。
 Codex 还会自动获得 `model_provider=litellm` 的命令行配置，避免已有 ChatGPT 登录覆盖
@@ -163,6 +163,13 @@ agent-eval check-agent --agent codex --profile litellm_opencode_go_minimax_2_7
 CodeBuddy 只接受 `custom-local:MiniMax-M2.7`，评测系统会将它确定性映射到
 `opencode-go/minimax-m2.7`；报告中保留统一模型名和 Agent 实际参数，避免把别名误当成
 另一个模型。
+
+Claude、CodeBuddy 和 OpenClaw 的 LiteLLM 请求经过每次任务独立的本地弹性代理。
+代理强制写入 profile 对应的 gateway model，并对连接超时、断连以及 HTTP
+429/500/502/503/504 最多尝试 4 次，遵守 `Retry-After` 并使用指数退避。CodeBuddy 的
+CLI 模型别名配置在 profile 的 `agent_models.codebuddy`，不会再退回账号 Token Plan；
+OpenClaw 同时使用隔离的 `OPENCLAW_CONFIG_PATH`、`OPENCLAW_STATE_DIR` 和 workspace，
+不会读取或迁移用户的旧工作区。
 
 该命令只发送一次 `CONNECTIVITY_OK` 探针，不创建 Skill-Up 运行、评分或评测结果目录。
 `agent-eval agents` 可列出 Multica 支持的后端及当前机器实际安装的 CLI；只有探测到
@@ -204,7 +211,13 @@ LITELLM_MASTER_KEY=sk-your-litellm-master-key
 $env:LITELLM_MASTER_KEY = "你的 LiteLLM Master Key"
 ```
 
-后端优先为每个任务创建一小时有效的临时虚拟 Key，并按 `key_alias` 精确读取 SpendLogs，运行结束后删除。若网关禁止管理接口，则退化为任务时间窗口匹配，并在报告中明确标记较弱的 Agent 归因。默认开启模型硬校验：没有成功调用或实际模型不匹配都会令任务失败。只有显式使用 `--no-require-model-verification` 才允许保留“未确认”的诊断结果。默认不读取 messages/response。
+后端优先为每个任务创建一小时有效的临时虚拟 Key，并按 `key_alias` 精确读取 SpendLogs，运行结束后删除。仅当显式关闭模型硬校验时，网关禁止管理接口才允许退化为任务时间窗口匹配，并在报告中标记较弱的 Agent 归因。默认开启模型硬校验：没有成功调用或实际模型不匹配都会令任务失败。只有显式使用 `--no-require-model-verification` 才允许保留“未确认”的诊断结果。默认不读取 messages/response。
+
+模型硬校验现在是 fail-closed：必须同时满足 LiteLLM profile、可用 PostgreSQL、
+`LITELLM_MASTER_KEY`、成功创建 run-scoped virtual key 和按 alias 命中的 SpendLogs。
+任一预检失败都会在调用 Agent 前停止，不再消耗模型额度；不会退化为时间窗口证据。
+PostgreSQL 暂态连接错误会自动重试 4 次。任务报告中的 `gateway_resilience`、`failure`
+和 `trace_key_cleanup` 分别记录网关重试、失败分类/可重试性和虚拟 Key 清理结果。
 
 ## 原理图完整 Skill 与专项 Judge
 

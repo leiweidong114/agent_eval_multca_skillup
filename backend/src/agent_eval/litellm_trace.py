@@ -1,10 +1,67 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
+
+
+RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+
+class TraceKeyError(RuntimeError):
+    def __init__(self, message: str, *, retryable: bool, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+        self.status_code = status_code
+
+
+def _post_with_retry(
+    url: str,
+    *,
+    headers: dict[str, str],
+    payload: dict[str, object],
+    max_attempts: int = 4,
+) -> httpx.Response:
+    last_error: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            response = httpx.post(url, headers=headers, json=payload, timeout=15)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            last_error = exc
+            if attempt + 1 == max_attempts:
+                raise TraceKeyError(
+                    f"LiteLLM trace-key endpoint is unreachable after {max_attempts} attempts",
+                    retryable=True,
+                ) from exc
+        else:
+            if response.status_code not in RETRYABLE_STATUS_CODES:
+                if response.is_error:
+                    raise TraceKeyError(
+                        f"LiteLLM trace-key endpoint returned HTTP {response.status_code}",
+                        retryable=False,
+                        status_code=response.status_code,
+                    )
+                return response
+            last_error = TraceKeyError(
+                f"LiteLLM trace-key endpoint returned HTTP {response.status_code}",
+                retryable=True,
+                status_code=response.status_code,
+            )
+            if attempt + 1 == max_attempts:
+                raise last_error
+            retry_after = response.headers.get("Retry-After")
+            try:
+                delay = float(retry_after) if retry_after is not None else 0.5 * (2 ** attempt)
+            except ValueError:
+                delay = 0.5 * (2 ** attempt)
+            time.sleep(min(8.0, max(0.0, delay)))
+            continue
+        if attempt + 1 < max_attempts:
+            time.sleep(min(8.0, 0.5 * (2 ** attempt)))
+    raise TraceKeyError(f"LiteLLM trace-key request failed: {last_error}", retryable=True)
 
 
 @dataclass(frozen=True)
@@ -29,19 +86,17 @@ def create_trace_key(
     path = parsed.path[:-3] if parsed.path.endswith("/v1") else parsed.path
     api_root = urlunsplit((parsed.scheme, parsed.netloc, path.rstrip("/"), "", ""))
     alias = f"agent-eval-{run_id}"
-    response = httpx.post(
+    response = _post_with_retry(
         f"{api_root}/key/generate",
         headers={"Authorization": f"Bearer {master_key}"},
-        json={
+        payload={
             "key_alias": alias,
             "duration": "1h",
             "models": [model],
             "metadata": {"agent_eval_run_id": run_id},
             "tags": ["agent-eval", f"run:{run_id}"],
         },
-        timeout=15,
     )
-    response.raise_for_status()
     key = str(response.json().get("key") or "")
     if not key:
         raise RuntimeError("LiteLLM key generation returned no key")
@@ -51,10 +106,8 @@ def create_trace_key(
 def delete_trace_key(trace_key: TraceKey | None) -> None:
     if trace_key is None:
         return
-    response = httpx.post(
+    _post_with_retry(
         f"{trace_key.api_root}/key/delete",
         headers={"Authorization": f"Bearer {trace_key.master_key}"},
-        json={"keys": [trace_key.key]},
-        timeout=15,
+        payload={"keys": [trace_key.key]},
     )
-    response.raise_for_status()

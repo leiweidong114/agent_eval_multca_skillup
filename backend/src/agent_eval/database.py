@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -143,19 +144,49 @@ def _driver() -> tuple[Any, Any]:
     return psycopg, dict_row
 
 
+def _is_transient_database_error(exc: Exception) -> bool:
+    sqlstate = str(getattr(exc, "sqlstate", "") or "")
+    if sqlstate.startswith(("08", "40", "53", "57P", "58")):
+        return True
+    name = type(exc).__name__.lower()
+    text = str(exc).lower()
+    return (
+        any(marker in name for marker in ("operational", "interface", "timeout"))
+        or any(marker in text for marker in (
+            "timeout", "timed out", "connection reset", "connection refused",
+            "server closed the connection", "could not connect", "temporarily unavailable",
+        ))
+    )
+
+
+def _database_retry(operation, *, max_attempts: int = 4):
+    last_error: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            return operation()
+        except Exception as exc:
+            last_error = exc
+            if not _is_transient_database_error(exc) or attempt + 1 == max_attempts:
+                raise
+            time.sleep(min(4.0, 0.25 * (2 ** attempt)))
+    raise RuntimeError(f"PostgreSQL operation failed: {last_error}")
+
+
 def database_health(project_root: Path) -> dict[str, Any]:
     try:
         config = resolve_database_config(project_root)
         if not config.enabled:
             return {"status": "disabled"}
         psycopg, dict_row = _driver()
-        with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    'select current_database() as database, current_user as "user", '
-                    '(select count(*) from "LiteLLM_SpendLogs") as spend_log_count'
-                )
-                row = cursor.fetchone()
+        def check() -> Any:
+            with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        'select current_database() as database, current_user as "user", '
+                        '(select count(*) from "LiteLLM_SpendLogs") as spend_log_count'
+                    )
+                    return cursor.fetchone()
+        row = _database_retry(check)
         return {
             "status": "ok",
             "host": config.host,
@@ -223,10 +254,12 @@ def fetch_model_interactions(
         where {match_sql}
         order by "startTime" asc
         limit %s'''
-    with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(query, (*parameters, config.limit))
-            rows = cursor.fetchall()
+    def fetch() -> list[dict[str, Any]]:
+        with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(query, (*parameters, config.limit))
+                return cursor.fetchall()
+    rows = _database_retry(fetch)
     return [
         _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=config.max_content_chars)
         for row in rows

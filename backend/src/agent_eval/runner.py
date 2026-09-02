@@ -19,6 +19,7 @@ import yaml
 
 from agent_eval.codebuddy_proxy import CodeBuddyCompatibilityProxy
 from agent_eval.database import (
+    database_health,
     fetch_model_interactions,
     summarize_model_interactions,
     verify_requested_model,
@@ -30,7 +31,7 @@ from agent_eval.model_config import (
     write_codebuddy_profile_config,
 )
 from agent_eval.skill_quality import evaluate_skill_quality
-from agent_eval.litellm_trace import create_trace_key, delete_trace_key
+from agent_eval.litellm_trace import TraceKeyError, create_trace_key, delete_trace_key
 from agent_eval.agent_contract import assess_agent_contract
 from agent_eval.llm_judge import run_llm_judge
 from agent_eval.scoring import (
@@ -74,6 +75,41 @@ def _copy_skill(source: Path, target: Path) -> None:
 
 class EvaluationCancelled(RuntimeError):
     pass
+
+
+class EvaluationInfrastructureError(RuntimeError):
+    def __init__(self, message: str, *, category: str, retryable: bool) -> None:
+        super().__init__(message)
+        self.category = category
+        self.retryable = retryable
+
+
+def _retryable_infrastructure_message(value: str) -> bool:
+    lowered = value.lower()
+    return any(marker in lowered for marker in (
+        "timeout", "timed out", "connection", "temporarily unavailable",
+        "server closed", "429", "500", "502", "503", "504",
+    ))
+
+
+def classify_evaluation_failure(text: str, returncode: int) -> dict[str, Any] | None:
+    if returncode == 0:
+        return None
+    lowered = text.lower()
+    rules = (
+        (("quota exceeded", "usage limit", "usage has reached", "insufficient quota"), "gateway_quota_exhausted", False),
+        (("429", "rate limit", "too many requests", "token plan"), "gateway_rate_limited", True),
+        (("500", "502", "503", "504", "gateway_transport_error"), "gateway_server_error", True),
+        (("timeout", "timed out", "connection reset", "connection refused", "temporarily unavailable"), "gateway_unavailable", True),
+        (("401", "unauthorized", "invalid api key", "authentication"), "gateway_authentication", False),
+        (("403", "forbidden"), "gateway_authorization", False),
+        (("unrecognized_model", "model not found", "unknown model"), "model_incompatible", False),
+        (("doctor --fix", "legacy workspace"), "agent_workspace_invalid", False),
+    )
+    for markers, category, retryable in rules:
+        if any(marker in lowered for marker in markers):
+            return {"category": category, "retryable": retryable, "summary": category}
+    return {"category": "agent_execution_failed", "retryable": False, "summary": "Agent execution failed"}
 
 
 def _execute_process(
@@ -324,6 +360,23 @@ def run_evaluation(
     )
     provider_model = resolved_profile.model
     model = resolved_profile.model_for_agent(agent)
+    gateway_model = resolved_profile.gateway_model_for_agent(agent)
+    if require_model_verification and not collect_database_trace:
+        raise ValueError("require_model_verification=true requires collect_database_trace=true")
+    if require_model_verification and not resolved_profile.api_base:
+        raise ValueError(
+            "Exact model verification requires a LiteLLM profile; native profiles have no "
+            "run-scoped gateway trace"
+        )
+    if require_model_verification:
+        health = database_health(project_root)
+        if health.get("status") != "ok":
+            detail = str(health.get("error") or health.get("status"))
+            raise EvaluationInfrastructureError(
+                f"PostgreSQL trace preflight failed: {detail}",
+                category="postgresql_unavailable",
+                retryable=_retryable_infrastructure_message(detail),
+            )
     agent_executable = executable or default_agent_command(requested_agent)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     operation_id = _identity(task_id or run_id or uuid.uuid4().hex, field="task_id")
@@ -379,8 +432,6 @@ def run_evaluation(
     )
     output = result_root / "skill-up"
     env = os.environ.copy()
-    if agent == "claude":
-        env.pop("ANTHROPIC_API_KEY", None)
     env.update(resolved_profile.environment)
     if agent == "claude":
         claude_config = result_root / "runtime" / "claude-config"
@@ -398,6 +449,9 @@ def run_evaluation(
             openclaw_config, resolved_profile, workspace=openclaw_workspace
         )
         env["OPENCLAW_CONFIG_PATH"] = str(openclaw_config)
+        openclaw_state = result_root / "runtime" / "openclaw-state"
+        openclaw_state.mkdir(parents=True, exist_ok=True)
+        env["OPENCLAW_STATE_DIR"] = str(openclaw_state)
     env["AGENT_EVAL_RUN_ID"] = operation_id
     env["AGENT_EVAL_TASK_ID"] = canonical_task_id
     env["AGENT_EVAL_USER_ID"] = user_id
@@ -450,7 +504,7 @@ def run_evaluation(
         try:
             trace_key = create_trace_key(
                 resolved_profile.api_base,
-                provider_model,
+                gateway_model,
                 operation_id,
                 master_key=resolve_config_secret(project_root, "LITELLM_MASTER_KEY"),
             )
@@ -463,6 +517,18 @@ def run_evaluation(
         except Exception as exc:
             trace_key_error = str(exc)
             trace_key = None
+            if require_model_verification:
+                raise EvaluationInfrastructureError(
+                    f"Exact LiteLLM trace-key creation failed: {exc}",
+                    category="trace_key_unavailable",
+                    retryable=isinstance(exc, TraceKeyError) and exc.retryable,
+                ) from exc
+    if require_model_verification and trace_key is None:
+        raise EvaluationInfrastructureError(
+            "Exact model verification requires LITELLM_MASTER_KEY and a run-scoped virtual key",
+            category="trace_key_not_configured",
+            retryable=False,
+        )
 
     command = [
         str(skill_up),
@@ -479,27 +545,57 @@ def run_evaluation(
     ]
     evaluation_started_at = datetime.now(timezone.utc).replace(tzinfo=None)
     progress("running", 25, "Agent evaluation is running")
-    if agent == "codebuddy":
-        openai_base = resolved_profile.environment["OPENAI_BASE_URL"]
-        proxy = CodeBuddyCompatibilityProxy(f"{openai_base}/chat/completions")
-        proxy.start()
-        codebuddy_config = Path(env["CODEBUDDY_CONFIG_DIR"])
-        write_codebuddy_profile_config(
-            codebuddy_config / "models.json", resolved_profile, endpoint=proxy.url
+    resilience_proxy = None
+    gateway_resilience: dict[str, Any] = {"status": "not_used"}
+    if resolved_profile.api_base and agent in {"claude", "codebuddy", "openclaw"}:
+        resilience_proxy = CodeBuddyCompatibilityProxy(
+            resolved_profile.api_base,
+            timeout=timeout_seconds,
+            forced_model=gateway_model,
+            strip_tools_after_result=agent == "codebuddy",
         )
         try:
-            completed = _execute_process(
-                command, cwd=project_root, env=env, cancel_event=cancel_event
+            resilience_proxy.start()
+        except Exception:
+            try:
+                delete_trace_key(trace_key)
+            except Exception:
+                pass
+            raise
+        gateway_resilience = {"status": "active"}
+        if agent == "claude":
+            env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+        elif agent == "codebuddy":
+            codebuddy_config = Path(env["CODEBUDDY_CONFIG_DIR"])
+            write_codebuddy_profile_config(
+                codebuddy_config / "models.json", resolved_profile, endpoint=resilience_proxy.url
             )
-        finally:
-            proxy.close()
-    else:
+        elif agent == "openclaw":
+            write_openclaw_profile_config(
+                Path(env["OPENCLAW_CONFIG_PATH"]),
+                resolved_profile,
+                workspace=openclaw_workspace,
+                api_base_override=resilience_proxy.openai_base_url,
+            )
+    try:
         completed = _execute_process(
             command,
             cwd=project_root,
             env=env,
             cancel_event=cancel_event,
         )
+    except Exception:
+        # Cancellation or a local process-launch failure must not leave the
+        # run-scoped credential alive until its one-hour TTL.
+        try:
+            delete_trace_key(trace_key)
+        except Exception:
+            pass
+        raise
+    finally:
+        if resilience_proxy is not None:
+            gateway_resilience = {"status": "completed", **resilience_proxy.stats()}
+            resilience_proxy.close()
     evaluation_finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
     (result_root / "skill-up.stdout.log").write_text(completed.stdout, encoding="utf-8")
     (result_root / "skill-up.stderr.log").write_text(completed.stderr, encoding="utf-8")
@@ -538,7 +634,9 @@ def run_evaluation(
             if trace_key_error:
                 database_trace["exact_correlation_error"] = trace_key_error
             agent_model = resolved_profile.model_for_agent(agent)
-            accepted_groups = [agent_model.removeprefix("custom-local:")]
+            accepted_groups = [
+                agent_model.removeprefix("custom-local:"), gateway_model
+            ]
             model_verification = verify_requested_model(
                 interactions,
                 expected_model=provider_model,
@@ -567,7 +665,35 @@ def run_evaluation(
         and require_model_verification
         and model_verification.get("verified") is not True
     )
+    combined_failure_text = "\n".join(
+        str(value or "") for value in (
+            completed.stdout,
+            completed.stderr,
+            json.dumps(results, ensure_ascii=False, default=str),
+        )
+    )
+    failure = classify_evaluation_failure(combined_failure_text, completed.returncode)
     evaluation_status = "failed" if completed.returncode or verification_failed else "completed"
+    if verification_failed and failure is None:
+        failure = {
+            "category": "model_verification_failed",
+            "retryable": database_trace.get("status") == "unavailable",
+            "summary": model_verification.get("reason") or "Exact model verification failed",
+        }
+
+    trace_key_cleanup: dict[str, Any] = {"status": "not_created"}
+    if trace_key is not None:
+        try:
+            delete_trace_key(trace_key)
+            trace_key_cleanup = {"status": "deleted", "alias": trace_key.alias}
+        except Exception as exc:
+            # The key expires after one hour, so cleanup failure does not alter
+            # attribution, but it must remain visible to operators.
+            trace_key_cleanup = {
+                "status": "delete_failed",
+                "alias": trace_key.alias,
+                "error": str(exc),
+            }
 
     progress("scoring", 92, "Calculating rule and LLM evaluation scores")
     process_metrics = collect_process_metrics(results, database_trace)
@@ -616,7 +742,6 @@ def run_evaluation(
         process_metrics=process_metrics,
         skill_up_exit_code=completed.returncode,
     )
-
     summary = {
         "run_id": operation_id,
         "task_id": canonical_task_id,
@@ -631,6 +756,7 @@ def run_evaluation(
         "model": model,
         "model_profile": resolved_profile.name,
         "provider_model": provider_model,
+        "gateway_model": gateway_model,
         "skill": str(source_skill),
         "result_dir": str(result_root),
         "skill_up_exit_code": completed.returncode,
@@ -644,6 +770,9 @@ def run_evaluation(
         "model_verification": model_verification,
         "require_model_verification": require_model_verification,
         "database_trace_file": trace_file,
+        "gateway_resilience": gateway_resilience,
+        "trace_key_cleanup": trace_key_cleanup,
+        "failure": failure,
         "eval_config_file": str(eval_path),
         "eval_config_generated_by": "agent_eval.runner.build_eval_config",
         "results": results,
@@ -651,10 +780,6 @@ def run_evaluation(
     (result_root / "evaluation-report.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    try:
-        delete_trace_key(trace_key)
-    except Exception:
-        pass
     progress(
         "completed" if evaluation_status == "completed" else "failed",
         100,

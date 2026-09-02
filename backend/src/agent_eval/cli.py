@@ -11,15 +11,18 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agent_eval.runner import run_evaluation
+from agent_eval.runner import _retryable_infrastructure_message, run_evaluation
+from agent_eval.codebuddy_proxy import CodeBuddyCompatibilityProxy
 from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.database import (
+    database_health,
     fetch_model_interactions,
     summarize_model_interactions,
     verify_requested_model,
 )
 from agent_eval.model_config import (
     describe_model_config,
+    resolve_config_secret,
     resolve_model_profile,
     write_codebuddy_profile_config,
     write_openclaw_profile_config,
@@ -32,6 +35,7 @@ from agent_eval.runtime import (
     find_multica_runtime,
     find_skill_up,
 )
+from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 
 
 # backend/src/agent_eval/cli.py -> parents[2] = backend
@@ -135,10 +139,46 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         }
     runtime = find_multica_runtime(PROJECT_ROOT)
     env = os.environ.copy()
-    if runtime_agent == "claude":
-        env.pop("ANTHROPIC_API_KEY", None)
     env.update(profile.environment)
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = detected
+    trace_key = None
+    if args.database_verify and profile.api_base:
+        health = database_health(PROJECT_ROOT)
+        if health.get("status") != "ok":
+            return {
+                "status": "failed", "agent": args.agent, "model": profile.model,
+                "failure": {
+                    "category": "postgresql_unavailable",
+                    "retryable": _retryable_infrastructure_message(
+                        str(health.get("error") or health.get("status"))
+                    ),
+                },
+                "error": health.get("error") or health.get("status"),
+            }
+        try:
+            trace_key = create_trace_key(
+                profile.api_base,
+                profile.gateway_model_for_agent(runtime_agent),
+                f"connectivity-{uuid.uuid4().hex}",
+                master_key=resolve_config_secret(PROJECT_ROOT, "LITELLM_MASTER_KEY"),
+            )
+        except Exception as exc:
+            return {
+                "status": "failed", "agent": args.agent, "model": profile.model,
+                "failure": {"category": "trace_key_unavailable", "retryable": False},
+                "error": str(exc),
+            }
+        if trace_key is None:
+            return {
+                "status": "failed", "agent": args.agent, "model": profile.model,
+                "failure": {"category": "trace_key_not_configured", "retryable": False},
+                "error": "LITELLM_MASTER_KEY is required for exact model verification",
+            }
+        for key_name in (
+            "LITELLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN", "MINIMAX_API_KEY",
+        ):
+            env[key_name] = trace_key.key
     with tempfile.TemporaryDirectory(prefix="agent-connectivity-") as temp:
         root = Path(temp)
         if runtime_agent == "claude":
@@ -162,6 +202,9 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             config_path = root / "openclaw.json"
             write_openclaw_profile_config(config_path, profile)
             env["OPENCLAW_CONFIG_PATH"] = str(config_path)
+            state_path = root / "openclaw-state"
+            state_path.mkdir()
+            env["OPENCLAW_STATE_DIR"] = str(state_path)
         command = [
             str(runtime), "--input", str(input_path), "--output", str(output_path),
             "--agent", runtime_agent, "--model", profile.model_for_agent(runtime_agent),
@@ -169,14 +212,46 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         ]
         for value in profile.agent_args:
             command.extend(["--extra-arg", value])
+        resilience_proxy = None
+        if profile.api_base and runtime_agent in {"claude", "codebuddy", "openclaw"}:
+            resilience_proxy = CodeBuddyCompatibilityProxy(
+                profile.api_base,
+                timeout=args.timeout,
+                forced_model=profile.gateway_model_for_agent(runtime_agent),
+                strip_tools_after_result=runtime_agent == "codebuddy",
+            )
+            resilience_proxy.start()
+            if runtime_agent == "claude":
+                env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+            elif runtime_agent == "codebuddy":
+                write_codebuddy_profile_config(
+                    Path(env["CODEBUDDY_CONFIG_DIR"]) / "models.json",
+                    profile,
+                    endpoint=resilience_proxy.url,
+                )
+            else:
+                write_openclaw_profile_config(
+                    Path(env["OPENCLAW_CONFIG_PATH"]),
+                    profile,
+                    workspace=root,
+                    api_base_override=resilience_proxy.openai_base_url,
+                )
         started_at = datetime.now(timezone.utc).replace(tzinfo=None)
         try:
-            process = subprocess.run(
-                command, cwd=PROJECT_ROOT, env=env, capture_output=True, text=True,
-                timeout=args.timeout + 10, check=False,
-            )
-        except subprocess.TimeoutExpired:
-            return {"status": "timeout", "agent": args.agent, "model": profile.model}
+            try:
+                process = subprocess.run(
+                    command, cwd=PROJECT_ROOT, env=env, capture_output=True, text=True,
+                    timeout=args.timeout + 10, check=False,
+                )
+            except subprocess.TimeoutExpired:
+                try:
+                    delete_trace_key(trace_key)
+                except Exception:
+                    pass
+                return {"status": "timeout", "agent": args.agent, "model": profile.model}
+        finally:
+            if resilience_proxy is not None:
+                resilience_proxy.close()
         finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
         result = json.loads(output_path.read_text(encoding="utf-8")) if output_path.is_file() else {}
     combined = "\n".join(
@@ -199,16 +274,20 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                     started_at=started_at,
                     finished_at=finished_at,
                     model=profile.model,
+                    key_alias=trace_key.alias if trace_key else None,
                 )
                 if rows or attempt == 5:
                     break
                 time.sleep(2)
-            database_trace = summarize_model_interactions(rows, exact=False)
+            database_trace = summarize_model_interactions(rows, exact=trace_key is not None)
             model_verification = verify_requested_model(
                 rows,
                 expected_model=profile.model,
-                accepted_model_groups=[profile.model_for_agent(runtime_agent).removeprefix("custom-local:")],
-                exact=False,
+                accepted_model_groups=[
+                    profile.model_for_agent(runtime_agent).removeprefix("custom-local:"),
+                    profile.gateway_model_for_agent(runtime_agent),
+                ],
+                exact=trace_key is not None,
             )
         except Exception as exc:
             database_trace = {"status": "unavailable", "error": str(exc)}
@@ -216,6 +295,10 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 "status": "unverified", "verified": False,
                 "expected_model": profile.model, "reason": "database_trace_unavailable",
             }
+    try:
+        delete_trace_key(trace_key)
+    except Exception:
+        pass
     ok = (
         process.returncode == 0
         and result.get("exit_code") == 0

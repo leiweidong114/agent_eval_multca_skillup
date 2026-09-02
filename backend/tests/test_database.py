@@ -5,6 +5,7 @@ import pytest
 
 from agent_eval.database import (
     DatabaseConfigurationError,
+    _database_retry,
     resolve_database_config,
     summarize_model_interactions,
     verify_requested_model,
@@ -107,3 +108,21 @@ def test_requested_model_verification_reports_mismatch():
     assert result["verified"] is False
     assert result["reason"] == "requested_model_mismatch"
     assert result["mismatches"][0]["request_id"] == "req-2"
+
+
+def test_database_retry_recovers_from_transient_connection_failure(monkeypatch):
+    attempts = 0
+
+    class OperationalError(RuntimeError):
+        pass
+
+    def operation():
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise OperationalError("connection reset by peer")
+        return "ok"
+
+    monkeypatch.setattr("agent_eval.database.time.sleep", lambda _: None)
+    assert _database_retry(operation) == "ok"
+    assert attempts == 3

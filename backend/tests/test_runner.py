@@ -5,7 +5,13 @@ from threading import Event
 
 import pytest
 
-from agent_eval.runner import EvaluationCancelled, _execute_process, aggregate_scores, build_eval_config
+from agent_eval.runner import (
+    EvaluationCancelled,
+    _execute_process,
+    aggregate_scores,
+    build_eval_config,
+    classify_evaluation_failure,
+)
 from agent_eval.runtime import SUPPORTED_AGENTS, agent_capabilities, backend_agent
 
 
@@ -156,3 +162,20 @@ def test_background_process_can_be_cancelled(tmp_path):
             env=dict(os.environ),
             cancel_event=cancelled,
         )
+
+
+@pytest.mark.parametrize(
+    ("message", "category", "retryable"),
+    [
+        ("HTTP 429 Too Many Requests", "gateway_rate_limited", True),
+        ("Token Plan usage has reached the usage limit", "gateway_quota_exhausted", False),
+        ("upstream returned 503", "gateway_server_error", True),
+        ("connection reset by peer", "gateway_unavailable", True),
+        ("unrecognized_model", "model_incompatible", False),
+        ("legacy workspace; run openclaw doctor --fix", "agent_workspace_invalid", False),
+    ],
+)
+def test_external_failures_are_classified(message, category, retryable):
+    result = classify_evaluation_failure(message, 1)
+    assert result["category"] == category
+    assert result["retryable"] is retryable
