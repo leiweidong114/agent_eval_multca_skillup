@@ -210,9 +210,10 @@ def resolve_model_profile(
         # gateway aliases after the actual task has already completed.
         # Keep Claude's own model identity on a family alias; the per-run
         # compatibility proxy rewrites every HTTP request to gateway_model.
-        environment["ANTHROPIC_DEFAULT_SONNET_MODEL"] = "sonnet"
-        environment["ANTHROPIC_DEFAULT_OPUS_MODEL"] = "opus"
-        environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "haiku"
+        claude_cli_model = agent_models.get("claude") or "sonnet"
+        environment["ANTHROPIC_DEFAULT_SONNET_MODEL"] = claude_cli_model
+        environment["ANTHROPIC_DEFAULT_OPUS_MODEL"] = claude_cli_model
+        environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = claude_cli_model
         environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         agent_args = ("--bare",)
     elif agent == "codex":

@@ -83,8 +83,8 @@ def test_claude_uses_bare_mode_and_bearer_auth(tmp_path):
     assert profile.model_for_agent("claude") == "sonnet"
     assert profile.environment["ANTHROPIC_API_KEY"] == "virtual-key"
     assert profile.environment["ANTHROPIC_DEFAULT_SONNET_MODEL"] == "sonnet"
-    assert profile.environment["ANTHROPIC_DEFAULT_OPUS_MODEL"] == "opus"
-    assert profile.environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "haiku"
+    assert profile.environment["ANTHROPIC_DEFAULT_OPUS_MODEL"] == "sonnet"
+    assert profile.environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "sonnet"
     assert profile.environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
 
 
