@@ -10,16 +10,19 @@ from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from agent_eval.database import database_health
 from agent_eval.failure import describe_evaluation_failure
 from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.model_config import (
     describe_model_config,
+    delete_model_profile,
     discover_available_models,
+    list_model_profiles,
     resolve_config_secret,
     resolve_model_profile,
+    save_model_profile,
 )
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
@@ -46,6 +49,19 @@ class CleanupRequest(BaseModel):
 class ModelTestRequest(BaseModel):
     model: str = Field(min_length=1, max_length=300)
     profile: str = Field(min_length=1, max_length=200)
+
+
+class ModelProfileRequest(BaseModel):
+    model: str = Field(min_length=1, max_length=300)
+    api_base: str = Field(min_length=8, max_length=1000)
+    api_key_env: str = Field(default="LITELLM_API_KEY", min_length=1, max_length=100)
+    api_key: SecretStr | None = None
+    protocol: str = "openai_compatible"
+    context_window: int = Field(default=200000, gt=0, le=10_000_000)
+    max_output_tokens: int = Field(default=32000, gt=0, le=1_000_000)
+    agent_models: dict[str, str] = Field(default_factory=dict)
+    gateway_models: dict[str, str] = Field(default_factory=dict)
+    make_default: bool = False
 
 
 def _scan_skills(root: Path) -> list[dict[str, str]]:
@@ -138,6 +154,42 @@ def get_model_config() -> dict[str, object]:
     return result
 
 
+@router.get("/model-profiles")
+def get_model_profiles() -> list[dict[str, Any]]:
+    """List provider profiles without returning API-key values."""
+    return list_model_profiles(BACKEND_ROOT)
+
+
+@router.put("/model-profiles/{profile_name}")
+def put_model_profile(
+    profile_name: str, request: ModelProfileRequest
+) -> dict[str, Any]:
+    """Create or update an ignored local CC-Switch-style provider profile."""
+    try:
+        values = request.model_dump(exclude={"api_key", "make_default"})
+        return save_model_profile(
+            BACKEND_ROOT,
+            profile_name,
+            values,
+            api_key=(request.api_key.get_secret_value() if request.api_key else None),
+            make_default=request.make_default,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/model-profiles/{profile_name}")
+def remove_model_profile(profile_name: str) -> dict[str, object]:
+    """Remove a local profile or restore a built-in profile overridden locally."""
+    try:
+        removed = delete_model_profile(BACKEND_ROOT, profile_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not removed:
+        raise HTTPException(status_code=404, detail="Local model profile not found")
+    return {"removed": True, "profile": profile_name}
+
+
 @router.get("/models")
 def list_models() -> dict[str, object]:
     """Return models discovered from LiteLLM plus configured native fallbacks."""
@@ -165,19 +217,30 @@ def test_model(request: ModelTestRequest) -> dict[str, object]:
                 "duration_ms": 0,
                 "message": "本地原生模型配置有效；实际可用性由 Agent 负责",
             }
-        openai_base = profile.environment["OPENAI_BASE_URL"].rstrip("/")
-        response = httpx.post(
-            f"{openai_base}/chat/completions",
-            headers={"Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}"},
-            json={
+        key = profile.environment["LITELLM_API_KEY"]
+        if profile.protocol == "anthropic_messages":
+            endpoint = f"{profile.environment['ANTHROPIC_BASE_URL'].rstrip('/')}/v1/messages"
+            headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
+            payload = {
+                "model": request.model,
+                "messages": [{"role": "user", "content": "Reply with OK."}],
+                "max_tokens": 4,
+            }
+        elif profile.protocol == "openai_responses":
+            endpoint = f"{profile.environment['OPENAI_BASE_URL'].rstrip('/')}/responses"
+            headers = {"Authorization": f"Bearer {key}"}
+            payload = {"model": request.model, "input": "Reply with OK.", "max_output_tokens": 4}
+        else:
+            endpoint = f"{profile.environment['OPENAI_BASE_URL'].rstrip('/')}/chat/completions"
+            headers = {"Authorization": f"Bearer {key}"}
+            payload = {
                 "model": request.model,
                 "messages": [{"role": "user", "content": "Reply with OK."}],
                 "max_tokens": 4,
                 "temperature": 0,
                 "stream": False,
-            },
-            timeout=30.0,
-        )
+            }
+        response = httpx.post(endpoint, headers=headers, json=payload, timeout=30.0)
         response.raise_for_status()
         payload = response.json()
         actual_model = str(payload.get("model") or request.model) if isinstance(payload, dict) else request.model

@@ -171,6 +171,21 @@ Codex 还会自动获得 `model_provider=litellm` 的命令行配置，避免已
 LiteLLM 地址。OpenClaw/JustDo 会继续使用 Agent ID `main`，并由评测端生成临时
 LiteLLM provider 配置；配置只引用 `${LITELLM_API_KEY}`，不会包含真实 Key。
 
+“模型与 Agent”页面也可以创建 CC Switch 风格的自定义 Provider。页面配置写入被 Git
+忽略的 `backend/config/local.yaml`，API Key 写入被忽略的
+`backend/config/secrets.env`，查询接口只返回 `api_key_configured`，不会回显 Key。Profile
+支持 `openai_compatible`、`openai_chat`、`openai_responses` 和
+`anthropic_messages` 协议、上下文窗口、最大输出 Token，以及 `agent_models` /
+`gateway_models` 两级模型别名。要让同一 Provider 覆盖全部 21 个评测 Agent，应使用能
+同时提供 OpenAI Responses、Chat Completions 和 Anthropic Messages 兼容入口的网关，并
+选择 `openai_compatible`；单协议直连 Profile 只会允许协议匹配的 Agent。
+
+本阶段的统一模型适配范围为 21 个
+`specified_model_and_skill_evaluation=true` 的 Agent。`mcode`、`qwenpaw`、
+`zeroclaw` 仍由运行时管理模型；`dim`、`hermes` 仍缺少直接 Skill 注入，因此五者不在
+该范围内。`GET /api/agents` 的 `capabilities.model_adapter` 会返回每个 Agent 的模型选择、
+Provider 注入和客户端协议方式。
+
 OpenCode Go 模型在 LiteLLM UI 中使用 `opencode-go/<model-id>` 名称管理。无需启动
 Skill-Up 评测即可先做 Agent/模型连通性检查：
 

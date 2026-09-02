@@ -25,6 +25,7 @@ from agent_eval.database import (
     verify_requested_model,
 )
 from agent_eval.model_config import (
+    CREDENTIAL_ENV_NAMES,
     resolve_config_secret,
     resolve_model_profile,
     write_openclaw_profile_config,
@@ -528,11 +529,10 @@ def run_evaluation(
                 master_key=resolve_config_secret(project_root, "LITELLM_MASTER_KEY"),
             )
             if trace_key is not None:
-                for key_name in (
-                    "LITELLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
-                    "ANTHROPIC_AUTH_TOKEN", "MINIMAX_API_KEY",
-                ):
+                for key_name in CREDENTIAL_ENV_NAMES:
                     env[key_name] = trace_key.key
+                if resolved_profile.api_key_env:
+                    env[resolved_profile.api_key_env] = trace_key.key
         except Exception as exc:
             trace_key_error = str(exc)
             trace_key = None

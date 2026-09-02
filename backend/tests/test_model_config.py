@@ -4,9 +4,12 @@ import httpx
 import pytest
 
 from agent_eval.model_config import (
+    delete_model_profile,
     describe_model_config,
     discover_available_models,
+    list_model_profiles,
     resolve_model_profile,
+    save_model_profile,
     write_codebuddy_profile_config,
     write_openclaw_profile_config,
 )
@@ -258,3 +261,69 @@ def test_discovered_model_prefers_the_profile_configured_for_its_exact_id(tmp_pa
     discovered = next(item for item in result["models"] if item["id"] == "gateway/model-a")
 
     assert discovered["profile"] == "exact"
+
+
+def test_custom_profile_crud_is_local_atomic_and_never_exposes_key(tmp_path):
+    _write_config(tmp_path)
+
+    saved = save_model_profile(
+        tmp_path,
+        "company_gateway",
+        {
+            "model": "vendor/model-a",
+            "api_base": "https://gateway.example/v1",
+            "api_key_env": "COMPANY_GATEWAY_KEY",
+            "protocol": "openai_compatible",
+            "context_window": 128000,
+            "max_output_tokens": 16000,
+            "agent_models": {"claude": "sonnet"},
+            "gateway_models": {"claude": "vendor/model-a-anthropic"},
+        },
+        api_key="top-secret",
+        make_default=True,
+    )
+
+    assert saved["compatible_agents"] and len(saved["compatible_agents"]) == 21
+    assert saved["supports_all_evaluation_agents"] is True
+    assert saved["api_key_configured"] is True
+    assert "top-secret" not in repr(saved)
+    assert "top-secret" not in (tmp_path / "config" / "local.yaml").read_text(encoding="utf-8")
+    assert "COMPANY_GATEWAY_KEY=top-secret" in (
+        tmp_path / "config" / "secrets.env"
+    ).read_text(encoding="utf-8")
+
+    resolved = resolve_model_profile(
+        tmp_path, profile_name="company_gateway", agent="claude", environ={}
+    )
+    assert resolved.protocol == "openai_compatible"
+    assert resolved.context_window == 128000
+    assert resolved.environment["OPENAI_API_KEY"] == "top-secret"
+    assert len(list_model_profiles(tmp_path)) == 2
+
+    assert delete_model_profile(tmp_path, "company_gateway") is True
+    assert delete_model_profile(tmp_path, "company_gateway") is False
+    assert {item["name"] for item in list_model_profiles(tmp_path)} == {"minimax"}
+
+
+def test_protocol_specific_profile_rejects_an_incompatible_agent(tmp_path):
+    _write_config(tmp_path)
+    save_model_profile(
+        tmp_path,
+        "anthropic_direct",
+        {
+            "model": "claude-test",
+            "api_base": "https://anthropic.example",
+            "api_key_env": "ANTHROPIC_DIRECT_KEY",
+            "protocol": "anthropic_messages",
+        },
+        api_key="secret",
+    )
+
+    claude = resolve_model_profile(
+        tmp_path, profile_name="anthropic_direct", agent="claude", environ={}
+    )
+    assert claude.protocol == "anthropic_messages"
+    with pytest.raises(ValueError, match="requires openai_responses"):
+        resolve_model_profile(
+            tmp_path, profile_name="anthropic_direct", agent="codex", environ={}
+        )

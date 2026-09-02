@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -10,6 +11,21 @@ from urllib.parse import urlsplit, urlunsplit
 
 import yaml
 import httpx
+
+from agent_eval.agent_adapters import AGENT_MODEL_ADAPTERS, model_adapter
+
+
+PROFILE_PROTOCOLS = frozenset(
+    {"openai_compatible", "openai_chat", "openai_responses", "anthropic_messages"}
+)
+PROFILE_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}")
+CREDENTIAL_ENV_NAMES = (
+    "LITELLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN", "MINIMAX_API_KEY", "GOOGLE_API_KEY",
+    "GEMINI_API_KEY", "XAI_API_KEY", "DEEPSEEK_API_KEY",
+    "DASHSCOPE_API_KEY", "MOONSHOT_API_KEY", "KIMI_API_KEY",
+    "ZHIPUAI_API_KEY", "OPENROUTER_API_KEY",
+)
 
 
 @dataclass(frozen=True)
@@ -21,6 +37,10 @@ class ResolvedModelProfile:
     agent_args: tuple[str, ...]
     agent_models: dict[str, str] = field(default_factory=dict)
     gateway_models: dict[str, str] = field(default_factory=dict)
+    protocol: str = "openai_compatible"
+    api_key_env: str = "LITELLM_API_KEY"
+    context_window: int = 200000
+    max_output_tokens: int = 32000
 
     def model_for_agent(self, agent: str) -> str:
         configured = self.agent_models.get(agent)
@@ -64,6 +84,52 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
         else:
             result[key] = value
     return result
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def _write_yaml(path: Path, value: dict[str, Any]) -> None:
+    _atomic_write(path, yaml.safe_dump(value, allow_unicode=True, sort_keys=False))
+
+
+def _validate_profile_name(name: str) -> str:
+    normalized = name.strip()
+    if not PROFILE_NAME_RE.fullmatch(normalized):
+        raise ValueError(
+            "Profile name must start with a letter and contain only letters, numbers, _ or -"
+        )
+    return normalized
+
+
+def _validate_env_name(name: str) -> str:
+    normalized = name.strip()
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", normalized):
+        raise ValueError("api_key_env must be a valid environment variable name")
+    return normalized
+
+
+def _positive_int(value: object, *, field_name: str, default: int) -> int:
+    if value in (None, ""):
+        return default
+    parsed = int(value)
+    if parsed <= 0:
+        raise ValueError(f"{field_name} must be greater than zero")
+    return parsed
 
 
 def load_model_config(project_root: Path) -> dict[str, Any]:
@@ -126,14 +192,46 @@ def resolve_model_profile(
     if not model:
         raise ValueError(f"Model profile has no model: {selected}")
     if str(profile.get("type") or "").strip().lower() == "native":
-        return ResolvedModelProfile(selected, model, "", {}, (), {}, {})
+        return ResolvedModelProfile(
+            selected, model, "", {}, (), {}, {}, protocol="native", api_key_env=""
+        )
+    protocol = str(profile.get("protocol") or "openai_compatible").strip().lower()
+    if protocol not in PROFILE_PROTOCOLS:
+        raise ValueError(
+            f"Unsupported model profile protocol {protocol!r}; expected one of "
+            f"{', '.join(sorted(PROFILE_PROTOCOLS))}"
+        )
+    if agent and protocol != "openai_compatible":
+        adapter_protocol = model_adapter(agent).client_protocol
+        compatible_protocol = {
+            "openai_chat": "openai_compatible",
+            "openai_responses": "openai_responses",
+            "anthropic_messages": "anthropic_messages",
+        }[protocol]
+        if adapter_protocol != compatible_protocol:
+            raise ValueError(
+                f"Model profile {selected!r} exposes {protocol}, but Agent {agent!r} "
+                f"requires {adapter_protocol}; use an openai_compatible gateway profile"
+            )
     api_base = str(profile.get("api_base") or "").strip()
     openai_base, anthropic_base = _normalized_base_url(api_base)
 
-    key_name = str(profile.get("api_key_env") or "LITELLM_API_KEY").strip()
+    key_name = _validate_env_name(str(profile.get("api_key_env") or "LITELLM_API_KEY"))
+    context_window = _positive_int(
+        profile.get("context_window"), field_name="context_window", default=200000
+    )
+    max_output_tokens = _positive_int(
+        profile.get("max_output_tokens"), field_name="max_output_tokens", default=32000
+    )
     local_secrets = config.get("secrets") or {}
+    env_secrets = load_env_secrets(project_root)
     source_environment = environ if environ is not None else os.environ
-    api_key = str(source_environment.get(key_name) or local_secrets.get(key_name) or "").strip()
+    api_key = str(
+        source_environment.get(key_name)
+        or local_secrets.get(key_name)
+        or env_secrets.get(key_name)
+        or ""
+    ).strip()
     if not api_key:
         raise ValueError(
             f"Model profile {selected!r} requires {key_name}; set it in the environment "
@@ -176,7 +274,21 @@ def resolve_model_profile(
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": gateway_model,
         "MINIMAX_API_KEY": api_key,
         "MINIMAX_BASE_URL": openai_base,
+        "GOOGLE_API_KEY": api_key,
+        "GEMINI_API_KEY": api_key,
+        "GOOGLE_GEMINI_BASE_URL": openai_base,
+        "XAI_API_KEY": api_key,
+        "DEEPSEEK_API_KEY": api_key,
+        "DASHSCOPE_API_KEY": api_key,
+        "MOONSHOT_API_KEY": api_key,
+        "KIMI_API_KEY": api_key,
+        "ZHIPUAI_API_KEY": api_key,
+        "OPENROUTER_API_KEY": api_key,
+        "AGENT_EVAL_PROVIDER_PROTOCOL": protocol,
+        "AGENT_EVAL_PROVIDER_BASE_URL": api_base,
+        "AGENT_EVAL_PROVIDER_MODEL": gateway_model,
     }
+    environment[key_name] = api_key
     # Claude Code 2.1.248 --bare explicitly authenticates with
     # ANTHROPIC_API_KEY. Keep both Anthropic forms: LiteLLM accepts x-api-key
     # while older Claude releases may still prefer the bearer token variable.
@@ -194,7 +306,10 @@ def resolve_model_profile(
                         gateway_model: {
                             "name": gateway_model,
                             "reasoning": True,
-                            "limit": {"context": 200000, "output": 32000},
+                            "limit": {
+                                "context": context_window,
+                                "output": max_output_tokens,
+                            },
                         }
                     },
                 }
@@ -232,7 +347,17 @@ def resolve_model_profile(
             'model_providers.litellm.wire_api="responses"',
         )
     return ResolvedModelProfile(
-        selected, model, api_base, environment, agent_args, agent_models, gateway_models
+        selected,
+        model,
+        api_base,
+        environment,
+        agent_args,
+        agent_models,
+        gateway_models,
+        protocol=protocol,
+        api_key_env=key_name,
+        context_window=context_window,
+        max_output_tokens=max_output_tokens,
     )
 
 
@@ -266,6 +391,190 @@ def resolve_config_secret(
     return str(source_environment.get(name) or secrets.get(name) or env_secrets.get(name) or "").strip()
 
 
+def _profile_compatible_agents(protocol: str) -> list[str]:
+    if protocol == "openai_compatible":
+        return sorted(AGENT_MODEL_ADAPTERS)
+    expected = {
+        "openai_chat": "openai_compatible",
+        "openai_responses": "openai_responses",
+        "anthropic_messages": "anthropic_messages",
+    }.get(protocol)
+    return sorted(
+        name
+        for name, adapter in AGENT_MODEL_ADAPTERS.items()
+        if adapter.client_protocol == expected
+    )
+
+
+def list_model_profiles(project_root: Path) -> list[dict[str, Any]]:
+    """Return editable, non-secret provider profiles and their Agent coverage."""
+    config = load_model_config(project_root)
+    local = _read_yaml(project_root / "config" / "local.yaml")
+    profiles = config.get("profiles") or {}
+    local_profiles = local.get("profiles") or {}
+    if not isinstance(profiles, dict):
+        return []
+    result: list[dict[str, Any]] = []
+    for name, raw in sorted(profiles.items()):
+        if not isinstance(raw, dict):
+            continue
+        profile_type = str(raw.get("type") or "compatible").strip().lower()
+        protocol = "native" if profile_type == "native" else str(
+            raw.get("protocol") or "openai_compatible"
+        ).strip().lower()
+        key_name = "" if profile_type == "native" else str(
+            raw.get("api_key_env") or "LITELLM_API_KEY"
+        ).strip()
+        result.append(
+            {
+                "name": name,
+                "type": profile_type,
+                "model": str(raw.get("model") or ""),
+                "api_base": str(raw.get("api_base") or ""),
+                "api_key_env": key_name,
+                "api_key_configured": bool(
+                    key_name and resolve_config_secret(project_root, key_name)
+                ),
+                "protocol": protocol,
+                "context_window": _positive_int(
+                    raw.get("context_window"), field_name="context_window", default=200000
+                ),
+                "max_output_tokens": _positive_int(
+                    raw.get("max_output_tokens"),
+                    field_name="max_output_tokens",
+                    default=32000,
+                ),
+                "agent_models": dict(raw.get("agent_models") or {}),
+                "gateway_models": dict(raw.get("gateway_models") or {}),
+                "compatible_agents": (
+                    [] if protocol == "native" else _profile_compatible_agents(protocol)
+                ),
+                "supports_all_evaluation_agents": (
+                    protocol == "openai_compatible"
+                ),
+                "source": "local" if name in local_profiles else "built_in",
+                "is_default": name == str(config.get("default_profile") or ""),
+            }
+        )
+    return result
+
+
+def _normalize_agent_mapping(value: object, *, field_name: str) -> dict[str, str]:
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{field_name} must be an object")
+    result: dict[str, str] = {}
+    for raw_name, raw_model in value.items():
+        name = str(raw_name).strip().lower()
+        model = str(raw_model).strip()
+        adapter = model_adapter(name)
+        if not adapter.evaluation_supported:
+            raise ValueError(f"{field_name} cannot target excluded Agent {name!r}")
+        if model:
+            result[name] = model
+    return result
+
+
+def _store_secret(project_root: Path, name: str, value: str) -> None:
+    path = project_root / "config" / "secrets.env"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    output: list[str] = []
+    replaced = False
+    for line in lines:
+        if re.match(rf"^\s*{re.escape(name)}\s*=", line):
+            if not replaced:
+                output.append(f"{name}={value}")
+                replaced = True
+        else:
+            output.append(line)
+    if not replaced:
+        output.append(f"{name}={value}")
+    _atomic_write(path, "\n".join(output).rstrip() + "\n")
+
+
+def save_model_profile(
+    project_root: Path,
+    name: str,
+    values: Mapping[str, object],
+    *,
+    api_key: str | None = None,
+    make_default: bool = False,
+) -> dict[str, Any]:
+    """Create/update an ignored local provider profile with atomic writes."""
+    normalized_name = _validate_profile_name(name)
+    model = str(values.get("model") or "").strip()
+    if not model:
+        raise ValueError("model cannot be empty")
+    api_base = str(values.get("api_base") or "").strip()
+    _normalized_base_url(api_base)
+    protocol = str(values.get("protocol") or "openai_compatible").strip().lower()
+    if protocol not in PROFILE_PROTOCOLS:
+        raise ValueError(f"Unsupported protocol: {protocol}")
+    key_name = _validate_env_name(
+        str(values.get("api_key_env") or "LITELLM_API_KEY")
+    )
+    profile: dict[str, Any] = {
+        "type": "compatible",
+        "model": model,
+        "api_base": api_base.rstrip("/"),
+        "api_key_env": key_name,
+        "protocol": protocol,
+        "context_window": _positive_int(
+            values.get("context_window"), field_name="context_window", default=200000
+        ),
+        "max_output_tokens": _positive_int(
+            values.get("max_output_tokens"),
+            field_name="max_output_tokens",
+            default=32000,
+        ),
+    }
+    agent_models = _normalize_agent_mapping(
+        values.get("agent_models"), field_name="agent_models"
+    )
+    gateway_models = _normalize_agent_mapping(
+        values.get("gateway_models"), field_name="gateway_models"
+    )
+    if agent_models:
+        profile["agent_models"] = agent_models
+    if gateway_models:
+        profile["gateway_models"] = gateway_models
+
+    path = project_root / "config" / "local.yaml"
+    local = _read_yaml(path)
+    profiles = local.setdefault("profiles", {})
+    if not isinstance(profiles, dict):
+        raise ValueError("Local profiles configuration must be an object")
+    profiles[normalized_name] = profile
+    if make_default:
+        local["default_profile"] = normalized_name
+    _write_yaml(path, local)
+    if api_key is not None and api_key.strip():
+        _store_secret(project_root, key_name, api_key.strip())
+    return next(
+        item for item in list_model_profiles(project_root) if item["name"] == normalized_name
+    )
+
+
+def delete_model_profile(project_root: Path, name: str) -> bool:
+    """Delete a local profile/override; built-in profiles themselves are immutable."""
+    normalized_name = _validate_profile_name(name)
+    path = project_root / "config" / "local.yaml"
+    local = _read_yaml(path)
+    profiles = local.get("profiles") or {}
+    if not isinstance(profiles, dict) or normalized_name not in profiles:
+        return False
+    del profiles[normalized_name]
+    if profiles:
+        local["profiles"] = profiles
+    else:
+        local.pop("profiles", None)
+    if local.get("default_profile") == normalized_name:
+        local.pop("default_profile", None)
+    _write_yaml(path, local)
+    return True
+
+
 def describe_model_config(project_root: Path) -> dict[str, Any]:
     config = load_model_config(project_root)
     default_name = str(config.get("default_profile") or "").strip()
@@ -276,7 +585,6 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
         if isinstance(default, dict)
         else "LITELLM_API_KEY"
     )
-    secrets = config.get("secrets") or {}
     profile_models = {
         name: value.get("model")
         for name, value in profiles.items()
@@ -287,7 +595,7 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
         "default_model": default.get("model") if isinstance(default, dict) else None,
         "api_base": default.get("api_base") if isinstance(default, dict) else None,
         "api_key_env": key_name,
-        "api_key_configured": bool(os.environ.get(key_name) or secrets.get(key_name)),
+        "api_key_configured": bool(resolve_config_secret(project_root, key_name)),
         "profiles": sorted(profiles) if isinstance(profiles, dict) else [],
         "profile_models": profile_models,
         "profile_types": {
@@ -295,6 +603,16 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
             for name, value in profiles.items()
             if isinstance(value, dict)
         } if isinstance(profiles, dict) else {},
+        "profile_protocols": {
+            name: (
+                "native" if str(value.get("type") or "").lower() == "native"
+                else str(value.get("protocol") or "openai_compatible")
+            )
+            for name, value in profiles.items()
+            if isinstance(value, dict)
+        } if isinstance(profiles, dict) else {},
+        "supported_profile_protocols": sorted(PROFILE_PROTOCOLS),
+        "model_adapter_agent_count": len(AGENT_MODEL_ADAPTERS),
     }
 
 
@@ -416,8 +734,8 @@ def write_openclaw_profile_config(
                             "input": ["text"],
                             "compat": {"supportsUsageInStreaming": True},
                             "reasoning": True,
-                            "contextWindow": 200000,
-                            "maxTokens": 32000,
+                            "contextWindow": profile.context_window,
+                            "maxTokens": profile.max_output_tokens,
                         }
                     ],
                 }
@@ -457,8 +775,8 @@ def write_codebuddy_profile_config(
                 "vendor": "LiteLLM",
                 "url": endpoint or f"{openai_base}/chat/completions",
                 "apiKey": "${LITELLM_API_KEY}",
-                "maxInputTokens": 200000,
-                "maxOutputTokens": 32000,
+                "maxInputTokens": profile.context_window,
+                "maxOutputTokens": profile.max_output_tokens,
                 "supportsToolCall": True,
                 "supportsImages": True,
                 "supportsReasoning": True,

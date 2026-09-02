@@ -4,6 +4,8 @@ import os
 import shutil
 from pathlib import Path
 
+from agent_eval.agent_adapters import model_adapter
+
 
 SUPPORTED_AGENTS = (
     "antigravity", "claude", "codebuddy", "codex", "copilot", "cursor",
@@ -127,6 +129,7 @@ def skill_target(agent: str, skill_name: str) -> str:
 
 def agent_capabilities(agent: str) -> dict[str, object]:
     normalized = normalize_agent(agent)
+    adapter = model_adapter(normalized)
     model_selection = normalized not in RUNTIME_MANAGED_MODEL_AGENTS
     skill_injection = normalized not in UNSUPPORTED_SKILL_INJECTION_AGENTS
     return {
@@ -137,6 +140,7 @@ def agent_capabilities(agent: str) -> dict[str, object]:
         "skill_injection": skill_injection,
         "skill_root": SKILL_ROOTS.get(normalized) if skill_injection else None,
         "specified_model_and_skill_evaluation": model_selection and skill_injection,
+        "model_adapter": adapter.public_dict(),
     }
 
 

@@ -2,6 +2,8 @@ import os
 
 import pytest
 
+from agent_eval.agent_adapters import AGENT_MODEL_ADAPTERS, EXCLUDED_AGENT_ADAPTERS
+
 from agent_eval.runtime import (
     RUNTIME_MANAGED_MODEL_AGENTS,
     SUPPORTED_AGENTS,
@@ -52,6 +54,22 @@ def test_every_supported_agent_has_an_explicit_evaluation_capability():
                 agent,
                 require_model_selection=agent not in RUNTIME_MANAGED_MODEL_AGENTS,
             )
+
+
+def test_model_adapter_registry_has_exactly_the_21_supported_agents():
+    supported_by_capability = {
+        agent
+        for agent in SUPPORTED_AGENTS
+        if agent_capabilities(agent)["specified_model_and_skill_evaluation"]
+    }
+
+    assert len(AGENT_MODEL_ADAPTERS) == 21
+    assert set(AGENT_MODEL_ADAPTERS) == supported_by_capability
+    assert set(EXCLUDED_AGENT_ADAPTERS) == set(SUPPORTED_AGENTS) - supported_by_capability
+    assert all(
+        agent_capabilities(agent)["model_adapter"]["evaluation_supported"]
+        for agent in AGENT_MODEL_ADAPTERS
+    )
 
 
 @pytest.mark.parametrize("agent", sorted(UNSUPPORTED_SKILL_INJECTION_AGENTS))

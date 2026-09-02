@@ -111,3 +111,33 @@ def test_batch_queues_unique_agent_model_combinations(monkeypatch):
     assert response.json() == {"batch_id": "batch-test", "total_jobs": 2}
     assert captured["name"] == "matrix"
     assert [item["model"] for item in captured["requests"]] == ["gpt-5.4", "gpt-5.5"]
+
+
+def test_model_profile_api_keeps_api_keys_out_of_responses(tmp_path, monkeypatch):
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "models.yaml").write_text(
+        "default_profile: native\nprofiles:\n  native:\n    type: native\n    model: gpt-test\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.api.routes_skill.BACKEND_ROOT", tmp_path)
+
+    response = client.put(
+        "/api/model-profiles/custom_gateway",
+        json={
+            "model": "provider/model",
+            "api_base": "https://gateway.example/v1",
+            "api_key_env": "CUSTOM_GATEWAY_KEY",
+            "api_key": "api-secret",
+            "protocol": "openai_compatible",
+            "agent_models": {"claude": "sonnet"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["supports_all_evaluation_agents"] is True
+    assert "api-secret" not in response.text
+    listing = client.get("/api/model-profiles")
+    assert listing.status_code == 200
+    assert "api-secret" not in listing.text
+    assert client.delete("/api/model-profiles/custom_gateway").json()["removed"] is True
