@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/multica-ai/multica/server/pkg/agent"
 )
 
 func TestExactPromptSingleMessageIsUnchanged(t *testing.T) {
@@ -25,6 +27,15 @@ func TestExactPromptPreservesMultiMessageOrder(t *testing.T) {
 	})
 	if got != "[SYSTEM]\nrules\n\n[USER]\ntask" {
 		t.Fatalf("unexpected serialization: %q", got)
+	}
+}
+
+func TestStatusFramesAreNotAssistantTranscriptMessages(t *testing.T) {
+	if includeInTranscript(agent.Message{Type: agent.MessageStatus, Status: "running"}) {
+		t.Fatal("status frame must not be treated as assistant output")
+	}
+	if !includeInTranscript(agent.Message{Type: agent.MessageText, Content: "done"}) {
+		t.Fatal("text response must remain in the transcript")
 	}
 }
 

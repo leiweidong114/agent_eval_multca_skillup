@@ -186,6 +186,13 @@ func appendTerminalMessages(
 	return transcript
 }
 
+func includeInTranscript(message agent.Message) bool {
+	// Runtime status frames are transport progress, not assistant output. Keeping
+	// them in the transcript lets Skill-Up select the first "running" frame as
+	// the case response even when SessionResult.FinalMessage is correct.
+	return message.Type != agent.MessageStatus
+}
+
 func main() {
 	var inputPath, outputPath, agentName, model, executable string
 	var timeoutSeconds, maxTurns int
@@ -265,6 +272,9 @@ func main() {
 	messageCounts := map[string]int{}
 	for message := range session.Messages {
 		messageCounts[string(message.Type)]++
+		if !includeInTranscript(message) {
+			continue
+		}
 		if message.Type == agent.MessageToolUse {
 			transcript = append(transcript, transcriptMessage{
 				Role: "tool_call", Turn: 1,
