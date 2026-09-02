@@ -21,8 +21,8 @@ def test_health_and_discovery_endpoints():
     assert skills.status_code == 200
     model_config = client.get("/api/model-config")
     assert model_config.status_code == 200
-    assert model_config.json()["llm_judge"]["profile"] == "litellm_opencode_go_luna"
-    assert model_config.json()["llm_judge"]["model"] == "opencode-go/gpt-5.6-luna"
+    assert model_config.json()["llm_judge"]["profile"] == "litellm_opencode_go_minimax_2_7"
+    assert model_config.json()["llm_judge"]["model"] == "opencode-go/minimax-m2.7"
 
 
 def test_database_health_never_exposes_credentials_or_crashes():
