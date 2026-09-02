@@ -210,11 +210,6 @@ def resolve_model_profile(
     elif agent == "codex":
         # Codex with an existing ChatGPT login otherwise keeps using the
         # built-in OpenAI provider even when OPENAI_BASE_URL is set.
-        wire_api = str(profile.get("codex_wire_api") or "responses").strip().lower()
-        if wire_api not in {"responses", "chat"}:
-            raise ValueError(
-                f"Unsupported codex_wire_api {wire_api!r} in model profile {selected!r}"
-            )
         agent_args = (
             "-c",
             'model_provider="litellm"',
@@ -225,7 +220,7 @@ def resolve_model_profile(
             "-c",
             'model_providers.litellm.env_key="LITELLM_API_KEY"',
             "-c",
-            f'model_providers.litellm.wire_api="{wire_api}"',
+            'model_providers.litellm.wire_api="responses"',
         )
     return ResolvedModelProfile(
         selected, model, api_base, environment, agent_args, agent_models, gateway_models
