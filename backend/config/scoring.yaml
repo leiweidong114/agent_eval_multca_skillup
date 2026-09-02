@@ -26,10 +26,10 @@ process_rules:
 llm_judge:
   enabled: true
   required: false
-  # This is the strongest LiteLLM profile currently declared by the project.
+  # Use the strongest OpenCode deployment currently declared by the project.
   # Override it in config/local.yaml without changing committed configuration.
-  profile: litellm_deepseek_pro
-  model: deepseek-v4-pro
+  profile: litellm_opencode_go_luna
+  model: opencode-go/gpt-5.6-luna
   timeout_seconds: 120
   max_evidence_chars: 60000
   temperature: 0

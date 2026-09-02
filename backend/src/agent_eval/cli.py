@@ -179,13 +179,18 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             "ANTHROPIC_AUTH_TOKEN", "MINIMAX_API_KEY",
         ):
             env[key_name] = trace_key.key
-    with tempfile.TemporaryDirectory(prefix="agent-connectivity-") as temp:
+    # Some Windows Agent CLIs keep their workspace directory handle open for
+    # a short time after exit. Do not let best-effort temp cleanup replace the
+    # real connectivity result with a recursive PermissionError traceback.
+    with tempfile.TemporaryDirectory(
+        prefix="agent-connectivity-", ignore_cleanup_errors=True
+    ) as temp:
         root = Path(temp)
-        if runtime_agent == "claude":
+        if profile.api_base and runtime_agent == "claude":
             # Keep user-level Claude settings (especially env overrides and
             # apiKeyHelper) out of this gateway connectivity probe.
             env["CLAUDE_CONFIG_DIR"] = str(root / "claude-config")
-        if runtime_agent == "codebuddy":
+        if profile.api_base and runtime_agent == "codebuddy":
             codebuddy_config = root / "codebuddy-config"
             write_codebuddy_profile_config(codebuddy_config / "models.json", profile)
             env["CODEBUDDY_CONFIG_DIR"] = str(codebuddy_config)
@@ -198,7 +203,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             }),
             encoding="utf-8",
         )
-        if runtime_agent == "openclaw":
+        if profile.api_base and runtime_agent == "openclaw":
             config_path = root / "openclaw.json"
             write_openclaw_profile_config(config_path, profile)
             env["OPENCLAW_CONFIG_PATH"] = str(config_path)

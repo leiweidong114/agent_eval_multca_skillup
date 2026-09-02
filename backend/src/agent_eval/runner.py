@@ -465,15 +465,15 @@ def run_evaluation(
     output = result_root / "skill-up"
     env = os.environ.copy()
     env.update(resolved_profile.environment)
-    if agent == "claude":
+    if resolved_profile.api_base and agent == "claude":
         claude_config = result_root / "runtime" / "claude-config"
         claude_config.mkdir(parents=True, exist_ok=True)
         env["CLAUDE_CONFIG_DIR"] = str(claude_config)
-    if agent == "codebuddy":
+    if resolved_profile.api_base and agent == "codebuddy":
         codebuddy_config = result_root / "runtime" / "codebuddy-config"
         write_codebuddy_profile_config(codebuddy_config / "models.json", resolved_profile)
         env["CODEBUDDY_CONFIG_DIR"] = str(codebuddy_config)
-    if agent == "openclaw":
+    if resolved_profile.api_base and agent == "openclaw":
         openclaw_config = result_root / "runtime" / "openclaw.json"
         openclaw_workspace = result_root / "runtime" / "openclaw-workspace"
         _copy_skill(staged_skill, openclaw_workspace / "skills" / _slug(source_skill.name))
