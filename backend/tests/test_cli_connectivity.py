@@ -27,6 +27,10 @@ def test_agents_command_defaults_to_available_executables_only(monkeypatch, caps
         cli.shutil, "which", lambda command: "codex.exe" if command == "codex" else None
     )
     monkeypatch.setattr(
+        cli, "_probe_local_agent",
+        lambda executable: {"available": True, "version": "test", "exit_code": 0, "error": None},
+    )
+    monkeypatch.setattr(
         cli, "agent_capabilities",
         lambda agent: {"specified_model_and_skill_evaluation": True},
     )

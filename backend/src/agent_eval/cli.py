@@ -510,6 +510,31 @@ def _unique_agents(values: list[str], workers: int) -> list[str]:
     return agents
 
 
+def _probe_local_agent(executable: str, *, timeout: float = 8.0) -> dict[str, object]:
+    """Check that a discovered CLI can actually start, not merely exist on PATH."""
+    try:
+        process = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            encoding="utf-8",
+            errors="replace",
+        )
+        output = (process.stdout or process.stderr or "").strip().splitlines()
+        return {
+            "available": process.returncode == 0,
+            "version": output[0][:300] if output else None,
+            "exit_code": process.returncode,
+            "error": None if process.returncode == 0 else (output[0][:500] if output else None),
+        }
+    except subprocess.TimeoutExpired:
+        return {"available": False, "version": None, "exit_code": None, "error": "version probe timed out"}
+    except OSError as exc:
+        return {"available": False, "version": None, "exit_code": None, "error": str(exc)}
+
+
 def _prompt_batch(args: argparse.Namespace) -> dict[str, object]:
     agents = _unique_agents(args.agent, args.workers)
     rows: list[dict[str, object]] = []
@@ -646,11 +671,19 @@ def main() -> None:
             detected = shutil.which(command)
             if detected is None and not args.all:
                 continue
+            availability = (
+                _probe_local_agent(detected)
+                if detected is not None
+                else {"available": False, "version": None, "exit_code": None, "error": "not found"}
+            )
+            if not availability["available"] and not args.all:
+                continue
             result.append(
                 {
                     "agent": agent,
                     "default_command": command,
                     "detected_executable": detected,
+                    "availability": availability,
                     "capabilities": agent_capabilities(agent),
                     "evaluation_contract": describe_agent_contract(agent),
                 }

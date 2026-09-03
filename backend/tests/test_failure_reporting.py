@@ -56,6 +56,17 @@ def test_responses_404_is_classified_as_agent_protocol_incompatible():
     assert "Responses API" in failure["suggested_action"]
 
 
+def test_justdo_not_running_is_actionable():
+    failure = describe_evaluation_failure(
+        "JustDo is not running. Start JustDo and keep it open or in the tray. exit status 69",
+        returncode=69,
+    )
+
+    assert failure is not None
+    assert failure["category"] == "agent_not_running"
+    assert "启动 JustDo" in failure["suggested_action"]
+
+
 def test_judge_rate_limit_preserves_upstream_reason(monkeypatch):
     request = httpx.Request("POST", "http://gateway/v1/chat/completions")
     response = httpx.Response(
