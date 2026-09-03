@@ -1,5 +1,7 @@
 # 指定 Agent、模型和 Prompt
 
+命令默认使用统一 LiteLLM 网关，无需再提供 `--profile`。真实密钥可放在 Git 忽略的 `backend/config/litellm.env`，也兼容现有 `backend/config/secrets.env`。
+
 ## 1. 同步 LiteLLM 模型目录
 
 在项目根目录执行：
@@ -29,7 +31,6 @@ python -m agent_eval.cli models --prefix glm-4.7
 ```powershell
 python -m agent_eval.cli check-agent `
   --agent codex `
-  --profile litellm_glm_4_7 `
   --model glm-4.7 `
   --prompt "只回复 COMMAND_OK" `
   --timeout 120 `

@@ -89,12 +89,13 @@ def test_multi_commands_parse_repeated_agents():
         [
             "run-multi", "--skill", "example-marker",
             "--agent", "codex", "--agent", "opencode",
-            "--profile", "litellm_glm_4_7", "--model", "glm-4.7",
+            "--model", "glm-4.7",
             "--prompt", "HI",
         ]
     )
 
     assert args.agent == ["codex", "opencode"]
+    assert args.profile is None
     assert args.workers == 2
 
 

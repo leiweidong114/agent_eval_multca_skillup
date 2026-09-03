@@ -57,7 +57,13 @@ def describe_evaluation_failure(
                 inferred_status = code
                 break
 
-    if any(marker in lowered for marker in ("usage limit", "usage has reached", "quota exceeded", "insufficient quota")):
+    if any(
+        marker in lowered
+        for marker in (
+            "usage limit", "usage has reached", "quota exceeded", "insufficient quota",
+            "余额不足", "无可用资源包", "请充值",
+        )
+    ):
         category = "gateway_quota_exhausted"
         title = "模型使用额度已达上限"
         detail = "上游模型账户的可用额度或时间窗口已经用完。"
@@ -65,7 +71,9 @@ def describe_evaluation_failure(
             detail = "OpenCode Go 的 5 小时模型使用额度已经用完。"
         if reset_after:
             detail += f" 服务提示预计 {reset_after} 后重置。"
-        action = "等待额度重置，或在 OpenCode Go 账户启用可用余额后重试。"
+        action = "等待额度重置，或由管理员补充上游模型账户额度/资源包后重试。"
+        if "opencode" in lowered or "gousagelimiterror" in lowered:
+            action = "等待额度重置，或在 OpenCode Go 账户启用可用余额后重试。"
         retryable = bool(reset_after)
     elif inferred_status == 429 or any(marker in lowered for marker in ("rate limit", "too many requests", "token plan")):
         category, title = "gateway_rate_limited", "模型服务请求过于频繁"

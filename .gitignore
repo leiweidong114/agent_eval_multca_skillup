@@ -6,6 +6,7 @@ evaluation_results/
 backend/evaluation_results/
 backend/config/local.yaml
 backend/config/secrets.env
+backend/config/litellm.env
 backend/schematic_projects/
 backend/skills/.registry/
 backend/model_eval_data/

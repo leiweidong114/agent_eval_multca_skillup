@@ -55,7 +55,7 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
     if not pipeline:
         parser.add_argument("--skill", required=True)
     parser.add_argument("--agent", action="append", required=True)
-    parser.add_argument("--profile", required=True)
+    parser.add_argument("--profile", help=argparse.SUPPRESS)
     parser.add_argument("--model", required=True)
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--case", action="append", default=[])
@@ -87,8 +87,8 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--task-id", help="Optional caller-provided unique task id")
     run.add_argument("--client-task-id", help="Optional business-side correlation id")
     run.add_argument("--agent", required=True)
-    run.add_argument("--model", help="Override the model from the selected profile")
-    run.add_argument("--profile", help="Model profile from config/models.yaml")
+    run.add_argument("--model", required=True, help="LiteLLM model id")
+    run.add_argument("--profile", help=argparse.SUPPRESS)
     run.add_argument("--case", action="append", default=[])
     run.add_argument("--prompt")
     run.add_argument("--must-contain", action="append", default=[])
@@ -145,8 +145,8 @@ def _parser() -> argparse.ArgumentParser:
         "check-agent", help="Test one Agent/model connection without running an evaluation"
     )
     check.add_argument("--agent", required=True)
-    check.add_argument("--profile", required=True)
-    check.add_argument("--model", help="Override the profile model")
+    check.add_argument("--profile", help=argparse.SUPPRESS)
+    check.add_argument("--model", required=True, help="LiteLLM model id")
     check.add_argument("--agent-executable")
     check.add_argument("--timeout", type=int, default=120)
     check.add_argument(
@@ -164,7 +164,7 @@ def _parser() -> argparse.ArgumentParser:
         "prompt", help="Send the same prompt to one or more Agents concurrently"
     )
     prompt.add_argument("--agent", action="append", required=True)
-    prompt.add_argument("--profile", required=True)
+    prompt.add_argument("--profile", help=argparse.SUPPRESS)
     prompt.add_argument("--model", required=True)
     prompt.add_argument("--prompt", required=True)
     prompt.add_argument("--workers", type=int, default=2)
@@ -446,7 +446,6 @@ def _prompt_batch(args: argparse.Namespace) -> dict[str, object]:
     return {
         "status": "completed" if passed == len(rows) else ("partial_failed" if passed else "failed"),
         "prompt": args.prompt,
-        "profile": args.profile,
         "model": args.model,
         "workers": min(args.workers, len(agents)),
         "passed": passed,
@@ -536,7 +535,6 @@ def _evaluation_batch(
         "evaluation_type": evaluation_type,
         "skills": selected_skills,
         "prompt": args.prompt,
-        "profile": args.profile,
         "model": args.model,
         "workers": min(args.workers, len(agents)),
         "passed": passed,

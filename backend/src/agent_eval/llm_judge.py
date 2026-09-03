@@ -93,7 +93,7 @@ def run_llm_judge(
     config = scoring_config.get("llm_judge") or {}
     if not config.get("enabled", False):
         return {"status": "disabled"}
-    profile_name = str(config.get("profile") or "litellm_deepseek_pro")
+    profile_name = str(config.get("profile") or "").strip() or None
     try:
         profile = resolve_model_profile(
             project_root,
@@ -101,7 +101,7 @@ def run_llm_judge(
             model_override=str(config.get("model") or "").strip() or None,
         )
         if not profile.api_base:
-            raise ValueError("LLM judge profile must use a LiteLLM HTTP endpoint")
+            raise ValueError("LLM judge must use the unified LiteLLM HTTP endpoint")
         max_chars = int(config.get("max_evidence_chars") or 60000)
         evidence_text = json.dumps(evidence, ensure_ascii=False, default=str)
         if len(evidence_text) > max_chars:
@@ -134,7 +134,7 @@ def run_llm_judge(
         result = _json_object(content)
         return {
             "status": "completed",
-            "profile": profile.name,
+            "gateway": profile.name,
             "model": profile.model,
             "dimensions": result["dimensions"],
             "risks": result.get("risks") or [],
@@ -160,6 +160,6 @@ def run_llm_judge(
             "status": "unavailable",
             "error": (failure or {}).get("detail") or str(exc),
             "failure": failure,
-            "profile": profile_name,
+            "gateway": profile_name or "litellm",
             "model": str(config.get("model") or "") or None,
         }

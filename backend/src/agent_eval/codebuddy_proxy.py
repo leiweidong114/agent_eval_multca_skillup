@@ -18,6 +18,9 @@ NON_RETRYABLE_RATE_LIMIT_MARKERS = (
     b"gousagelimiterror",
     b"insufficient_quota",
     b"quota exceeded",
+    "余额不足".encode("utf-8"),
+    "无可用资源包".encode("utf-8"),
+    "请充值".encode("utf-8"),
 )
 HOP_BY_HOP_HEADERS = frozenset(
     {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",

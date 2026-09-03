@@ -1,5 +1,19 @@
 default_profile: native_codex
 
+# Default user-facing gateway. CLI commands do not require --profile.
+litellm:
+  model: glm-4.7
+  api_base: http://8.137.196.46/v1
+  api_key_env: LITELLM_API_KEY
+  reasoning: true
+  agent_models:
+    claude: claude-sonnet-4-6
+    codebuddy: custom-local:glm-4.7
+    openclaw: main
+  gateway_models:
+    claude: glm-4.7-anthropic
+    opencode: glm-4.7
+
 profiles:
   native_codex:
     type: native

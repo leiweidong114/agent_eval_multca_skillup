@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "refreshed_at": "2026-09-03T03:59:31.328768+00:00",
+  "refreshed_at": "2026-09-03T09:39:04.876500+00:00",
   "source": "LiteLLM /v1/models",
   "catalog_visible_only": true,
   "note": "Catalog visibility does not guarantee inference availability; use agent-eval check-agent for a live request and database verification.",
@@ -9,587 +9,236 @@
     {
       "id": "deepseek",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "glm-4.7",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_glm_4_7"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "glm-4.7-anthropic",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "glm-4.7-no-thinking",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": false,
+      "reasoning": false
     },
     {
       "id": "MiniMax-M2.7",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "MiniMax-M3",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_minimax"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/deepseek-v4-flash",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/deepseek-v4-flash-vision-exp",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/deepseek-v4-pro",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/glm-5",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/glm-5.1",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/glm-5.2",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/glm-5.3",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/glm-5.3-flash",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/gpt-5.6-luna",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/grok-4.5",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/grok-4.6",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_opencode_go_grok"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/hy3",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/hy3-preview",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/hy4-preview",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/kimi-k2.5",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/kimi-k2.6",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/kimi-k2.7-code",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/kimi-k3",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/longcat-2.0",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_opencode_go_chat"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/mimo-v2-omni",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/mimo-v2-pro",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/mimo-v2.5",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/mimo-v2.5-pro",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/minimax-m2.5",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/minimax-m2.7",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_opencode_go_minimax_2_7"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/minimax-m3",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_opencode_go"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/muse-spark-1.2-contributor",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/qwen3.5-plus",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/qwen3.6-plus",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/qwen3.7-max",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/qwen3.7-plus",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/qwen3.8-flash",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     },
     {
       "id": "opencode-go/qwen3.8-max",
       "owned_by": "openai",
-      "profiles": [
-        "litellm_deepseek_flash",
-        "litellm_deepseek_pro",
-        "litellm_glm_4_7",
-        "litellm_minimax",
-        "litellm_opencode_go",
-        "litellm_opencode_go_chat",
-        "litellm_opencode_go_grok",
-        "litellm_opencode_go_minimax_2_7"
-      ],
-      "profile": "litellm_deepseek_flash"
+      "enabled": true,
+      "reasoning": true
     }
   ],
   "errors": []

@@ -33,6 +33,18 @@ def test_failure_reporting_redacts_api_keys():
     assert "sk-secret-value" not in failure["technical_detail"]
 
 
+def test_chinese_balance_error_is_classified_as_quota_exhausted():
+    failure = describe_evaluation_failure(
+        '{"error":{"message":"余额不足或无可用资源包,请充值。"}}',
+        status_code=429,
+    )
+
+    assert failure is not None
+    assert failure["category"] == "gateway_quota_exhausted"
+    assert failure["retryable"] is False
+    assert "额度/资源包" in failure["suggested_action"]
+
+
 def test_judge_rate_limit_preserves_upstream_reason(monkeypatch):
     request = httpx.Request("POST", "http://gateway/v1/chat/completions")
     response = httpx.Response(

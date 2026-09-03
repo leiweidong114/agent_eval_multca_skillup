@@ -21,7 +21,8 @@ def test_health_and_discovery_endpoints():
     assert skills.status_code == 200
     model_config = client.get("/api/model-config")
     assert model_config.status_code == 200
-    assert model_config.json()["llm_judge"]["profile"] == "litellm_glm_4_7"
+    assert "profile" not in model_config.json()["llm_judge"]
+    assert model_config.json()["llm_judge"]["model"] == "glm-4.7"
     assert model_config.json()["llm_judge"]["model"] == "glm-4.7"
 
 

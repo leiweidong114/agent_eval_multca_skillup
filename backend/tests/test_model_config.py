@@ -73,7 +73,67 @@ def test_resolves_default_litellm_profile_and_agent_environment(tmp_path):
         'model_providers.litellm.env_key="LITELLM_API_KEY"',
         "-c",
         'model_providers.litellm.wire_api="responses"',
+        "-c",
+        'model_reasoning_effort="high"',
     )
+
+
+def test_unified_litellm_gateway_needs_no_profile_and_enables_reasoning(tmp_path):
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "models.yaml").write_text(
+        """\
+litellm:
+  model: glm-4.7
+  api_base: http://127.0.0.1:4000/v1
+  api_key_env: TEST_LITELLM_KEY
+  reasoning: true
+  agent_models:
+    claude: claude-sonnet-4-6
+  gateway_models:
+    claude: glm-4.7-anthropic
+    opencode: glm-4.7
+profiles: {}
+""",
+        encoding="utf-8",
+    )
+
+    profile = resolve_model_profile(
+        tmp_path,
+        model_override="glm-4.7",
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+        agent="opencode",
+    )
+
+    assert profile.name == "litellm"
+    assert profile.model_for_agent("opencode") == "litellm/glm-4.7"
+    assert profile.environment["AGENT_EVAL_REASONING_ENABLED"] == "true"
+    assert '"reasoning": true' in profile.environment["OPENCODE_CONFIG_CONTENT"]
+    description = describe_model_config(tmp_path)
+    assert description["configuration_mode"] == "unified_litellm"
+    assert description["gateway"] == "litellm"
+    assert description["reasoning_enabled"] is True
+    assert "profiles" not in description
+    assert "default_profile" not in description
+
+
+def test_unified_litellm_reads_ignored_env_file_and_rejects_no_thinking(tmp_path):
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "models.yaml").write_text(
+        "litellm:\n  model: glm-4.7\n  api_base: http://fallback.invalid/v1\n",
+        encoding="utf-8",
+    )
+    (config / "litellm.env").write_text(
+        "LITELLM_API_BASE=http://127.0.0.1:4000/v1\nLITELLM_API_KEY=virtual-key\n",
+        encoding="utf-8",
+    )
+
+    profile = resolve_model_profile(tmp_path, model_override="glm-4.7", environ={})
+
+    assert profile.api_base == "http://127.0.0.1:4000/v1"
+    with pytest.raises(ValueError, match="reasoning enabled"):
+        resolve_model_profile(tmp_path, model_override="glm-4.7-no-thinking", environ={})
 
 
 def test_claude_uses_bare_mode_and_bearer_auth(tmp_path):
@@ -260,6 +320,7 @@ def test_refreshes_and_loads_non_secret_litellm_catalog(tmp_path, monkeypatch):
     assert snapshot["model_count"] == 1
     assert snapshot["catalog_visible_only"] is True
     assert load_litellm_model_catalog(tmp_path)["models"][0]["id"] == "gateway/model-a"
+    assert "profile" not in snapshot["models"][0]
     assert "virtual-key" not in stored
 
 

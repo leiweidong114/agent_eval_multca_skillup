@@ -181,17 +181,29 @@ def resolve_model_profile(
     environ: Mapping[str, str] | None = None,
 ) -> ResolvedModelProfile:
     config = load_model_config(project_root)
-    selected = profile_name or str(config.get("default_profile") or "").strip()
+    unified_litellm = config.get("litellm")
     profiles = config.get("profiles") or {}
-    if not selected or not isinstance(profiles, dict) or selected not in profiles:
-        raise ValueError(f"Unknown or missing model profile: {selected or '<empty>'}")
-    profile = profiles[selected]
+    if profile_name in (None, "litellm") and isinstance(unified_litellm, dict):
+        selected = "litellm"
+        profile = unified_litellm
+    else:
+        selected = profile_name or str(config.get("default_profile") or "").strip()
+        if not selected or not isinstance(profiles, dict) or selected not in profiles:
+            raise ValueError(f"Unknown or missing model profile: {selected or '<empty>'}")
+        profile = profiles[selected]
     if not isinstance(profile, dict):
         raise ValueError(f"Model profile must be a mapping: {selected}")
 
     model = (model_override or str(profile.get("model") or "")).strip()
     if not model:
         raise ValueError(f"Model profile has no model: {selected}")
+    if selected == "litellm" and "no-thinking" in model.lower():
+        raise ValueError(
+            "The unified LiteLLM gateway keeps reasoning enabled; select a reasoning model"
+        )
+    reasoning_enabled = bool(profile.get("reasoning", True))
+    if selected == "litellm" and not reasoning_enabled:
+        raise ValueError("The unified LiteLLM gateway must keep reasoning enabled")
     if str(profile.get("type") or "").strip().lower() == "native":
         return ResolvedModelProfile(
             selected, model, "", {}, (), {}, {}, protocol="native", api_key_env=""
@@ -214,7 +226,16 @@ def resolve_model_profile(
                 f"Model profile {selected!r} exposes {protocol}, but Agent {agent!r} "
                 f"requires {adapter_protocol}; use an openai_compatible gateway profile"
             )
-    api_base = str(profile.get("api_base") or "").strip()
+    local_secrets = config.get("secrets") or {}
+    env_secrets = load_env_secrets(project_root)
+    source_environment = environ if environ is not None else os.environ
+    env_api_base = (
+        source_environment.get("LITELLM_API_BASE")
+        or env_secrets.get("LITELLM_API_BASE")
+        if selected == "litellm"
+        else None
+    )
+    api_base = str(env_api_base or profile.get("api_base") or "").strip()
     openai_base, anthropic_base = _normalized_base_url(api_base)
 
     key_name = _validate_env_name(str(profile.get("api_key_env") or "LITELLM_API_KEY"))
@@ -224,9 +245,6 @@ def resolve_model_profile(
     max_output_tokens = _positive_int(
         profile.get("max_output_tokens"), field_name="max_output_tokens", default=32000
     )
-    local_secrets = config.get("secrets") or {}
-    env_secrets = load_env_secrets(project_root)
-    source_environment = environ if environ is not None else os.environ
     api_key = str(
         source_environment.get(key_name)
         or local_secrets.get(key_name)
@@ -236,7 +254,7 @@ def resolve_model_profile(
     if not api_key:
         raise ValueError(
             f"Model profile {selected!r} requires {key_name}; set it in the environment "
-            "or config/local.yaml"
+            "or the ignored config/litellm.env file"
         )
 
     agent_models = profile.get("agent_models") or {}
@@ -288,6 +306,7 @@ def resolve_model_profile(
         "AGENT_EVAL_PROVIDER_PROTOCOL": protocol,
         "AGENT_EVAL_PROVIDER_BASE_URL": api_base,
         "AGENT_EVAL_PROVIDER_MODEL": gateway_model,
+        "AGENT_EVAL_REASONING_ENABLED": "true" if reasoning_enabled else "false",
     }
     environment[key_name] = api_key
     # Claude Code 2.1.248 --bare explicitly authenticates with
@@ -346,6 +365,8 @@ def resolve_model_profile(
             'model_providers.litellm.env_key="LITELLM_API_KEY"',
             "-c",
             'model_providers.litellm.wire_api="responses"',
+            "-c",
+            'model_reasoning_effort="high"',
         )
     return ResolvedModelProfile(
         selected,
@@ -363,19 +384,22 @@ def resolve_model_profile(
 
 
 def load_env_secrets(project_root: Path) -> dict[str, str]:
-    """Load a simple ignored KEY=value file without mutating process globals."""
-    path = project_root / "config" / "secrets.env"
-    if not path.is_file():
-        return {}
+    """Load ignored KEY=value files without mutating process globals."""
     result: dict[str, str] = {}
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    for path in (
+        project_root / "config" / "secrets.env",
+        project_root / "config" / "litellm.env",
+    ):
+        if not path.is_file():
             continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
-            result[key] = value.strip().strip('"').strip("'")
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+                result[key] = value.strip().strip('"').strip("'")
     return result
 
 
@@ -411,7 +435,10 @@ def list_model_profiles(project_root: Path) -> list[dict[str, Any]]:
     """Return editable, non-secret provider profiles and their Agent coverage."""
     config = load_model_config(project_root)
     local = _read_yaml(project_root / "config" / "local.yaml")
-    profiles = config.get("profiles") or {}
+    raw_profiles = config.get("profiles") or {}
+    profiles = dict(raw_profiles) if isinstance(raw_profiles, dict) else {}
+    if isinstance(config.get("litellm"), dict):
+        profiles["litellm"] = config["litellm"]
     local_profiles = local.get("profiles") or {}
     if not isinstance(profiles, dict):
         return []
@@ -578,9 +605,14 @@ def delete_model_profile(project_root: Path, name: str) -> bool:
 
 def describe_model_config(project_root: Path) -> dict[str, Any]:
     config = load_model_config(project_root)
-    default_name = str(config.get("default_profile") or "").strip()
     profiles = config.get("profiles") or {}
-    default = profiles.get(default_name, {}) if isinstance(profiles, dict) else {}
+    unified = config.get("litellm")
+    if isinstance(unified, dict):
+        default_name = "litellm"
+        default = unified
+    else:
+        default_name = str(config.get("default_profile") or "").strip()
+        default = profiles.get(default_name, {}) if isinstance(profiles, dict) else {}
     key_name = (
         str(default.get("api_key_env") or "LITELLM_API_KEY")
         if isinstance(default, dict)
@@ -591,12 +623,28 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
         for name, value in profiles.items()
         if isinstance(value, dict) and value.get("model")
     } if isinstance(profiles, dict) else {}
-    return {
+    if isinstance(unified, dict) and unified.get("model"):
+        profile_models["litellm"] = unified["model"]
+    common = {
         "default_profile": default_name or None,
         "default_model": default.get("model") if isinstance(default, dict) else None,
         "api_base": default.get("api_base") if isinstance(default, dict) else None,
         "api_key_env": key_name,
         "api_key_configured": bool(resolve_config_secret(project_root, key_name)),
+    }
+    if isinstance(unified, dict):
+        common.pop("default_profile", None)
+        common.update(
+            configuration_mode="unified_litellm",
+            gateway="litellm",
+            reasoning_enabled=bool(unified.get("reasoning", True)),
+            legacy_profiles_hidden=True,
+            model_adapter_agent_count=len(AGENT_MODEL_ADAPTERS),
+        )
+        return common
+    return {
+        "configuration_mode": "legacy_profiles",
+        **common,
         "profiles": sorted(profiles) if isinstance(profiles, dict) else [],
         "profile_models": profile_models,
         "profile_types": {
@@ -628,8 +676,6 @@ def discover_available_models(
     models: dict[str, dict[str, Any]] = {}
     gateways: dict[str, list[str]] = {}
     errors: list[dict[str, str]] = []
-    if not isinstance(profiles, dict):
-        profiles = {}
     for name, value in profiles.items():
         if not isinstance(value, dict):
             continue
@@ -718,8 +764,8 @@ def refresh_litellm_model_catalog(
         {
             "id": item["id"],
             "owned_by": item.get("owned_by"),
-            "profiles": item.get("profiles") or [],
-            "profile": item.get("profile"),
+            "enabled": "no-thinking" not in str(item["id"]).lower(),
+            "reasoning": "no-thinking" not in str(item["id"]).lower(),
         }
         for item in discovered.get("models", [])
         if item.get("source") == "litellm"
