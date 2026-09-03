@@ -7,7 +7,9 @@ from agent_eval.model_config import (
     delete_model_profile,
     describe_model_config,
     discover_available_models,
+    load_litellm_model_catalog,
     list_model_profiles,
+    refresh_litellm_model_catalog,
     resolve_model_profile,
     save_model_profile,
     write_codebuddy_profile_config,
@@ -238,6 +240,27 @@ def test_discovers_litellm_models_and_keeps_profile_mapping(tmp_path, monkeypatc
     discovered = next(item for item in result["models"] if item["id"] == "gateway/model-a")
     assert discovered["profile"] == "minimax"
     assert discovered["owned_by"] == "test"
+
+
+def test_refreshes_and_loads_non_secret_litellm_catalog(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    monkeypatch.setenv("TEST_LITELLM_KEY", "virtual-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"data": [{"id": "gateway/model-a", "owned_by": "test-owner"}]},
+        )
+
+    snapshot = refresh_litellm_model_catalog(
+        tmp_path, transport=httpx.MockTransport(handler)
+    )
+    stored = (tmp_path / "config" / "litellm-models.json").read_text(encoding="utf-8")
+
+    assert snapshot["model_count"] == 1
+    assert snapshot["catalog_visible_only"] is True
+    assert load_litellm_model_catalog(tmp_path)["models"][0]["id"] == "gateway/model-a"
+    assert "virtual-key" not in stored
 
 
 def test_discovered_model_prefers_the_profile_configured_for_its_exact_id(tmp_path, monkeypatch):

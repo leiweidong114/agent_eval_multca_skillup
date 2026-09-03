@@ -22,6 +22,8 @@ from agent_eval.database import (
 )
 from agent_eval.model_config import (
     describe_model_config,
+    load_litellm_model_catalog,
+    refresh_litellm_model_catalog,
     resolve_config_secret,
     resolve_model_profile,
     write_codebuddy_profile_config,
@@ -88,6 +90,14 @@ def _parser() -> argparse.ArgumentParser:
 
     commands.add_parser("doctor", help="Check the local skill-up and Multica runtime")
     commands.add_parser("agents", help="List Multica Agent backends and local CLI discovery")
+    models = commands.add_parser(
+        "models", help="List the cached LiteLLM model catalog or refresh it from /v1/models"
+    )
+    models.add_argument(
+        "--refresh", action="store_true",
+        help="Query LiteLLM and update config/litellm-models.json",
+    )
+    models.add_argument("--prefix", help="Only show model ids beginning with this prefix")
     check = commands.add_parser(
         "check-agent", help="Test one Agent/model connection without running an evaluation"
     )
@@ -360,6 +370,25 @@ def main() -> None:
             "litellm_required": True,
             "model_config": describe_model_config(PROJECT_ROOT),
         }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    if args.command == "models":
+        try:
+            result = (
+                refresh_litellm_model_catalog(PROJECT_ROOT)
+                if args.refresh
+                else load_litellm_model_catalog(PROJECT_ROOT)
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(json.dumps({"status": "failed", "error": str(exc)}, ensure_ascii=False, indent=2))
+            raise SystemExit(1)
+        if args.prefix:
+            result = dict(result)
+            result["models"] = [
+                item for item in result["models"]
+                if str(item.get("id") or "").startswith(args.prefix)
+            ]
+            result["filtered_model_count"] = len(result["models"])
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     if args.command == "check-agent":

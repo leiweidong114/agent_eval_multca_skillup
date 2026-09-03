@@ -2,6 +2,18 @@ import argparse
 import json
 
 
+def test_models_command_parses_refresh_and_prefix():
+    from agent_eval import cli
+
+    args = cli._parser().parse_args(
+        ["models", "--refresh", "--prefix", "opencode-go/"]
+    )
+
+    assert args.command == "models"
+    assert args.refresh is True
+    assert args.prefix == "opencode-go/"
+
+
 def test_connectivity_probe_accepts_exact_custom_prompt(tmp_path, monkeypatch):
     """The live matrix must be able to send exactly HI, without marker text."""
     from agent_eval import cli

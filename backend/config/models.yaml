@@ -30,7 +30,7 @@ profiles:
       openclaw: main
     gateway_models:
       claude: glm-4.7-anthropic
-      opencode: glm-4.7-no-thinking
+      opencode: glm-4.7
   litellm_opencode_go:
     model: opencode-go/minimax-m3
     api_base: http://8.137.196.46/v1

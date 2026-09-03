@@ -46,7 +46,7 @@ SECRET_PATTERN = re.compile(r"(?i)(?:sk|key)-[A-Za-z0-9_.-]{12,}")
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Send HI through every core Agent and every LiteLLM OpenCode model"
+        description="Send HI through every core Agent and selected LiteLLM models"
     )
     parser.add_argument("--profile", default="litellm_opencode_go")
     parser.add_argument("--prefix", default="opencode-go/")
@@ -132,6 +132,7 @@ def _run_one(
     cleanup = raw.get("trace_key_cleanup") or {}
     passed = bool(
         raw.get("status") == "connected"
+        and bool(str(raw.get("response") or "").strip())
         and verification.get("verified") is True
         and int(trace.get("successful_model_calls") or 0) >= 1
         and cleanup.get("status") == "deleted"
@@ -217,9 +218,13 @@ def _resolve_adapter(agent: str, model: str, profile_name: str) -> dict[str, Any
             if runtime_agent == "opencode"
             else True
         )
+        gateway_is_expected = gateway_model.lower() in {
+            model.lower(),
+            f"{model}-anthropic".lower(),
+        }
         passed = bool(
             profile.model == model
-            and gateway_model == model
+            and gateway_is_expected
             and "no-thinking" not in gateway_model.lower()
             and reasoning_enabled
         )

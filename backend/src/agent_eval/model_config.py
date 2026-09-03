@@ -5,6 +5,7 @@ import os
 import re
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlsplit, urlunsplit
@@ -704,6 +705,56 @@ def discover_available_models(
         "gateways": [{"api_base": base, "profiles": names} for base, names in gateways.items()],
         "errors": errors,
     }
+
+
+def refresh_litellm_model_catalog(
+    project_root: Path,
+    *,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, Any]:
+    """Refresh the non-secret LiteLLM catalog snapshot used by the CLI."""
+    discovered = discover_available_models(project_root, transport=transport)
+    models = [
+        {
+            "id": item["id"],
+            "owned_by": item.get("owned_by"),
+            "profiles": item.get("profiles") or [],
+            "profile": item.get("profile"),
+        }
+        for item in discovered.get("models", [])
+        if item.get("source") == "litellm"
+    ]
+    snapshot = {
+        "schema_version": 1,
+        "refreshed_at": datetime.now(timezone.utc).isoformat(),
+        "source": "LiteLLM /v1/models",
+        "catalog_visible_only": True,
+        "note": (
+            "Catalog visibility does not guarantee inference availability; "
+            "use agent-eval check-agent for a live request and database verification."
+        ),
+        "model_count": len(models),
+        "models": models,
+        "errors": discovered.get("errors") or [],
+    }
+    _atomic_write(
+        project_root / "config" / "litellm-models.json",
+        json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n",
+    )
+    return snapshot
+
+
+def load_litellm_model_catalog(project_root: Path) -> dict[str, Any]:
+    """Load the last non-secret LiteLLM model catalog snapshot."""
+    path = project_root / "config" / "litellm-models.json"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"LiteLLM model catalog does not exist: {path}; run 'agent-eval models --refresh'"
+        )
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict) or not isinstance(value.get("models"), list):
+        raise ValueError(f"Invalid LiteLLM model catalog: {path}")
+    return value
 
 
 def write_openclaw_profile_config(
