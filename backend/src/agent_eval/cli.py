@@ -8,11 +8,18 @@ import subprocess
 import tempfile
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
 from agent_eval.runner import _retryable_infrastructure_message, run_evaluation
 from agent_eval.codebuddy_proxy import CodeBuddyCompatibilityProxy
+from agent_eval.cli_catalog import (
+    SCHEMATIC_PIPELINE_SKILLS,
+    compose_skill_bundle,
+    list_results,
+    list_skills,
+)
 from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.database import (
     database_health,
@@ -42,6 +49,32 @@ from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 
 # backend/src/agent_eval/cli.py -> parents[2] = backend
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool = False) -> None:
+    if not pipeline:
+        parser.add_argument("--skill", required=True)
+    parser.add_argument("--agent", action="append", required=True)
+    parser.add_argument("--profile", required=True)
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--prompt", required=True)
+    parser.add_argument("--case", action="append", default=[])
+    parser.add_argument("--must-contain", action="append", default=[])
+    parser.add_argument("--must-not-contain", action="append", default=[])
+    parser.add_argument("--workers", type=int, default=2, help="Concurrent Agent evaluations")
+    parser.add_argument("--parallelism", type=int, default=1, help="Case concurrency per Agent")
+    parser.add_argument("--iterations", type=int, default=1)
+    parser.add_argument("--timeout", type=int, default=1800)
+    parser.add_argument("--max-turns", type=int, default=12)
+    parser.add_argument("--output-dir")
+    parser.add_argument("--user", "--user-id", dest="user_id", default="local")
+    parser.add_argument("--task-name")
+    parser.add_argument("--benchmark", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--database-trace", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--require-model-verification", action=argparse.BooleanOptionalAction, default=True
+    )
+    parser.add_argument("--llm-judge", action=argparse.BooleanOptionalAction, default=True)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -98,6 +131,16 @@ def _parser() -> argparse.ArgumentParser:
         help="Query LiteLLM and update config/litellm-models.json",
     )
     models.add_argument("--prefix", help="Only show model ids beginning with this prefix")
+    skills = commands.add_parser("skills", help="List Skills available for evaluation")
+    skills.add_argument(
+        "--pipeline", action="store_true", help="Only show the four schematic pipeline Skills"
+    )
+    results = commands.add_parser("results", help="List saved evaluation reports")
+    results.add_argument("--limit", type=int, default=20)
+    results.add_argument("--agent")
+    results.add_argument("--skill")
+    results.add_argument("--status")
+    results.add_argument("--results-root")
     check = commands.add_parser(
         "check-agent", help="Test one Agent/model connection without running an evaluation"
     )
@@ -117,6 +160,26 @@ def _parser() -> argparse.ArgumentParser:
         default=True,
         help="Confirm the requested model in PostgreSQL after the connectivity probe",
     )
+    prompt = commands.add_parser(
+        "prompt", help="Send the same prompt to one or more Agents concurrently"
+    )
+    prompt.add_argument("--agent", action="append", required=True)
+    prompt.add_argument("--profile", required=True)
+    prompt.add_argument("--model", required=True)
+    prompt.add_argument("--prompt", required=True)
+    prompt.add_argument("--workers", type=int, default=2)
+    prompt.add_argument("--timeout", type=int, default=120)
+    prompt.add_argument(
+        "--database-verify", action=argparse.BooleanOptionalAction, default=True
+    )
+    multi = commands.add_parser(
+        "run-multi", help="Evaluate one Skill with multiple Agents concurrently"
+    )
+    _add_multi_eval_arguments(multi)
+    pipeline = commands.add_parser(
+        "pipeline-eval", help="Evaluate the complete four-Skill schematic pipeline"
+    )
+    _add_multi_eval_arguments(pipeline, pipeline=True)
     return parser
 
 
@@ -344,6 +407,144 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def _unique_agents(values: list[str], workers: int) -> list[str]:
+    agents = list(dict.fromkeys(value.strip().lower() for value in values if value.strip()))
+    if not agents:
+        raise ValueError("Select at least one --agent")
+    if workers < 1:
+        raise ValueError("--workers must be greater than zero")
+    return agents
+
+
+def _prompt_batch(args: argparse.Namespace) -> dict[str, object]:
+    agents = _unique_agents(args.agent, args.workers)
+    rows: list[dict[str, object]] = []
+
+    def run_one(agent: str) -> dict[str, object]:
+        return _check_agent(
+            argparse.Namespace(
+                agent=agent,
+                profile=args.profile,
+                model=args.model,
+                agent_executable=None,
+                timeout=args.timeout,
+                database_verify=args.database_verify,
+                prompt=args.prompt,
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=min(args.workers, len(agents))) as pool:
+        futures = {pool.submit(run_one, agent): agent for agent in agents}
+        for future in as_completed(futures):
+            agent = futures[future]
+            try:
+                rows.append(future.result())
+            except Exception as exc:
+                rows.append({"status": "exception", "agent": agent, "error": str(exc)})
+    rows.sort(key=lambda item: agents.index(str(item.get("agent"))))
+    passed = sum(item.get("status") == "connected" for item in rows)
+    return {
+        "status": "completed" if passed == len(rows) else ("partial_failed" if passed else "failed"),
+        "prompt": args.prompt,
+        "profile": args.profile,
+        "model": args.model,
+        "workers": min(args.workers, len(agents)),
+        "passed": passed,
+        "total": len(rows),
+        "results": rows,
+    }
+
+
+def _resolve_cli_skill(value: str) -> Path:
+    direct = Path(value).resolve()
+    if (direct / "SKILL.md").is_file():
+        return direct
+    candidate = (PROJECT_ROOT / "skills" / value).resolve()
+    if (candidate / "SKILL.md").is_file():
+        return candidate
+    raise FileNotFoundError(f"Skill was not found: {value}")
+
+
+def _evaluation_batch(
+    args: argparse.Namespace,
+    *,
+    skill_dir: Path,
+    selected_skills: list[str],
+    evaluation_type: str,
+) -> dict[str, object]:
+    agents = _unique_agents(args.agent, args.workers)
+    rows: list[dict[str, object]] = []
+
+    def run_one(agent: str) -> dict[str, object]:
+        task_id = uuid.uuid4().hex
+        try:
+            result = run_evaluation(
+                project_root=PROJECT_ROOT,
+                skill_dir=str(skill_dir),
+                agent=agent,
+                model=args.model,
+                profile=args.profile,
+                case_files=args.case,
+                prompt=args.prompt,
+                must_contain=args.must_contain,
+                must_not_contain=args.must_not_contain,
+                parallelism=args.parallelism,
+                iterations=args.iterations,
+                timeout_seconds=args.timeout,
+                max_turns=args.max_turns,
+                benchmark=args.benchmark,
+                output_dir=args.output_dir,
+                collect_database_trace=args.database_trace,
+                require_model_verification=args.require_model_verification,
+                task_id=task_id,
+                user_id=args.user_id,
+                task_name=args.task_name or skill_dir.name,
+                run_llm_judge_enabled=args.llm_judge,
+                evaluation_type=evaluation_type,
+                selected_skills=selected_skills,
+            )
+            scores = result.get("scores") or {}
+            return {
+                "agent": agent,
+                "status": result.get("status", "completed"),
+                "task_id": result.get("task_id") or task_id,
+                "model": result.get("provider_model") or result.get("model"),
+                "overall_score": scores.get("overall_score"),
+                "result_score": scores.get("result_dimension_score"),
+                "process_score": scores.get("process_dimension_score"),
+                "skill_quality_score": scores.get("skill_quality_dimension_score"),
+                "result_dir": result.get("result_dir"),
+                "failure": result.get("failure"),
+            }
+        except Exception as exc:
+            return {
+                "agent": agent,
+                "status": "exception",
+                "task_id": task_id,
+                "model": args.model,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+    with ThreadPoolExecutor(max_workers=min(args.workers, len(agents))) as pool:
+        futures = {pool.submit(run_one, agent): agent for agent in agents}
+        for future in as_completed(futures):
+            rows.append(future.result())
+    rows.sort(key=lambda item: agents.index(str(item.get("agent"))))
+    passed = sum(item.get("status") == "completed" for item in rows)
+    return {
+        "status": "completed" if passed == len(rows) else ("partial_failed" if passed else "failed"),
+        "evaluation_type": evaluation_type,
+        "skills": selected_skills,
+        "prompt": args.prompt,
+        "profile": args.profile,
+        "model": args.model,
+        "workers": min(args.workers, len(agents)),
+        "passed": passed,
+        "total": len(rows),
+        "results": rows,
+    }
+
+
 def main() -> None:
     args = _parser().parse_args()
     if args.command == "agents":
@@ -391,10 +592,52 @@ def main() -> None:
             result["filtered_model_count"] = len(result["models"])
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
+    if args.command == "skills":
+        print(
+            json.dumps(
+                list_skills(PROJECT_ROOT / "skills", pipeline_only=args.pipeline),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    if args.command == "results":
+        root = Path(args.results_root).resolve() if args.results_root else PROJECT_ROOT / "evaluation_results"
+        print(
+            json.dumps(
+                list_results(
+                    root, limit=args.limit, agent=args.agent, skill=args.skill, status=args.status
+                ),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
     if args.command == "check-agent":
         result = _check_agent(args)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         raise SystemExit(0 if result["status"] == "connected" else 1)
+    if args.command == "prompt":
+        result = _prompt_batch(args)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        raise SystemExit(0 if result["status"] == "completed" else 1)
+    if args.command in {"run-multi", "pipeline-eval"}:
+        if args.command == "pipeline-eval":
+            selected_skills = list(SCHEMATIC_PIPELINE_SKILLS)
+            skill_dir = compose_skill_bundle(PROJECT_ROOT)
+            evaluation_type = "schematic"
+        else:
+            skill_dir = _resolve_cli_skill(args.skill)
+            selected_skills = [skill_dir.name]
+            evaluation_type = "skill"
+        result = _evaluation_batch(
+            args,
+            skill_dir=skill_dir,
+            selected_skills=selected_skills,
+            evaluation_type=evaluation_type,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        raise SystemExit(0 if result["status"] == "completed" else 1)
     result = run_evaluation(
         project_root=PROJECT_ROOT,
         skill_dir=args.skill,
