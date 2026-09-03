@@ -97,6 +97,11 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--agent-executable")
     check.add_argument("--timeout", type=int, default=120)
     check.add_argument(
+        "--prompt",
+        default="Reply with exactly CONNECTIVITY_OK.",
+        help="Minimal prompt sent by the connectivity probe",
+    )
+    check.add_argument(
         "--database-verify",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -198,7 +203,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         probe_id = f"connectivity-{uuid.uuid4().hex}"
         input_path.write_text(
             json.dumps({
-                "messages": [{"role": "user", "content": f"Reply with exactly CONNECTIVITY_OK. Probe ID: {probe_id}"}],
+                "messages": [{"role": "user", "content": args.prompt}],
                 "workspace": str(root), "case_id": probe_id, "variant": "no-evaluation", "kwargs": {},
             }),
             encoding="utf-8",
@@ -300,15 +305,23 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 "status": "unverified", "verified": False,
                 "expected_model": profile.model, "reason": "database_trace_unavailable",
             }
-    try:
-        delete_trace_key(trace_key)
-    except Exception:
-        pass
+    trace_key_alias = trace_key.alias if trace_key else None
+    trace_key_cleanup: dict[str, object] = {"status": "not_created"}
+    if trace_key is not None:
+        try:
+            delete_trace_key(trace_key)
+            trace_key_cleanup = {"status": "deleted", "alias": trace_key.alias}
+        except Exception as exc:
+            trace_key_cleanup = {
+                "status": "delete_failed", "alias": trace_key.alias,
+                "error": str(exc),
+            }
     ok = (
         process.returncode == 0
         and result.get("exit_code") == 0
         and marker is None
         and (not args.database_verify or not profile.api_base or model_verification.get("verified") is True)
+        and (trace_key is None or trace_key_cleanup["status"] == "deleted")
     )
     return {
         "status": "connected" if ok else "failed", "agent": args.agent,
@@ -316,6 +329,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         "executable": detected, "runtime_exit_code": process.returncode,
         "agent_exit_code": result.get("exit_code"), "response": result.get("final_message"),
         "database_trace": database_trace, "model_verification": model_verification,
+        "trace_key_alias": trace_key_alias, "trace_key_cleanup": trace_key_cleanup,
         "error": result.get("stderr") or (f"Detected error marker: {marker}" if marker else None),
     }
 

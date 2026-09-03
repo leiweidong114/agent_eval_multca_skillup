@@ -27,7 +27,7 @@ profiles:
     api_base: http://127.0.0.1:4000/v1
     api_key_env: TEST_LITELLM_KEY
     agent_models:
-      claude: sonnet
+      claude: claude-sonnet-4-6
       codebuddy: custom-local:MiniMax-M3
       openclaw: main
 """,
@@ -52,7 +52,7 @@ def test_resolves_default_litellm_profile_and_agent_environment(tmp_path):
     assert profile.environment["OPENAI_API_KEY"] == "virtual-key"
     assert profile.environment["ANTHROPIC_AUTH_TOKEN"] == "virtual-key"
     assert profile.model_for_agent("codex") == "MiniMax-M3"
-    assert profile.model_for_agent("claude") == "sonnet"
+    assert profile.model_for_agent("claude") == "claude-sonnet-4-6"
     assert profile.model_for_agent("openclaw") == "main"
     assert profile.model_for_agent("opencode") == "litellm/MiniMax-M3"
     inline = profile.environment["OPENCODE_CONFIG_CONTENT"]
@@ -83,11 +83,11 @@ def test_claude_uses_bare_mode_and_bearer_auth(tmp_path):
     )
 
     assert profile.agent_args == ("--bare",)
-    assert profile.model_for_agent("claude") == "sonnet"
+    assert profile.model_for_agent("claude") == "claude-sonnet-4-6"
     assert profile.environment["ANTHROPIC_API_KEY"] == "virtual-key"
-    assert profile.environment["ANTHROPIC_DEFAULT_SONNET_MODEL"] == "sonnet"
-    assert profile.environment["ANTHROPIC_DEFAULT_OPUS_MODEL"] == "sonnet"
-    assert profile.environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "sonnet"
+    assert profile.environment["ANTHROPIC_DEFAULT_SONNET_MODEL"] == "claude-sonnet-4-6"
+    assert profile.environment["ANTHROPIC_DEFAULT_OPUS_MODEL"] == "claude-sonnet-4-6"
+    assert profile.environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "claude-sonnet-4-6"
     assert profile.environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
 
 
@@ -167,7 +167,7 @@ def test_codebuddy_uses_exact_gateway_model_id(tmp_path):
     )
 
     assert profile.model_for_agent("codebuddy") == "custom-local:MiniMax-M3"
-    assert profile.model_for_agent("claude") == "sonnet"
+    assert profile.model_for_agent("claude") == "claude-sonnet-4-6"
 
     minimax_27 = resolve_model_profile(
         tmp_path,

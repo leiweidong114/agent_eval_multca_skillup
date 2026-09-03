@@ -36,7 +36,7 @@ profiles:
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
     agent_models:
-      claude: sonnet
+      claude: claude-sonnet-4-6
       codebuddy: custom-local:MiniMax-M3
       openclaw: main
   litellm_opencode_go_minimax_2_7:
@@ -44,7 +44,7 @@ profiles:
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
     agent_models:
-      claude: sonnet
+      claude: claude-sonnet-4-6
       codebuddy: custom-local:MiniMax-M2.7
       openclaw: main
   litellm_opencode_go_grok:

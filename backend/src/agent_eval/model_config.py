@@ -52,7 +52,7 @@ class ResolvedModelProfile:
             # Claude Code accepts its stable family aliases at the CLI layer;
             # the corresponding environment mapping below selects the actual
             # LiteLLM deployment without requiring a native Anthropic model.
-            return "sonnet"
+            return "claude-sonnet-4-6"
         if agent == "codebuddy" and self.api_base:
             # A per-run models.json entry uses the provider model id verbatim,
             # so CodeBuddy sends that exact id to the LiteLLM gateway instead

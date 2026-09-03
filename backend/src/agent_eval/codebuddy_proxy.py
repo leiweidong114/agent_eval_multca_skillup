@@ -12,6 +12,13 @@ from urllib.parse import urlsplit
 
 
 RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+NON_RETRYABLE_RATE_LIMIT_MARKERS = (
+    b"weekly usage limit",
+    b"usage limit reached",
+    b"gousagelimiterror",
+    b"insufficient_quota",
+    b"quota exceeded",
+)
 HOP_BY_HOP_HEADERS = frozenset(
     {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
      "te", "trailers", "transfer-encoding", "upgrade", "host", "content-length"}
@@ -59,6 +66,12 @@ def _retry_after(value: str | None) -> float | None:
             return max(0.0, parsedate_to_datetime(value).timestamp() - time.time())
         except (TypeError, ValueError, OverflowError):
             return None
+
+
+def _is_permanent_rate_limit(status: int, body: bytes) -> bool:
+    """Do not amplify account/quota exhaustion into repeated paid requests."""
+    lowered = body.lower()
+    return status == 429 and any(marker in lowered for marker in NON_RETRYABLE_RATE_LIMIT_MARKERS)
 
 
 class CodeBuddyCompatibilityProxy:
@@ -200,7 +213,10 @@ class CodeBuddyCompatibilityProxy:
                                 owner.forced_model,
                                 client_model,
                             )
-                        retryable = response.status in RETRYABLE_STATUS_CODES
+                        retryable = (
+                            response.status in RETRYABLE_STATUS_CODES
+                            and not _is_permanent_rate_limit(response.status, response_body)
+                        )
                         owner._record(
                             request=attempt == 0,
                             retry=retryable and attempt + 1 < owner.max_attempts,

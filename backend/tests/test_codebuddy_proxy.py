@@ -105,6 +105,53 @@ def test_proxy_retries_429_and_forces_the_gateway_model():
     assert stats["status_counts"] == {"200": 1, "429": 1}
 
 
+def test_proxy_does_not_retry_permanent_weekly_usage_limit():
+    calls = 0
+
+    class Upstream(BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+        def do_POST(self) -> None:
+            nonlocal calls
+            calls += 1
+            self.rfile.read(int(self.headers["Content-Length"]))
+            response = b'{"error":{"type":"GoUsageLimitError","message":"Weekly usage limit reached"}}'
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+    upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+    thread.start()
+    host, port = upstream.server_address[:2]
+    try:
+        with CodeBuddyCompatibilityProxy(
+            f"http://{host}:{port}/v1", max_attempts=4, backoff_seconds=0
+        ) as proxy:
+            request = Request(
+                proxy.url,
+                data=json.dumps({"model": "opencode-go/test", "messages": []}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                urlopen(request)
+            except Exception as exc:
+                assert getattr(exc, "code", None) == 429
+            stats = proxy.stats()
+    finally:
+        upstream.shutdown()
+        upstream.server_close()
+        thread.join(timeout=5)
+
+    assert calls == 1
+    assert stats["retry_count"] == 0
+    assert stats["attempt_count"] == 1
+
+
 def test_proxy_restores_client_model_in_anthropic_response():
     received: list[dict[str, object]] = []
 
