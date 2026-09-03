@@ -274,6 +274,11 @@ def resolve_model_profile(
         for name, value in gateway_models.items()
         if str(name).strip() and str(value).strip()
     }
+    configured_model = str(profile.get("model") or "").strip()
+    if model_override and model != configured_model and agent:
+        # Agent/gateway mappings describe aliases for the configured default
+        # deployment. They must never replace an explicit CLI model choice.
+        gateway_models.pop(agent, None)
     if agent == "codebuddy":
         derived_codebuddy_model = _codebuddy_custom_model(model)
         if model_override:

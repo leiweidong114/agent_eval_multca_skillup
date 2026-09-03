@@ -117,6 +117,16 @@ profiles: {}
     assert "profiles" not in description
     assert "default_profile" not in description
 
+    overridden = resolve_model_profile(
+        tmp_path,
+        model_override="glm-4.5-air",
+        environ={"TEST_LITELLM_KEY": "virtual-key"},
+        agent="opencode",
+    )
+    assert overridden.model_for_agent("opencode") == "litellm/glm-4.5-air"
+    assert overridden.gateway_model_for_agent("opencode") == "glm-4.5-air"
+    assert '"glm-4.5-air"' in overridden.environment["OPENCODE_CONFIG_CONTENT"]
+
 
 def test_unified_litellm_reads_ignored_env_file_and_rejects_no_thinking(tmp_path):
     config = tmp_path / "config"
