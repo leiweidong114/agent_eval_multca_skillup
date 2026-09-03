@@ -63,8 +63,8 @@ def test_justdo_not_running_is_actionable():
     )
 
     assert failure is not None
-    assert failure["category"] == "agent_not_running"
-    assert "启动 JustDo" in failure["suggested_action"]
+    assert failure["category"] == "agent_bridge_unavailable"
+    assert "完全退出 JustDo" in failure["suggested_action"]
 
 
 def test_judge_rate_limit_preserves_upstream_reason(monkeypatch):

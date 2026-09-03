@@ -99,9 +99,17 @@ def describe_evaluation_failure(
         detail = "连接模型网关时发生超时、断开或服务暂不可用。"
         action, retryable = "检查网络和 LiteLLM 健康状态后重试。", True
     elif any(marker in lowered for marker in ("justdo is not running", "start justdo", "exit status 69")):
-        category, title = "agent_not_running", "JustDo 桌面端未运行"
-        detail = "JustDo-agent 是桌面端的桥接进程；当前 JustDo 主程序未启动或未驻留托盘。"
-        action, retryable = "启动 JustDo 并保持其运行（可最小化到托盘）后重试。", False
+        category, title = "agent_bridge_unavailable", "JustDo 桌面端桥接未就绪"
+        detail = (
+            "JustDo-agent 未发现可通信的 JustDo 主程序实例或 IPC 通道；"
+            "即使任务管理器中存在 JustDo.exe，也可能是开发版/正式版不匹配、"
+            "托盘实例未就绪，或桥接进程与当前会话不一致。"
+        )
+        action, retryable = (
+            "完全退出 JustDo（包括托盘）后启动与该 JustDo-agent 相匹配的版本，"
+            "确认进入主界面并保持运行，再重试；不要直接单独启动 JustDo-agent.exe。",
+            False,
+        )
     elif inferred_status == 401 or any(marker in lowered for marker in ("unauthorized", "invalid api key", "authentication")):
         category, title = "gateway_authentication", "模型服务鉴权失败"
         detail = "模型网关拒绝了当前 API Key（HTTP 401）。"
