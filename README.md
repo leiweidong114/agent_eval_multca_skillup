@@ -125,6 +125,8 @@ Agent CLI 自身可能需要本地安装和配置；这属于 Agent 运行环境
 
 并发、三维评分、Skill 安装语义、可观测字段限制和新 Agent 上线门槛见
 [`docs/evaluation-scoring-and-agent-contract.md`](docs/evaluation-scoring-and-agent-contract.md)。
+完整的前端、后端、CLI、六 Agent、LiteLLM、数据库、评分以及原理图 Skill 验证闭环见
+[`docs/full-system-test-validation-plan.md`](docs/full-system-test-validation-plan.md)。
 
 ## 模型配置
 
