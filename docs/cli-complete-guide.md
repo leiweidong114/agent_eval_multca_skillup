@@ -49,8 +49,8 @@ backend/config/litellm.env
 |---|---|
 | `agent-eval doctor` | 检查运行时、模型配置和基础环境 |
 | `agent-eval models` | 查看缓存的 LiteLLM 模型目录 |
-| `agent-eval models --refresh` | 从 LiteLLM `/v1/models` 重新同步模型目录 |
-| `agent-eval agents` | 查看支持的 Agent、本机可执行文件和能力 |
+| `agent-eval models --refresh` | 同步 LiteLLM 目录，逐个真实推理并只返回可用模型 |
+| `agent-eval agents` | 只查看本机已安装、可启动评测的 Agent |
 | `agent-eval skills` | 查看当前可评测的 Skill |
 | `agent-eval check-agent` | 向一个 Agent 发送任意 Prompt，并核验数据库模型 |
 | `agent-eval prompt` | 向多个 Agent 并发发送相同 Prompt |
@@ -242,6 +242,28 @@ agent-eval check-agent `
 agent-eval models --refresh
 ```
 
+该命令不是只读取 `/v1/models`：它会对目录中的每个模型调用一次
+`/v1/chat/completions` 并发送 `HI`。输出的 `models` 只包含 HTTP 推理成功的模型。
+失败数量通过 `unavailable_model_count` 显示；需要查看已脱敏的逐模型失败原因时增加
+`--show-unavailable`。可调整探测并发和单模型超时：
+
+```powershell
+agent-eval models --refresh --workers 8 --timeout 15
+agent-eval models --refresh --show-unavailable
+```
+
+真实探测会产生少量 token 消耗。它证明模型当前能够通过 LiteLLM 完成 Chat Completions
+推理，但不等于所有 Agent 协议都兼容。Codex 新版本只使用 Responses API，因此为
+Codex 筛选模型时应执行：
+
+```powershell
+agent-eval models --refresh --agent codex --workers 8 --timeout 15
+```
+
+这时只保留 `/v1/responses` 实际推理成功的模型。其他指定 Agent 最终仍应使用
+`check-agent` 验证完整适配链。Agent 专属结果是实时视图，不会覆盖共享的
+`litellm-models.json` Chat Completions 快照。
+
 之后可直接读取本地缓存：
 
 ```powershell
@@ -261,7 +283,7 @@ agent-eval models --prefix glm-4.7
 backend/config/litellm-models.json
 ```
 
-该文件不保存 API Key。`/v1/models` 返回“目录可见”模型，不代表额度、区域和上游推理状态一定正常；实际可用性应使用 `check-agent` 或 `prompt` 验证。
+该文件不保存 API Key，并保存最近一次连通性探测结果。模型额度或上游状态会变化，正式评测前仍建议重新执行 `models --refresh`，再用 `check-agent` 验证具体 Agent。
 
 ## 5. 查看支持的 Agent
 
@@ -269,7 +291,11 @@ backend/config/litellm-models.json
 agent-eval agents
 ```
 
-输出包括 Agent 名称、默认命令、本机是否找到可执行文件、是否支持指定模型、是否支持 Skill 注入和协议适配信息。
+默认只输出本机已找到可执行文件的 Agent，并包括默认命令、实际路径、指定模型/Skill 能力和协议适配信息。需要诊断未安装的全部后端时使用：
+
+```powershell
+agent-eval agents --all
+```
 
 当前重点验证的六个 Agent 名称为：
 

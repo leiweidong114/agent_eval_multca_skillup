@@ -4,6 +4,8 @@ import json
 import os
 import re
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +16,7 @@ import yaml
 import httpx
 
 from agent_eval.agent_adapters import AGENT_MODEL_ADAPTERS, model_adapter
+from agent_eval.failure import describe_evaluation_failure
 
 
 PROFILE_PROTOCOLS = frozenset(
@@ -757,36 +760,116 @@ def refresh_litellm_model_catalog(
     project_root: Path,
     *,
     transport: httpx.BaseTransport | None = None,
+    probe_timeout: float = 15.0,
+    probe_workers: int = 8,
+    probe_agent: str | None = None,
 ) -> dict[str, Any]:
-    """Refresh the non-secret LiteLLM catalog snapshot used by the CLI."""
+    """Refresh the catalog and retain only models that complete a real inference."""
     discovered = discover_available_models(project_root, transport=transport)
-    models = [
-        {
-            "id": item["id"],
-            "owned_by": item.get("owned_by"),
-            "enabled": "no-thinking" not in str(item["id"]).lower(),
-            "reasoning": "no-thinking" not in str(item["id"]).lower(),
-        }
-        for item in discovered.get("models", [])
-        if item.get("source") == "litellm"
+    visible_models = [
+        item for item in discovered.get("models", []) if item.get("source") == "litellm"
     ]
+
+    def probe(item: dict[str, Any]) -> dict[str, Any]:
+        model_id = str(item["id"])
+        started = time.perf_counter()
+        try:
+            profile = resolve_model_profile(project_root, model_override=model_id)
+            endpoint_name = "responses" if probe_agent == "codex" else "chat/completions"
+            endpoint = profile.api_base.rstrip("/") + f"/{endpoint_name}"
+            api_key = profile.environment.get(profile.api_key_env, "")
+            request_body = (
+                {"model": model_id, "input": "HI", "stream": False}
+                if endpoint_name == "responses"
+                else {
+                    "model": profile.gateway_model_for_agent("direct"),
+                    "messages": [{"role": "user", "content": "HI"}],
+                    "stream": False,
+                }
+            )
+            with httpx.Client(timeout=probe_timeout, transport=transport) as client:
+                response = client.post(
+                    endpoint,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json=request_body,
+                )
+            latency_ms = round((time.perf_counter() - started) * 1000, 2)
+            if response.is_success:
+                return {
+                    "id": model_id,
+                    "owned_by": item.get("owned_by"),
+                    "available": True,
+                    "enabled": "no-thinking" not in model_id.lower(),
+                    "reasoning": "no-thinking" not in model_id.lower(),
+                    "probe_endpoint": endpoint_name,
+                    "probe_status_code": response.status_code,
+                    "probe_latency_ms": latency_ms,
+                }
+            failure = describe_evaluation_failure(
+                response.text,
+                returncode=1,
+                status_code=response.status_code,
+                component="litellm_model_probe",
+            )
+            return {
+                "id": model_id,
+                "available": False,
+                "probe_status_code": response.status_code,
+                "probe_latency_ms": latency_ms,
+                "failure": failure,
+            }
+        except Exception as exc:
+            latency_ms = round((time.perf_counter() - started) * 1000, 2)
+            failure = describe_evaluation_failure(
+                str(exc), returncode=1, component="litellm_model_probe"
+            )
+            return {
+                "id": model_id,
+                "available": False,
+                "probe_status_code": None,
+                "probe_latency_ms": latency_ms,
+                "failure": failure,
+            }
+
+    probes: list[dict[str, Any]] = []
+    safe_workers = max(1, min(int(probe_workers), len(visible_models) or 1, 16))
+    with ThreadPoolExecutor(max_workers=safe_workers) as pool:
+        futures = {pool.submit(probe, item): item for item in visible_models}
+        for future in as_completed(futures):
+            probes.append(future.result())
+    probes.sort(key=lambda item: str(item["id"]).lower())
+    models = [item for item in probes if item["available"]]
+    unavailable = [item for item in probes if not item["available"]]
     snapshot = {
         "schema_version": 1,
         "refreshed_at": datetime.now(timezone.utc).isoformat(),
-        "source": "LiteLLM /v1/models",
-        "catalog_visible_only": True,
+        "status": "completed" if models else "failed",
+        "source": "LiteLLM /v1/models + /v1/chat/completions",
+        "catalog_visible_only": False,
+        "connectivity_tested": True,
+        "probe_agent": probe_agent,
+        "probe_endpoint": "responses" if probe_agent == "codex" else "chat/completions",
+        "probe_prompt": "HI",
+        "probe_workers": safe_workers,
+        "visible_model_count": len(visible_models),
+        "available_model_count": len(models),
+        "unavailable_model_count": len(unavailable),
         "note": (
-            "Catalog visibility does not guarantee inference availability; "
-            "use agent-eval check-agent for a live request and database verification."
+            "models contains only deployments that returned a successful real inference. "
+            "Agent-specific protocol compatibility must still be verified with check-agent."
         ),
         "model_count": len(models),
         "models": models,
+        "unavailable_models": unavailable,
         "errors": discovered.get("errors") or [],
     }
-    _atomic_write(
-        project_root / "config" / "litellm-models.json",
-        json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n",
-    )
+    # Agent-specific protocol probes are transient views. Do not replace the
+    # shared Chat Completions catalog with (for example) a Codex-only result.
+    if probe_agent is None:
+        _atomic_write(
+            project_root / "config" / "litellm-models.json",
+            json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n",
+        )
     return snapshot
 
 

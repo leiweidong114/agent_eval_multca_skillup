@@ -61,7 +61,7 @@ def describe_evaluation_failure(
         marker in lowered
         for marker in (
             "usage limit", "usage has reached", "quota exceeded", "insufficient quota",
-            "余额不足", "无可用资源包", "请充值",
+            "insufficient balance", "余额不足", "无可用资源包", "请充值",
         )
     ):
         category = "gateway_quota_exhausted"
@@ -79,6 +79,17 @@ def describe_evaluation_failure(
         category, title = "gateway_rate_limited", "模型服务请求过于频繁"
         detail = "LiteLLM 或上游模型服务返回 HTTP 429，当前请求受到速率限制。"
         action, retryable = "稍后重试；如持续出现，请检查模型账户额度和并发限制。", True
+    elif inferred_status == 402:
+        category, title = "gateway_quota_exhausted", "模型账户余额不足"
+        detail = "上游模型账户拒绝付费请求（HTTP 402），通常表示余额或资源包不足。"
+        action, retryable = "由管理员补充上游模型账户额度或资源包后重试。", False
+    elif inferred_status == 404 and any(
+        marker in lowered for marker in ("/responses", "model group", "model not found")
+    ):
+        category, title = "model_protocol_incompatible", "模型接口与 Agent 协议不兼容"
+        detail = "LiteLLM 已找到模型，但该模型的上游接口不支持 Agent 请求的端点。"
+        action = "改用支持该端点的模型，或在 LiteLLM 配置端点转换；Codex 当前要求 Responses API。"
+        retryable = False
     elif inferred_status in {500, 502, 503, 504} or "gateway_transport_error" in lowered:
         category, title = "gateway_server_error", "模型网关或上游服务异常"
         detail = f"模型服务返回 HTTP {inferred_status or '5xx'}，暂时无法完成推理。"

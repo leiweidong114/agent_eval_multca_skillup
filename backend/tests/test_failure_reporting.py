@@ -45,6 +45,17 @@ def test_chinese_balance_error_is_classified_as_quota_exhausted():
     assert "额度/资源包" in failure["suggested_action"]
 
 
+def test_responses_404_is_classified_as_agent_protocol_incompatible():
+    failure = describe_evaluation_failure(
+        '{"error":{"message":"Not Found","path":"/v4/responses"}}',
+        status_code=404,
+    )
+
+    assert failure is not None
+    assert failure["category"] == "model_protocol_incompatible"
+    assert "Responses API" in failure["suggested_action"]
+
+
 def test_judge_rate_limit_preserves_upstream_reason(monkeypatch):
     request = httpx.Request("POST", "http://gateway/v1/chat/completions")
     response = httpx.Response(

@@ -12,6 +12,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
+
 from agent_eval.runner import _retryable_infrastructure_message, run_evaluation
 from agent_eval.codebuddy_proxy import CodeBuddyCompatibilityProxy
 from agent_eval.cli_catalog import (
@@ -45,6 +47,7 @@ from agent_eval.runtime import (
     find_skill_up,
 )
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
+from agent_eval.failure import describe_evaluation_failure
 
 
 # backend/src/agent_eval/cli.py -> parents[2] = backend
@@ -122,7 +125,11 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     commands.add_parser("doctor", help="Check the local skill-up and Multica runtime")
-    commands.add_parser("agents", help="List Multica Agent backends and local CLI discovery")
+    agents = commands.add_parser("agents", help="List locally available evaluation Agents")
+    agents.add_argument(
+        "--all", action="store_true",
+        help="Also show Agent backends whose executable is not installed",
+    )
     models = commands.add_parser(
         "models", help="List the cached LiteLLM model catalog or refresh it from /v1/models"
     )
@@ -131,6 +138,22 @@ def _parser() -> argparse.ArgumentParser:
         help="Query LiteLLM and update config/litellm-models.json",
     )
     models.add_argument("--prefix", help="Only show model ids beginning with this prefix")
+    models.add_argument(
+        "--agent",
+        help="Probe the protocol required by this Agent (Codex uses /v1/responses)",
+    )
+    models.add_argument(
+        "--timeout", type=float, default=15.0,
+        help="Timeout in seconds for each real inference probe during --refresh",
+    )
+    models.add_argument(
+        "--workers", type=int, default=8,
+        help="Maximum concurrent model probes during --refresh",
+    )
+    models.add_argument(
+        "--show-unavailable", action="store_true",
+        help="Include failed model probes and their diagnostic reasons",
+    )
     skills = commands.add_parser("skills", help="List Skills available for evaluation")
     skills.add_argument(
         "--pipeline", action="store_true", help="Only show the four schematic pipeline Skills"
@@ -257,6 +280,69 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             "ANTHROPIC_AUTH_TOKEN", "MINIMAX_API_KEY",
         ):
             env[key_name] = trace_key.key
+    protocol_probe: dict[str, object] = {"status": "not_required"}
+    if profile.api_base and runtime_agent == "codex":
+        endpoint = profile.api_base.rstrip("/") + "/responses"
+        try:
+            response = httpx.post(
+                endpoint,
+                headers={"Authorization": f"Bearer {env['LITELLM_API_KEY']}"},
+                json={"model": profile.model, "input": "HI", "stream": False},
+                timeout=min(float(args.timeout), 45.0),
+            )
+            protocol_probe = {
+                "status": "available" if response.is_success else "unavailable",
+                "endpoint": "responses",
+                "status_code": response.status_code,
+            }
+            if not response.is_success:
+                failure = describe_evaluation_failure(
+                    response.text,
+                    returncode=1,
+                    status_code=response.status_code,
+                    component="agent_protocol_probe",
+                )
+                protocol_probe["failure"] = failure
+                cleanup: dict[str, object] = {"status": "not_created"}
+                if trace_key is not None:
+                    try:
+                        delete_trace_key(trace_key)
+                        cleanup = {"status": "deleted", "alias": trace_key.alias}
+                    except Exception as exc:
+                        cleanup = {
+                            "status": "delete_failed", "alias": trace_key.alias,
+                            "error": str(exc),
+                        }
+                return {
+                    "status": "failed",
+                    "agent": args.agent,
+                    "model": profile.model,
+                    "agent_model": profile.model_for_agent(runtime_agent),
+                    "executable": detected,
+                    "protocol_probe": protocol_probe,
+                    "trace_key_alias": trace_key.alias if trace_key else None,
+                    "trace_key_cleanup": cleanup,
+                    "failure": failure,
+                    "error": failure.get("technical_detail") if failure else response.text,
+                }
+        except (httpx.HTTPError, ValueError) as exc:
+            failure = describe_evaluation_failure(
+                str(exc), returncode=1, component="agent_protocol_probe"
+            )
+            protocol_probe = {
+                "status": "unavailable", "endpoint": "responses", "failure": failure
+            }
+            if trace_key is not None:
+                try:
+                    delete_trace_key(trace_key)
+                except Exception:
+                    pass
+            return {
+                "status": "failed", "agent": args.agent, "model": profile.model,
+                "agent_model": profile.model_for_agent(runtime_agent),
+                "executable": detected, "protocol_probe": protocol_probe,
+                "failure": failure, "error": str(exc),
+            }
     # Some Windows Agent CLIs keep their workspace directory handle open for
     # a short time after exit. Do not let best-effort temp cleanup replace the
     # real connectivity result with a recursive PermissionError traceback.
@@ -396,14 +482,22 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         and (not args.database_verify or not profile.api_base or model_verification.get("verified") is True)
         and (trace_key is None or trace_key_cleanup["status"] == "deleted")
     )
+    error_text = result.get("stderr") or (f"Detected error marker: {marker}" if marker else None)
+    failure = None if ok else describe_evaluation_failure(
+        combined or str(error_text or "Agent connectivity check failed"),
+        returncode=int(result.get("exit_code") or process.returncode or 1),
+        component="agent_model_connectivity",
+    )
     return {
         "status": "connected" if ok else "failed", "agent": args.agent,
         "model": profile.model, "agent_model": profile.model_for_agent(runtime_agent),
         "executable": detected, "runtime_exit_code": process.returncode,
         "agent_exit_code": result.get("exit_code"), "response": result.get("final_message"),
         "database_trace": database_trace, "model_verification": model_verification,
+        "protocol_probe": protocol_probe,
         "trace_key_alias": trace_key_alias, "trace_key_cleanup": trace_key_cleanup,
-        "error": result.get("stderr") or (f"Detected error marker: {marker}" if marker else None),
+        "failure": failure,
+        "error": error_text,
     }
 
 
@@ -549,11 +643,14 @@ def main() -> None:
         result = []
         for agent in SUPPORTED_AGENTS:
             command = default_agent_command(agent)
+            detected = shutil.which(command)
+            if detected is None and not args.all:
+                continue
             result.append(
                 {
                     "agent": agent,
                     "default_command": command,
-                    "detected_executable": shutil.which(command),
+                    "detected_executable": detected,
                     "capabilities": agent_capabilities(agent),
                     "evaluation_contract": describe_agent_contract(agent),
                 }
@@ -572,9 +669,20 @@ def main() -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     if args.command == "models":
+        if args.agent and not args.refresh:
+            print(json.dumps({
+                "status": "failed",
+                "error": "--agent requires --refresh because protocol availability is live",
+            }, ensure_ascii=False, indent=2))
+            raise SystemExit(1)
         try:
             result = (
-                refresh_litellm_model_catalog(PROJECT_ROOT)
+                refresh_litellm_model_catalog(
+                    PROJECT_ROOT,
+                    probe_timeout=args.timeout,
+                    probe_workers=args.workers,
+                    probe_agent=backend_agent(args.agent) if args.agent else None,
+                )
                 if args.refresh
                 else load_litellm_model_catalog(PROJECT_ROOT)
             )
@@ -588,6 +696,9 @@ def main() -> None:
                 if str(item.get("id") or "").startswith(args.prefix)
             ]
             result["filtered_model_count"] = len(result["models"])
+        if not args.show_unavailable and "unavailable_models" in result:
+            result = dict(result)
+            result.pop("unavailable_models", None)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     if args.command == "skills":

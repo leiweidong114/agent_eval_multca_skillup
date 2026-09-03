@@ -1,244 +1,731 @@
 {
   "schema_version": 1,
-  "refreshed_at": "2026-09-03T09:39:04.876500+00:00",
-  "source": "LiteLLM /v1/models",
-  "catalog_visible_only": true,
-  "note": "Catalog visibility does not guarantee inference availability; use agent-eval check-agent for a live request and database verification.",
-  "model_count": 39,
+  "refreshed_at": "2026-09-03T11:56:19.964468+00:00",
+  "status": "completed",
+  "source": "LiteLLM /v1/models + /v1/chat/completions",
+  "catalog_visible_only": false,
+  "connectivity_tested": true,
+  "probe_prompt": "HI",
+  "probe_workers": 8,
+  "visible_model_count": 40,
+  "available_model_count": 1,
+  "unavailable_model_count": 39,
+  "note": "models contains only deployments that returned a successful real inference. Agent-specific protocol compatibility must still be verified with check-agent.",
+  "model_count": 1,
   "models": [
     {
-      "id": "deepseek",
+      "id": "glm-4.5-air",
       "owned_by": "openai",
+      "available": true,
       "enabled": true,
-      "reasoning": true
+      "reasoning": true,
+      "probe_endpoint": "chat/completions",
+      "probe_status_code": 200,
+      "probe_latency_ms": 5736.64
+    }
+  ],
+  "unavailable_models": [
+    {
+      "id": "deepseek",
+      "available": false,
+      "probe_status_code": 402,
+      "probe_latency_ms": 701.84,
+      "failure": {
+        "category": "agent_execution_failed",
+        "retryable": false,
+        "summary": "Agent 执行失败",
+        "title": "Agent 执行失败",
+        "detail": "Agent 进程异常退出，未生成可验收的结果。",
+        "suggested_action": "查看技术详情、Agent 日志和本次运行轨迹后重试。",
+        "component": "litellm_model_probe",
+        "status_code": 402,
+        "reset_after": null,
+        "technical_detail": "litellm.BadRequestError: DeepseekException - {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}. Received Model Group=deepseek Available Model Group Fallbacks=None"
+      }
     },
     {
       "id": "glm-4.7",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": 429,
+      "probe_latency_ms": 5194.78,
+      "failure": {
+        "category": "gateway_quota_exhausted",
+        "retryable": false,
+        "summary": "模型使用额度已达上限",
+        "title": "模型使用额度已达上限",
+        "detail": "上游模型账户的可用额度或时间窗口已经用完。",
+        "suggested_action": "等待额度重置，或由管理员补充上游模型账户额度/资源包后重试。",
+        "component": "litellm_model_probe",
+        "status_code": 429,
+        "reset_after": null,
+        "technical_detail": "litellm.RateLimitError: RateLimitError: OpenAIException - 余额不足或无可用资源包,请充值。. Received Model Group=glm-4.7 Available Model Group Fallbacks=None"
+      }
     },
     {
       "id": "glm-4.7-anthropic",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": 429,
+      "probe_latency_ms": 5395.52,
+      "failure": {
+        "category": "gateway_quota_exhausted",
+        "retryable": false,
+        "summary": "模型使用额度已达上限",
+        "title": "模型使用额度已达上限",
+        "detail": "上游模型账户的可用额度或时间窗口已经用完。",
+        "suggested_action": "等待额度重置，或由管理员补充上游模型账户额度/资源包后重试。",
+        "component": "litellm_model_probe",
+        "status_code": 429,
+        "reset_after": null,
+        "technical_detail": "litellm.RateLimitError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"code\":\"1113\",\"message\":\"[1113][余额不足或无可用资源包,请充值。][202609031955324f3a06ccf64b4eb4]\"},\"request_id\":\"202609031955324f3a06ccf64b4eb4\"}. Received Model Group=glm-4.7-anthropic Available Model Group Fallbacks=None"
+      }
     },
     {
       "id": "glm-4.7-no-thinking",
-      "owned_by": "openai",
-      "enabled": false,
-      "reasoning": false
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 30.72,
+      "failure": {
+        "category": "agent_execution_failed",
+        "retryable": false,
+        "summary": "Agent 执行失败",
+        "title": "Agent 执行失败",
+        "detail": "Agent 进程异常退出，未生成可验收的结果。",
+        "suggested_action": "查看技术详情、Agent 日志和本次运行轨迹后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "The unified LiteLLM gateway keeps reasoning enabled; select a reasoning model"
+      }
     },
     {
       "id": "MiniMax-M2.7",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10089.02,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "MiniMax-M3",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10090.53,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/deepseek-v4-flash",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10076.03,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/deepseek-v4-flash-vision-exp",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10066.76,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/deepseek-v4-pro",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10062.06,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/glm-5",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10055.15,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/glm-5.1",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10039.29,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/glm-5.2",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10035.66,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/glm-5.3",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10063.36,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/glm-5.3-flash",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10058.63,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/gpt-5.6-luna",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10073.36,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/grok-4.5",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10068.4,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/grok-4.6",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10038.3,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/hy3",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10046.92,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/hy3-preview",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10033.3,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/hy4-preview",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10039.92,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/kimi-k2.5",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10084.44,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/kimi-k2.6",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10053.89,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/kimi-k2.7-code",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10039.36,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/kimi-k3",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10042.08,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/longcat-2.0",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10024.3,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/mimo-v2-omni",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10037.3,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/mimo-v2-pro",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10035.6,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/mimo-v2.5",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": 429,
+      "probe_latency_ms": 7727.89,
+      "failure": {
+        "category": "gateway_quota_exhausted",
+        "retryable": true,
+        "summary": "模型使用额度已达上限",
+        "title": "模型使用额度已达上限",
+        "detail": "上游模型账户的可用额度或时间窗口已经用完。 服务提示预计 3 days 后重置。",
+        "suggested_action": "等待额度重置，或在 OpenCode Go 账户启用可用余额后重试。",
+        "component": "litellm_model_probe",
+        "status_code": 429,
+        "reset_after": "3 days",
+        "technical_detail": "litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: [链接已隐藏] Received Model Group=opencode-go/mimo-v2.5 Available Model Group Fallbacks=None"
+      }
     },
     {
       "id": "opencode-go/mimo-v2.5-pro",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10085.28,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/minimax-m2.5",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10064.56,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/minimax-m2.7",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10045.73,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/minimax-m3",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10052.3,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/muse-spark-1.2-contributor",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10024.89,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/qwen3.5-plus",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10061.7,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/qwen3.6-plus",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10049.86,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/qwen3.7-max",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10050.43,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/qwen3.7-plus",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10052.02,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/qwen3.8-flash",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10033.6,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     },
     {
       "id": "opencode-go/qwen3.8-max",
-      "owned_by": "openai",
-      "enabled": true,
-      "reasoning": true
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 10049.39,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
     }
   ],
   "errors": []

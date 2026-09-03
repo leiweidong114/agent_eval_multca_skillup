@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import httpx
@@ -307,6 +308,14 @@ def test_refreshes_and_loads_non_secret_litellm_catalog(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_LITELLM_KEY", "virtual-key")
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/chat/completions":
+            body = json.loads(request.content)
+            assert body["model"] == "gateway/model-a"
+            assert body["messages"] == [{"role": "user", "content": "HI"}]
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "HI"}}]},
+            )
         return httpx.Response(
             200,
             json={"data": [{"id": "gateway/model-a", "owned_by": "test-owner"}]},
@@ -318,10 +327,72 @@ def test_refreshes_and_loads_non_secret_litellm_catalog(tmp_path, monkeypatch):
     stored = (tmp_path / "config" / "litellm-models.json").read_text(encoding="utf-8")
 
     assert snapshot["model_count"] == 1
-    assert snapshot["catalog_visible_only"] is True
+    assert snapshot["catalog_visible_only"] is False
+    assert snapshot["connectivity_tested"] is True
+    assert snapshot["available_model_count"] == 1
+    assert snapshot["unavailable_model_count"] == 0
+    assert snapshot["models"][0]["available"] is True
     assert load_litellm_model_catalog(tmp_path)["models"][0]["id"] == "gateway/model-a"
     assert "profile" not in snapshot["models"][0]
     assert "virtual-key" not in stored
+
+
+def test_refresh_excludes_models_that_fail_real_inference(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    monkeypatch.setenv("TEST_LITELLM_KEY", "virtual-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/models":
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "working"}, {"id": "quota-exhausted"}]},
+            )
+        model = json.loads(request.content)["model"]
+        if model == "working":
+            return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+        return httpx.Response(
+            429,
+            json={"error": {"message": "余额不足或无可用资源包,请充值。"}},
+        )
+
+    snapshot = refresh_litellm_model_catalog(
+        tmp_path, transport=httpx.MockTransport(handler), probe_workers=2
+    )
+
+    assert [item["id"] for item in snapshot["models"]] == ["working"]
+    assert snapshot["visible_model_count"] == 2
+    assert snapshot["available_model_count"] == 1
+    assert snapshot["unavailable_model_count"] == 1
+    failed = snapshot["unavailable_models"][0]
+    assert failed["id"] == "quota-exhausted"
+    assert failed["failure"]["category"] == "gateway_quota_exhausted"
+
+
+def test_refresh_can_probe_codex_responses_protocol(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    monkeypatch.setenv("TEST_LITELLM_KEY", "virtual-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "chat-only-model"}]})
+        assert request.url.path == "/v1/responses"
+        return httpx.Response(
+            404,
+            json={"error": {"message": "Not Found", "path": "/v4/responses"}},
+        )
+
+    snapshot = refresh_litellm_model_catalog(
+        tmp_path,
+        transport=httpx.MockTransport(handler),
+        probe_agent="codex",
+    )
+
+    assert snapshot["probe_endpoint"] == "responses"
+    assert snapshot["models"] == []
+    assert not (tmp_path / "config" / "litellm-models.json").exists()
+    assert snapshot["unavailable_models"][0]["failure"]["category"] == (
+        "model_protocol_incompatible"
+    )
 
 
 def test_discovered_model_prefers_the_profile_configured_for_its_exact_id(tmp_path, monkeypatch):

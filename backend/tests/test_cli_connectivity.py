@@ -12,6 +12,33 @@ def test_models_command_parses_refresh_and_prefix():
     assert args.command == "models"
     assert args.refresh is True
     assert args.prefix == "opencode-go/"
+    assert args.timeout == 15.0
+    assert args.workers == 8
+    assert args.agent is None
+    assert args.show_unavailable is False
+
+
+def test_agents_command_defaults_to_available_executables_only(monkeypatch, capsys):
+    from agent_eval import cli
+
+    monkeypatch.setattr(cli, "SUPPORTED_AGENTS", ("codex", "opencode"))
+    monkeypatch.setattr(cli, "default_agent_command", lambda agent: agent)
+    monkeypatch.setattr(
+        cli.shutil, "which", lambda command: "codex.exe" if command == "codex" else None
+    )
+    monkeypatch.setattr(
+        cli, "agent_capabilities",
+        lambda agent: {"specified_model_and_skill_evaluation": True},
+    )
+    monkeypatch.setattr(cli, "describe_agent_contract", lambda agent: {"agent": agent})
+    monkeypatch.setattr(cli, "_parser", lambda: type(
+        "Parser", (), {"parse_args": lambda self: argparse.Namespace(command="agents", all=False)}
+    )())
+
+    cli.main()
+
+    rows = json.loads(capsys.readouterr().out)
+    assert [row["agent"] for row in rows] == ["codex"]
 
 
 def test_connectivity_probe_accepts_exact_custom_prompt(tmp_path, monkeypatch):

@@ -147,7 +147,7 @@ def get_model_config() -> dict[str, object]:
     result["llm_judge"] = {
         key: judge.get(key)
         for key in (
-            "enabled", "required", "profile", "model", "timeout_seconds",
+            "enabled", "required", "model", "timeout_seconds",
             "max_evidence_chars", "temperature",
         )
     }
