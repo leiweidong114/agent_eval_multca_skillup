@@ -596,7 +596,7 @@ python -m pytest backend/tests -q
 ```
 
 前两条命令会调用真实模型，默认覆盖当前检测到的六个 Agent；可以重复 `--agent` 缩小范围。
-测试文件保存在 `test/`，原始运行证据保存在 `.runtime/verification/`，正式评测报告在
+测试文件保存在 `test/`，原始运行证据保存在 `backend/.runtime/verification/`，正式评测报告在
 `backend/evaluation_results/`，可在网页“评测结果”中查看。
 完整验收额外检查工具调用、落盘 marker 文件、有 Skill=100 / 无 Skill=0、精确模型核验和 LLM Judge。
 只有回答正确而文件未落盘，不算通过这套验收。测试不触发 subagent，也不代表四个原理图 Skill 已验收。
@@ -712,13 +712,16 @@ $PROFILE_NAME = "litellm_glm_4_7"
 |---|---|
 | `GET /api/health` | 后端进程健康检查 |
 | `GET /api/agents` | 全部支持的 Agent、可执行文件探测和适配能力 |
-| `POST /api/agents/{agent_name}/test` | 对本机 Agent 执行 `--version` 探针，不调用模型 |
+| `POST /api/agents/{agent_name}/test` | 使用“设置”中的默认测试模型，让本机 Agent 完成一次 `HI` 请求 |
 | `GET /api/model-config` | 返回脱敏后的默认模型和 Judge 配置 |
 | `GET /api/model-profiles` | 返回所有模型 Profile，不回显 API Key |
 | `PUT /api/model-profiles/{profile_name}` | 创建或更新本地 Profile，可选择写入 API Key |
 | `DELETE /api/model-profiles/{profile_name}` | 删除本地 Profile 覆盖配置 |
-| `GET /api/models` | 读取 LiteLLM 模型发现/连通性缓存 |
+| `GET /api/models` | 读取 LiteLLM 可见模型，并合并最近一次真实推理连通性结果 |
 | `POST /api/models/test` | 使用指定 Profile 对模型发送最小推理请求 |
+| `POST /api/models/test-batch` | 对 LiteLLM 当前全部可见模型并发发送 `HI`，持久化红绿状态 |
+| `GET /api/settings` | 查看 LLM Judge 与 Agent 可用性测试的默认模型 |
+| `PUT /api/settings` | 保存两个默认模型 ID；不修改地址、密钥或鉴权 |
 | `GET /api/database/health` | 检查 PostgreSQL 和 SpendLogs 读取能力 |
 
 ```powershell
@@ -730,6 +733,9 @@ curl.exe "$API/model-profiles"
 curl.exe "$API/models"
 curl.exe "$API/database/health"
 curl.exe --json "{`"model`":`"$MODEL`",`"profile`":`"$PROFILE_NAME`"}" "$API/models/test"
+curl.exe --json '{"workers":8,"timeout_seconds":30}' "$API/models/test-batch"
+curl.exe "$API/settings"
+curl.exe -X PUT --json "{`"judge_model`":`"$MODEL`",`"agent_test_model`":`"$MODEL`"}" "$API/settings"
 ```
 
 创建或更新 Profile 会写入本机且被 Git 忽略的配置文件。下面的 `api_key` 只是占位符；
@@ -811,7 +817,7 @@ curl.exe --json $runBody "$API/run"
 | `POST /api/validate` | 校验同一请求，不执行完整评测 |
 | `GET /api/capacity` | 查看任务池和 case 并发容量 |
 | `GET /api/jobs?user_id=...` | 查看任务，可选按用户过滤 |
-| `GET /api/jobs/{job_id}` | 查询一个任务状态、进度和结果 |
+| `GET /api/jobs/{job_id}` | 查询状态、进度、实时 `events`、模型交互和最终结果 |
 | `POST /api/jobs/{job_id}/cancel` | 请求取消任务 |
 | `GET /api/runs?user_id=...` | 列出已经生成报告的运行 |
 | `GET /api/runs/{run_id}` | 读取完整 `evaluation-report.json` |
@@ -1139,3 +1145,246 @@ npm run multica:build-agent
 修复后的 JustDo 测试脚本会在 Vitest 结束后自动恢复 Electron ABI。不要在运行 launcher 前
 单独执行 `npm rebuild better-sqlite3`；如果执行过，至少再运行
 `npm run rebuild:electron-native`。
+
+## 22. 将整个系统迁移到新电脑
+
+项目的规范目录和历史目录归一说明见 [`project-structure.md`](project-structure.md)。后端运行时、
+工具、Skill 和结果统一位于 `backend/`，仓库根目录不再保留兼容副本。
+
+### 22.1 能否直接复制项目文件夹
+
+可以迁移源码并在新电脑重新构建，但不能把当前电脑生成的虚拟环境、原生模块和 launcher
+当成免安装的便携二进制直接使用。完整的可重建系统至少包含两个源码目录：
+
+```text
+migration-bundle/
+├── agent_eval_multca_skillup/   # dev 分支
+└── JustDo/                      # justdo_eval 分支
+```
+
+评测系统本身没有依赖旧电脑的固定盘符；路径由仓库位置、环境变量和 `%APPDATA%` 动态解析。
+JustDo 的开发 launcher 会记录构建时的源码绝对路径，因此换电脑、换盘符或移动 JustDo
+源码后必须重新运行 `npm run multica:build-agent`。其它 Agent 不需要放进项目目录，安装后
+保证其命令在新电脑 `PATH` 中即可。
+
+以下生成物不要作为“可移植构建结果”依赖，目标电脑应重新生成：
+
+- 评测系统：`backend/.runtime/`、`backend/.tools/`、Python 虚拟环境、前端
+  `node_modules/` 和 `dist/`。
+- JustDo：`node_modules/`、`dist/`、`dist-electron/`、`release/` 和旧电脑
+  `%APPDATA%\JustDo\multica\development\JustDo-agent.exe`。
+- 全局 `agent-eval.exe`：它可能引用旧电脑 Python 或旧源码路径；迁移后优先使用新项目
+  虚拟环境内的入口。
+
+`.env`、`backend/config/local.yaml`、`backend/config/secrets.env`、运行报告、Prism SQLite
+数据和上传 Skill 都被 Git 忽略，不会随 `git clone` 自动迁移。源码可公开传输，真实凭据应
+通过受控渠道单独传输或在新电脑重新填写。
+
+### 22.2 推荐的源码传输方式
+
+目标电脑能访问 GitHub 时，直接检出指定分支最干净：
+
+```powershell
+git clone --branch dev https://github.com/leiweidong114/agent_eval_multca_skillup.git
+git clone --branch justdo_eval https://github.com/leiweidong114/JustDo.git
+```
+
+内网电脑无法访问 GitHub 时，可在当前电脑把两个分支导出成不含 `.git`、运行产物和密钥的
+源码 ZIP：
+
+```powershell
+New-Item -ItemType Directory -Force -Path "D:\migration-bundle" | Out-Null
+
+git -C "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup" archive `
+  --format=zip --output="D:\migration-bundle\agent_eval_multca_skillup-dev.zip" dev
+
+git -C "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\JustDo" archive `
+  --format=zip --output="D:\migration-bundle\JustDo-justdo_eval.zip" justdo_eval
+```
+
+`git archive` 只包含已经提交的文件；执行前先用 `git status` 确认所需修改都已提交。
+`.env` 不会进入 ZIP，应单独安全迁移。完全离线的内网环境还需要预先准备 npm 缓存、Python
+包缓存、Electron/OpenClaw 下载缓存，以及评测脚本所需的 Go/Multica/Skill-Up 资源；仅有
+两个源码 ZIP 而没有网络或依赖缓存，不能完成首次构建。
+
+### 22.3 新电脑前置环境
+
+建议准备：
+
+- Windows 10/11 x64；
+- Git；
+- Python 3.10 或更高版本，并确保 `python` 可从 PowerShell 调用；
+- Node.js `24.15.x–24.x` 和 npm。JustDo 的 `package.json` 不支持 Node 25/26；
+- Visual Studio Build Tools 的 C++ 构建工具，用于原生 npm 模块缺少预编译包时回退构建；
+- Windows/.NET Framework C# 编译器，用于生成 JustDo 开发 launcher；
+- 能访问 LiteLLM HTTP 服务和 LiteLLM PostgreSQL 的网络；
+- 其它 Agent 的 CLI。安装后使用各自 `--version` 命令确认，并将目录加入 `PATH`。
+
+### 22.4 在新电脑构建 JustDo
+
+先构建 JustDo，使评测系统能够自动发现无界面 launcher：
+
+```powershell
+Set-Location "D:\new-path\JustDo"
+npm ci
+npm run openclaw:runtime:host
+npm run multica:build-agent
+```
+
+检查生成结果：
+
+```powershell
+$JUSTDO_AGENT = "$env:APPDATA\JustDo\multica\development\JustDo-agent.exe"
+Test-Path -LiteralPath $JUSTDO_AGENT
+& $JUSTDO_AGENT --version
+```
+
+必须得到 `True`、版本号和退出码 0。`openclaw:runtime:host` 首次执行通常需要下载 OpenClaw
+依赖；离线迁移必须提前准备对应 runtime。以后只要 JustDo 源码路径发生变化，就在新路径
+重新执行 `npm run multica:build-agent`。
+
+### 22.5 在新电脑构建评测系统
+
+```powershell
+Set-Location "D:\new-path\agent_eval_multca_skillup"
+.\backend\scripts\setup_windows.ps1
+
+Set-Location .\frontend
+npm ci
+Set-Location ..
+```
+
+`setup_windows.ps1` 会在 `backend/.runtime/windows/` 内创建新的 Python 虚拟环境、下载固定
+Go、检出固定 Multica/Skill-Up 版本、应用 Windows 补丁、编译运行时并执行测试。不要复用
+旧电脑复制来的 Python venv。
+
+创建本机配置：
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+至少按实际环境填写以下值，示例值不能直接使用：
+
+```dotenv
+LITELLM_API_BASE=http://your-litellm/v1
+LITELLM_API_KEY=your-inference-key
+LITELLM_MASTER_KEY=your-existing-master-key
+LITELLM_MODEL=glm-4.5-air
+LITELLM_JUDGE_MODEL=glm-4.5-air
+DATABASE_URL=postgresql://reader:encoded-password@database-host:5432/litellm
+```
+
+数据库 URL 中用户名或密码包含 `@`、`:`、`/` 等字符时必须 URL 编码。这里是用户在目标机
+填写已有凭据，不需要、也不应该修改 LiteLLM 服务端鉴权设置。
+
+### 22.6 新电脑验收顺序
+
+不要先做六 Agent 全量评测。按下面顺序可以快速定位依赖、网关、数据库或 Agent 问题：
+
+```powershell
+$AGENT_EVAL = ".\backend\.runtime\windows\python\Scripts\agent-eval.exe"
+
+& $AGENT_EVAL doctor
+& $AGENT_EVAL check-litellm --model glm-4.5-air
+& $AGENT_EVAL check-database
+& $AGENT_EVAL models --refresh --timeout 30 --workers 3
+& $AGENT_EVAL agents
+& $AGENT_EVAL check-agent --agent justdo --model glm-4.5-air --prompt "hi" --timeout 180 --database-verify
+```
+
+其它 Agent 手动安装完成后，逐个执行相同的 `check-agent`，只替换 `--agent`。`agents`
+只会列出本机可执行且版本探测通过的 Agent。全部单 Agent 检查通过后，再执行：
+
+```powershell
+python test/verify_system.py --phase connectivity --model glm-4.5-air --workers 2 --timeout 180
+python test/verify_system.py --phase evaluation --model glm-4.5-air --workers 2 --timeout 240
+```
+
+### 22.7 是否迁移历史数据
+
+只需要在新电脑重新评测时，无需迁移历史数据。需要保留历史时，还要单独复制这些 Git 忽略
+目录，并确保仅在后端停止时复制 SQLite 数据：
+
+- `backend/evaluation_results/`：Skill/Agent 历史报告；
+- `backend/model_eval_data/`：Prism SQLite、加密密钥和题库实验结果；
+- `backend/skills/.registry/`：网页上传的 Skill 版本；
+- `backend/schematic_projects/`：原理图演示工程。
+
+Prism 的加密 Provider Key 依赖 `backend/model_eval_data/secret.key`；只复制 SQLite 而遗漏该
+文件会导致原有 Provider 密钥无法解密。LiteLLM SpendLogs 位于外部 PostgreSQL，不在项目
+文件夹中，新电脑只需连接同一数据库或新的兼容数据库。
+
+## 23. Windows 端口 8000 被占用但查不到进程
+
+错误：
+
+```text
+[Errno 10048] error while attempting to bind on address ('127.0.0.1', 8000)
+通常每个套接字地址只允许使用一次
+```
+
+表示端口已经被监听或被转发占用，不是 FastAPI 启动失败。先检查 Windows 监听器：
+
+```powershell
+Get-NetTCPConnection -State Listen -LocalPort 8000 -ErrorAction SilentlyContinue |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+
+netstat -aon | Select-String ":8000"
+```
+
+得到 PID 后查看进程：
+
+```powershell
+$PORT_PID = (Get-NetTCPConnection -State Listen -LocalPort 8000).OwningProcess
+Get-Process -Id $PORT_PID
+Get-CimInstance Win32_Process |
+  Where-Object ProcessId -eq $PORT_PID |
+  Select-Object ProcessId,ExecutablePath,CommandLine
+```
+
+如果 Windows 查不到监听 PID，但 socket 仍能连接，应检查 WSL。WSL 2 的 localhost 转发可将
+Linux 监听端口映射到 Windows，而监听进程不会总是出现在 Windows `netstat` 中：
+
+```powershell
+wsl.exe --list --running
+wsl.exe -d Ubuntu-22.04 -- sh -lc "ss -ltnp '( sport = :8000 )'"
+curl.exe --noproxy "*" -i http://127.0.0.1:8000/openapi.json
+```
+
+2026-09-08 本机实测结果是 WSL `Ubuntu-22.04` 中的 `vllm` 监听
+`0.0.0.0:8000`，所以 Windows 后端无法绑定 8000。访问该端口得到的是 vLLM 的 Uvicorn
+OpenAPI，`/api/health` 返回 404，并不是 Agent Eval 后端。
+
+本机的 8001 也被该 vLLM 的 Python 子进程监听；当前已确认 8010 可绑定。最安全的做法是
+保留 vLLM，先检查候选端口，再让 Agent Eval 使用空闲端口：
+
+```powershell
+# 只做本地 bind 检查；输出 PORT_FREE 才继续
+python -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',8010)); print('PORT_FREE'); s.close()"
+
+# 终端 1：后端
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup"
+.\backend\.runtime\windows\python\Scripts\python.exe .\backend\run_server.py `
+  --host 127.0.0.1 --port 8010
+
+# 验证必须返回 agent-eval-backend
+curl.exe --noproxy "*" http://127.0.0.1:8010/api/health
+```
+
+前端终端必须同步指定后端地址：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup\frontend"
+$env:VITE_API_TARGET = "http://127.0.0.1:8010"
+npm run dev
+```
+
+如果确认不再需要 vLLM，应回到启动 vLLM 的 WSL 终端、服务管理器或容器编排工具中正常停止
+它。不要仅因为看到端口冲突就执行宽泛的 `taskkill`、`pkill` 或停止整个 WSL；先用 `ss`
+确认准确进程和用途。服务停止后再验证 8000：
+
+```powershell
+python -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',8000)); print('PORT_8000_FREE'); s.close()"
+```
