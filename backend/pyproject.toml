@@ -26,5 +26,6 @@ agent-eval = "agent_eval.cli:main"
 where = ["src"]
 
 [tool.pytest.ini_options]
+pythonpath = [".", "src"]
 testpaths = ["tests"]
 addopts = "-q"

@@ -1,0 +1,24 @@
+[
+  {
+    "agent": "claude",
+    "runtime_agent": "claude",
+    "requested_model": "opencode-go/minimax-m2.7",
+    "agent_model": "claude-sonnet-4-6",
+    "gateway_model": "opencode-go/minimax-m2.7",
+    "protocol": "openai_compatible",
+    "reasoning_enabled": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "agent": "codebuddy",
+    "runtime_agent": "codebuddy",
+    "requested_model": "opencode-go/minimax-m2.7",
+    "agent_model": "custom-local:MiniMax-M2.7",
+    "gateway_model": "opencode-go/minimax-m2.7",
+    "protocol": "openai_compatible",
+    "reasoning_enabled": true,
+    "passed": true,
+    "error": null
+  }
+]

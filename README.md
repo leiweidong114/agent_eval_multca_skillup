@@ -280,6 +280,24 @@ python backend/skills/schematic-generation/scripts/schematic_judge.py `
 
 网页 `/schematic` 可编辑/展示框图，执行信号接口提取、公共/私有 CBB 分流、器件并行生成、整版 JSON 打包和专项评分，并返回 `/schematic?project=<id>` 工程 URL。Judge 总分 100：器件 25、引脚 15、连线拓扑 40、网络名 15、Schema/过程产物 5。
 
+## 原理图整版生成（auto_layout 服务 + 4 Skills，开发中）
+
+外部服务与自动布局算法位于 `D:\AI_FOR_WORLD\14_AI_workspace\common_tools\自动布局算法\auto_layout_service`（FastAPI，端口 8631）：
+
+- **Service 1 auto_layout**：body 提交电路 DSL Python 代码 → 返回带坐标的布局 JSON。
+- **Service 2 apply_schematic**：布局 JSON 集 → 多图页网页（左栏切换），返回 URL。
+
+本仓库新增 4 个编排 Skill（`backend/skills/`），把自然语言电路描述端到端变成网页：
+
+```text
+signal-interface-generation/   需求 → 信号接口列表 sheets.json（每主芯片一个 sheet）
+schematic-layout-codegen/      sheets → Python DSL → 调 auto_layout 布局（subagent 并行 2/批）
+schematic-web-apply/           布局 JSON → apply_schematic → URL
+schematic-pipeline/            以上三步的总编排 SKILL
+```
+
+端到端 demo（STM32F103C8Tx + 8×LED）见 `tests_reports/20260903_schematic_pipeline_demo/report.md`。
+
 ## Windows 安装
 
 要求：Windows 10/11、PowerShell、Git、Python 3.10+。运行：

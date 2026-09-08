@@ -1,0 +1,68 @@
+[
+  {
+    "agent": "claude",
+    "runtime_agent": "claude",
+    "requested_model": "glm-4.7",
+    "agent_model": "claude-sonnet-4-6",
+    "gateway_model": "glm-4.7-anthropic",
+    "protocol": "openai_compatible",
+    "reasoning_enabled": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "agent": "codebuddy",
+    "runtime_agent": "codebuddy",
+    "requested_model": "glm-4.7",
+    "agent_model": "custom-local:glm-4.7",
+    "gateway_model": "glm-4.7",
+    "protocol": "openai_compatible",
+    "reasoning_enabled": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "agent": "codex",
+    "runtime_agent": "codex",
+    "requested_model": "glm-4.7",
+    "agent_model": "glm-4.7",
+    "gateway_model": "glm-4.7",
+    "protocol": "openai_compatible",
+    "reasoning_enabled": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "agent": "justdo",
+    "runtime_agent": "openclaw",
+    "requested_model": "glm-4.7",
+    "agent_model": "main",
+    "gateway_model": "glm-4.7",
+    "protocol": "openai_compatible",
+    "reasoning_enabled": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "agent": "openclaw",
+    "runtime_agent": "openclaw",
+    "requested_model": "glm-4.7",
+    "agent_model": "main",
+    "gateway_model": "glm-4.7",
+    "protocol": "openai_compatible",
+    "reasoning_enabled": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "agent": "opencode",
+    "runtime_agent": "opencode",
+    "requested_model": "glm-4.7",
+    "agent_model": "litellm/glm-4.7",
+    "gateway_model": "glm-4.7",
+    "protocol": "openai_compatible",
+    "reasoning_enabled": true,
+    "passed": true,
+    "error": null
+  }
+]

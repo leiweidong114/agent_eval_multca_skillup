@@ -1,0 +1,2995 @@
+{
+  "pareto_index": 1,
+  "algorithm": "independent-region routing-first pareto-simulated-annealing + detour-guided translate/rotate + staged A-star-v4",
+  "canvas": {
+    "x": 0,
+    "y": 0,
+    "width": 5600,
+    "height": 3400
+  },
+  "options": {
+    "grid_size": 10,
+    "component_gap": 40,
+    "layer_gap": 120,
+    "group_gap": 120,
+    "route_clearance": 10,
+    "route_lane_gap": 20,
+    "bend_penalty": 5,
+    "crossing_penalty": 100,
+    "overlap_penalty": 2400,
+    "parallel_proximity_penalty": 1,
+    "backward_penalty": 1,
+    "crossing_sweeps": 8,
+    "max_route_lanes": 160,
+    "max_layers_per_row": 8,
+    "main_pin_threshold": 10,
+    "subcircuit_min_components": 2,
+    "direct_wire_target_tracks": 20,
+    "long_wire_label_threshold_tracks": 36,
+    "main_long_wire_label_threshold_tracks": 30,
+    "max_direct_wire_tracks": 70,
+    "max_direct_wire_bends": 2,
+    "long_wire_labels": true,
+    "always_label_ground_nets": false,
+    "max_optional_labels_per_domain": 2,
+    "main_component_gap": 220,
+    "subcircuit_gap": 140,
+    "pin_escape_tracks": 8,
+    "pin_event_clearance_tracks": 3,
+    "subnetwork_cluster_gap_tracks": 10,
+    "subnetwork_internal_gap_tracks": 4,
+    "global_net_label_threshold": 12,
+    "large_main_label_pin_threshold": 64,
+    "always_use_astar": false,
+    "label_stub_length": 60,
+    "junction_merge_tracks": 12
+  },
+  "objectives": {
+    "primary_nonstraight_count": 0.0,
+    "wire_overlap_length": 0.0,
+    "wire_crossing_count": 0.0,
+    "pin_event_clearance_violation_count": 0.0,
+    "outward_label_violation_count": 0.0,
+    "label_ray_obstruction_count": 9.0,
+    "hard_detour_violation_count": 1.0,
+    "detour_violation_count": 1.0,
+    "maximum_detour_ratio": 2.7142857142857144,
+    "p95_detour_ratio": 2.7142857142857144,
+    "total_detour_length": 120.0,
+    "excessive_bend_branch_count": 0.0,
+    "maximum_branch_bends": 2.0,
+    "bend_count": 3.0,
+    "wire_length": 1770.0,
+    "maximum_branch_length": 200.0,
+    "maximum_direct_branch_length": 200.0,
+    "excess_direct_wire_length": 0.0,
+    "predicted_optional_internal_label_count": 0.0,
+    "network_label_count": 23.0,
+    "branch_length_variance": 1343.3599999999994,
+    "label_length_deviation": 0.0,
+    "spacing_deviation": 0.0,
+    "alignment_deviation": 0.0,
+    "compactness_area": 2308800.0
+  },
+  "placement_constraints": [],
+  "topology_validation": {
+    "main_component_ids": [
+      "U1",
+      "U3"
+    ],
+    "reachable_net_count": 10,
+    "total_net_count": 10,
+    "isolated_net_count": 0,
+    "isolated_nets": [],
+    "isolated_components": [],
+    "valid": true,
+    "main_detection": {
+      "pin_threshold": 10,
+      "comparison": "pin_count > threshold",
+      "detection_method": "automatic_pin_count_only",
+      "explicit_main_component_ids": [],
+      "inferred_main_component_ids": [
+        "U1",
+        "U3"
+      ],
+      "main_component_ids": [
+        "U1",
+        "U3"
+      ]
+    }
+  },
+  "hierarchical_regions": {
+    "strategy": "independent tight physical regions packed from automatic mains and Python subcircuits",
+    "main_detection_policy": "pin_count > main_pin_threshold only",
+    "main_component_ids": [
+      "U1",
+      "U3"
+    ],
+    "ignored_main_group_labels": [
+      "RF_PA"
+    ],
+    "component_region": {
+      "E1": "subcircuit:rf_filter",
+      "U1": "main:U1",
+      "U2": "subcircuit:power_3v3",
+      "U3": "main:U3",
+      "U4": "subcircuit:rf_filter"
+    },
+    "component_routing_domain": {
+      "E1": "subcircuit:rf_filter",
+      "U1": "main:U1",
+      "U2": "subcircuit:power_3v3",
+      "U3": "main:U3",
+      "U4": "subcircuit:rf_filter"
+    },
+    "component_priority": {
+      "E1": 1,
+      "U1": 0,
+      "U2": 1,
+      "U3": 0,
+      "U4": 3
+    },
+    "component_role": {
+      "E1": "topology_anchor",
+      "U1": "automatic_main_anchor",
+      "U2": "topology_anchor",
+      "U3": "automatic_main_anchor",
+      "U4": "topology_leaf"
+    },
+    "subnetworks": [
+      {
+        "id": "subcircuit:power_3v3",
+        "name": "POWER_3V3",
+        "component_ids": [
+          "U2"
+        ],
+        "connected_main_component_ids": [
+          "U1",
+          "U3"
+        ],
+        "motif": "tree",
+        "layout_template": "layered_tree",
+        "adjacency": {
+          "U2": []
+        },
+        "degrees": {
+          "U2": 0
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "U2",
+        "boundary_net_ids": [
+          "GND",
+          "VDD_3V3"
+        ],
+        "boundary_component_ids": [
+          "U2"
+        ],
+        "component_priority": {
+          "U2": 1
+        },
+        "component_role": {
+          "U2": "topology_anchor"
+        }
+      },
+      {
+        "id": "subcircuit:rf_filter",
+        "name": "RF_FILTER",
+        "component_ids": [
+          "E1",
+          "U4"
+        ],
+        "connected_main_component_ids": [
+          "U1",
+          "U3"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "adjacency": {
+          "E1": [
+            "U4"
+          ],
+          "U4": [
+            "E1"
+          ]
+        },
+        "degrees": {
+          "E1": 1,
+          "U4": 1
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "E1",
+        "boundary_net_ids": [
+          "GND",
+          "RF_PA_OUT"
+        ],
+        "boundary_component_ids": [
+          "U4"
+        ],
+        "component_priority": {
+          "E1": 1,
+          "U4": 3
+        },
+        "component_role": {
+          "E1": "topology_anchor",
+          "U4": "topology_leaf"
+        }
+      }
+    ],
+    "regions": [
+      {
+        "id": "main:U1",
+        "kind": "main",
+        "name": "U1_MAIN",
+        "main_component_id": "U1",
+        "component_ids": [
+          "U1"
+        ],
+        "motif": "single_anchor",
+        "layout_template": "main_centered",
+        "width": 1140,
+        "height": 1140,
+        "bounds": {
+          "x": 100,
+          "y": 100,
+          "width": 1140,
+          "height": 1140
+        },
+        "minimum_component_bounds": {
+          "x": 190,
+          "y": 190,
+          "width": 960,
+          "height": 960
+        },
+        "component_bounds_center": {
+          "x": 670,
+          "y": 670
+        },
+        "search_timing": {
+          "region_id": "main:U1",
+          "component_count": 1,
+          "routing_net_count": 7,
+          "iteration_budget": 0,
+          "attempted_moves": 0,
+          "accepted_candidates": 0,
+          "elapsed_seconds": 0.0,
+          "optimization_mode": "deterministic_main_anchor"
+        }
+      },
+      {
+        "id": "main:U3",
+        "kind": "main",
+        "name": "U3_MAIN",
+        "main_component_id": "U3",
+        "component_ids": [
+          "U3"
+        ],
+        "motif": "single_anchor",
+        "layout_template": "main_centered",
+        "width": 280,
+        "height": 290,
+        "bounds": {
+          "x": 1360,
+          "y": 100,
+          "width": 280,
+          "height": 290
+        },
+        "minimum_component_bounds": {
+          "x": 1450,
+          "y": 190,
+          "width": 100,
+          "height": 110
+        },
+        "component_bounds_center": {
+          "x": 1500,
+          "y": 240
+        },
+        "search_timing": {
+          "region_id": "main:U3",
+          "component_count": 1,
+          "routing_net_count": 8,
+          "iteration_budget": 0,
+          "attempted_moves": 0,
+          "accepted_candidates": 0,
+          "elapsed_seconds": 0.0,
+          "optimization_mode": "deterministic_main_anchor"
+        }
+      },
+      {
+        "id": "subcircuit:power_3v3",
+        "kind": "subcircuit",
+        "name": "POWER_3V3",
+        "main_component_id": null,
+        "component_ids": [
+          "U2"
+        ],
+        "motif": "tree",
+        "layout_template": "layered_tree",
+        "width": 240,
+        "height": 220,
+        "bounds": {
+          "x": 1760,
+          "y": 100,
+          "width": 240,
+          "height": 220
+        },
+        "minimum_component_bounds": {
+          "x": 1770,
+          "y": 270,
+          "width": 60,
+          "height": 40
+        },
+        "component_bounds_center": {
+          "x": 1800,
+          "y": 290
+        },
+        "search_timing": {
+          "region_id": "subcircuit:power_3v3",
+          "component_count": 1,
+          "routing_net_count": 3,
+          "iteration_budget": 21,
+          "attempted_moves": 21,
+          "accepted_candidates": 9,
+          "elapsed_seconds": 0.586701,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      },
+      {
+        "id": "subcircuit:rf_filter",
+        "kind": "subcircuit",
+        "name": "RF_FILTER",
+        "main_component_id": null,
+        "component_ids": [
+          "E1",
+          "U4"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "width": 300,
+        "height": 210,
+        "bounds": {
+          "x": 2120,
+          "y": 100,
+          "width": 300,
+          "height": 210
+        },
+        "minimum_component_bounds": {
+          "x": 2170,
+          "y": 110,
+          "width": 240,
+          "height": 80
+        },
+        "component_bounds_center": {
+          "x": 2290,
+          "y": 150
+        },
+        "search_timing": {
+          "region_id": "subcircuit:rf_filter",
+          "component_count": 2,
+          "routing_net_count": 3,
+          "iteration_budget": 39,
+          "attempted_moves": 39,
+          "accepted_candidates": 3,
+          "elapsed_seconds": 1.303007,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      }
+    ],
+    "routing_domains": [
+      {
+        "id": "main:U1",
+        "name": "U1_MAIN",
+        "kind": "main",
+        "physical_region_id": "main:U1",
+        "motif": "single_anchor",
+        "layout_template": "main_centered",
+        "bounds": {
+          "x": 100,
+          "y": 100,
+          "width": 1140,
+          "height": 1140
+        },
+        "selected_flow_side": "",
+        "initial_candidate_scores": [],
+        "component_ids": [
+          "U1"
+        ]
+      },
+      {
+        "id": "main:U3",
+        "name": "U3_MAIN",
+        "kind": "main",
+        "physical_region_id": "main:U3",
+        "motif": "single_anchor",
+        "layout_template": "main_centered",
+        "bounds": {
+          "x": 1360,
+          "y": 100,
+          "width": 280,
+          "height": 290
+        },
+        "selected_flow_side": "",
+        "initial_candidate_scores": [],
+        "component_ids": [
+          "U3"
+        ]
+      },
+      {
+        "id": "subcircuit:power_3v3",
+        "name": "POWER_3V3",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:power_3v3",
+        "motif": "tree",
+        "layout_template": "layered_tree",
+        "bounds": {
+          "x": 1760,
+          "y": 100,
+          "width": 240,
+          "height": 220
+        },
+        "selected_flow_side": "",
+        "initial_candidate_scores": [],
+        "component_ids": [
+          "U2"
+        ]
+      },
+      {
+        "id": "subcircuit:rf_filter",
+        "name": "RF_FILTER",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:rf_filter",
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "bounds": {
+          "x": 2120,
+          "y": 100,
+          "width": 300,
+          "height": 210
+        },
+        "selected_flow_side": "",
+        "initial_candidate_scores": [],
+        "component_ids": [
+          "E1",
+          "U4"
+        ]
+      }
+    ],
+    "movement_bounds": {
+      "U1": {
+        "x": 100,
+        "y": 100,
+        "width": 1140,
+        "height": 1140
+      },
+      "U3": {
+        "x": 1360,
+        "y": 100,
+        "width": 280,
+        "height": 290
+      },
+      "U2": {
+        "x": 1760,
+        "y": 100,
+        "width": 240,
+        "height": 220
+      },
+      "E1": {
+        "x": 2120,
+        "y": 100,
+        "width": 300,
+        "height": 210
+      },
+      "U4": {
+        "x": 2120,
+        "y": 100,
+        "width": 300,
+        "height": 210
+      }
+    },
+    "physical_region_count": 4,
+    "network_naming": {
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "rules": [
+        "uppercase ASCII letters, digits, and underscore only",
+        "names never start with a digit",
+        "duplicate normalized names receive a numeric suffix",
+        "all fragments of one logical connection share the same label"
+      ],
+      "source_to_normalized": {
+        "GND": "GND",
+        "RFM_RESET": "RFM_RESET",
+        "RF_OUT": "RF_OUT",
+        "RF_PA_OUT": "RF_PA_OUT",
+        "SPI_MISO": "SPI_MISO",
+        "SPI_MOSI": "SPI_MOSI",
+        "SPI_NSS": "SPI_NSS",
+        "SPI_SCK": "SPI_SCK",
+        "VDD_3V3": "VDD_3V3",
+        "VIN_5V": "VIN_5V"
+      }
+    },
+    "cross_region_nets": [
+      {
+        "source_net_id": "GND",
+        "normalized_net_name": "GND",
+        "fragment_ids": [
+          "GND__main_u1",
+          "GND__main_u3",
+          "GND__subcircuit_power_3v3",
+          "GND__subcircuit_rf_filter"
+        ],
+        "region_ids": [
+          "main:U1",
+          "main:U3",
+          "subcircuit:power_3v3",
+          "subcircuit:rf_filter"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "main:U3",
+          "subcircuit:power_3v3",
+          "subcircuit:rf_filter"
+        ],
+        "reason": "main_to_main_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "RFM_RESET",
+        "normalized_net_name": "RFM_RESET",
+        "fragment_ids": [
+          "RFM_RESET__main_u1",
+          "RFM_RESET__main_u3"
+        ],
+        "region_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "reason": "main_to_main_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "RF_PA_OUT",
+        "normalized_net_name": "RF_PA_OUT",
+        "fragment_ids": [
+          "RF_PA_OUT__main_u3",
+          "RF_PA_OUT__subcircuit_rf_filter"
+        ],
+        "region_ids": [
+          "main:U3",
+          "subcircuit:rf_filter"
+        ],
+        "routing_domain_ids": [
+          "main:U3",
+          "subcircuit:rf_filter"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "SPI_MISO",
+        "normalized_net_name": "SPI_MISO",
+        "fragment_ids": [
+          "SPI_MISO__main_u1",
+          "SPI_MISO__main_u3"
+        ],
+        "region_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "reason": "main_to_main_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "SPI_MOSI",
+        "normalized_net_name": "SPI_MOSI",
+        "fragment_ids": [
+          "SPI_MOSI__main_u1",
+          "SPI_MOSI__main_u3"
+        ],
+        "region_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "reason": "main_to_main_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "SPI_NSS",
+        "normalized_net_name": "SPI_NSS",
+        "fragment_ids": [
+          "SPI_NSS__main_u1",
+          "SPI_NSS__main_u3"
+        ],
+        "region_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "reason": "main_to_main_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "SPI_SCK",
+        "normalized_net_name": "SPI_SCK",
+        "fragment_ids": [
+          "SPI_SCK__main_u1",
+          "SPI_SCK__main_u3"
+        ],
+        "region_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "main:U3"
+        ],
+        "reason": "main_to_main_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "VDD_3V3",
+        "normalized_net_name": "VDD_3V3",
+        "fragment_ids": [
+          "VDD_3V3__main_u1",
+          "VDD_3V3__main_u3",
+          "VDD_3V3__subcircuit_power_3v3"
+        ],
+        "region_ids": [
+          "main:U1",
+          "main:U3",
+          "subcircuit:power_3v3"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "main:U3",
+          "subcircuit:power_3v3"
+        ],
+        "reason": "main_to_main_label",
+        "uses_net_labels": true
+      }
+    ],
+    "source_net_count": 10,
+    "routing_fragment_count": 21
+  },
+  "components": [
+    {
+      "id": "E1",
+      "library_id": "Device:Antenna",
+      "type": "rf",
+      "label": "E1  868MHz",
+      "group": "RF_FILTER",
+      "main": false,
+      "x": 2390,
+      "y": 110,
+      "width": 20,
+      "height": 30,
+      "source_width": 20,
+      "source_height": 30,
+      "library_width": 20,
+      "library_height": 30,
+      "rotation": 0,
+      "region_id": "subcircuit:rf_filter",
+      "routing_domain_id": "subcircuit:rf_filter",
+      "optimization_domain_id": "subcircuit:rf_filter",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              10.0,
+              0.0
+            ],
+            [
+              10.0,
+              25.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              15.0,
+              0.0
+            ],
+            [
+              10.0,
+              20.0
+            ],
+            [
+              5.0,
+              0.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "U1",
+      "library_id": "MCU_ST_STM32F1:STM32F103C8Tx",
+      "type": "soc",
+      "label": "U1  STM32F103C8Tx",
+      "group": "",
+      "main": true,
+      "x": 190,
+      "y": 190,
+      "width": 960,
+      "height": 960,
+      "source_width": 960,
+      "source_height": 960,
+      "library_width": 960,
+      "library_height": 960,
+      "rotation": 0,
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "optimization_domain_id": "main:U1",
+      "placement_priority": 0,
+      "placement_role": "automatic_main_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              68.571,
+              930.0
+            ],
+            [
+              891.429,
+              930.0
+            ],
+            [
+              891.429,
+              30.0
+            ],
+            [
+              68.571,
+              30.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "U2",
+      "library_id": "Regulator_Linear:AMS1117-3.3",
+      "type": "power",
+      "label": "U2  AMS1117-3.3",
+      "group": "POWER_3V3",
+      "main": false,
+      "x": 1770,
+      "y": 270,
+      "width": 60,
+      "height": 40,
+      "source_width": 60,
+      "source_height": 40,
+      "library_width": 60,
+      "library_height": 40,
+      "rotation": 0,
+      "region_id": "subcircuit:power_3v3",
+      "routing_domain_id": "subcircuit:power_3v3",
+      "optimization_domain_id": "subcircuit:power_3v3",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              10.0,
+              28.5
+            ],
+            [
+              50.0,
+              28.5
+            ],
+            [
+              50.0,
+              1.0
+            ],
+            [
+              10.0,
+              1.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "U3",
+      "library_id": "RF_Module:RFM95W-868S2",
+      "type": "rf",
+      "label": "U3  RFM95W-868S2",
+      "group": "RF_PA",
+      "main": true,
+      "x": 1450,
+      "y": 190,
+      "width": 100,
+      "height": 110,
+      "source_width": 100,
+      "source_height": 110,
+      "library_width": 100,
+      "library_height": 110,
+      "rotation": 0,
+      "region_id": "main:U3",
+      "routing_domain_id": "main:U3",
+      "optimization_domain_id": "main:U3",
+      "placement_priority": 0,
+      "placement_role": "automatic_main_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              10.0,
+              10.0
+            ],
+            [
+              90.0,
+              10.0
+            ],
+            [
+              90.0,
+              100.0
+            ],
+            [
+              10.0,
+              100.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "U4",
+      "library_id": "Device:Filter_EMI_CLC",
+      "type": "filter",
+      "label": "U4  Filter_EMI_CLC",
+      "group": "RF_FILTER",
+      "main": false,
+      "x": 2170,
+      "y": 170,
+      "width": 60,
+      "height": 20,
+      "source_width": 60,
+      "source_height": 20,
+      "library_width": 60,
+      "library_height": 20,
+      "rotation": 0,
+      "region_id": "subcircuit:rf_filter",
+      "routing_domain_id": "subcircuit:rf_filter",
+      "optimization_domain_id": "subcircuit:rf_filter",
+      "placement_priority": 3,
+      "placement_role": "topology_leaf",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              7.5,
+              -2.5
+            ],
+            [
+              52.0,
+              -2.5
+            ],
+            [
+              52.0,
+              15.0
+            ],
+            [
+              7.5,
+              15.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              10.0,
+              2.5
+            ],
+            [
+              20.0,
+              2.5
+            ]
+          ]
+        },
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              10.0,
+              9.5
+            ],
+            [
+              18.0,
+              9.5
+            ],
+            [
+              18.0,
+              8.5
+            ],
+            [
+              10.0,
+              8.5
+            ]
+          ]
+        },
+        {
+          "kind": "circle",
+          "center": [
+            14.0,
+            2.5
+          ],
+          "radius": 1.0
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              14.0,
+              2.5
+            ],
+            [
+              14.0,
+              5.5
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              14.0,
+              9.5
+            ],
+            [
+              14.0,
+              12.5
+            ],
+            [
+              45.0,
+              12.5
+            ],
+            [
+              45.0,
+              9.5
+            ]
+          ]
+        },
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              18.0,
+              6.5
+            ],
+            [
+              10.0,
+              6.5
+            ],
+            [
+              10.0,
+              5.5
+            ],
+            [
+              18.0,
+              5.5
+            ]
+          ]
+        },
+        {
+          "kind": "circle",
+          "center": [
+            30.0,
+            12.5
+          ],
+          "radius": 1.0
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              40.0,
+              2.5
+            ],
+            [
+              50.0,
+              2.5
+            ]
+          ]
+        },
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              41.0,
+              9.5
+            ],
+            [
+              49.0,
+              9.5
+            ],
+            [
+              49.0,
+              8.5
+            ],
+            [
+              41.0,
+              8.5
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              45.0,
+              2.5
+            ],
+            [
+              45.0,
+              5.5
+            ]
+          ]
+        },
+        {
+          "kind": "circle",
+          "center": [
+            45.0,
+            2.5
+          ],
+          "radius": 1.0
+        },
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              49.0,
+              6.5
+            ],
+            [
+              41.0,
+              6.5
+            ],
+            [
+              41.0,
+              5.5
+            ],
+            [
+              49.0,
+              5.5
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "pins": [
+    {
+      "id": "E1.1",
+      "component_id": "E1",
+      "name": "A",
+      "number": "1",
+      "x": 2400,
+      "y": 140,
+      "direction": "D",
+      "electrical_type": "input",
+      "length": 10
+    },
+    {
+      "id": "U1.1",
+      "component_id": "U1",
+      "name": "VBAT",
+      "number": "1",
+      "x": 530,
+      "y": 190,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.10",
+      "component_id": "U1",
+      "name": "PA0",
+      "number": "10",
+      "x": 1150,
+      "y": 280,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.11",
+      "component_id": "U1",
+      "name": "PA1",
+      "number": "11",
+      "x": 1150,
+      "y": 310,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.12",
+      "component_id": "U1",
+      "name": "PA2",
+      "number": "12",
+      "x": 1150,
+      "y": 340,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.13",
+      "component_id": "U1",
+      "name": "PA3",
+      "number": "13",
+      "x": 1150,
+      "y": 370,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.14",
+      "component_id": "U1",
+      "name": "PA4",
+      "number": "14",
+      "x": 1150,
+      "y": 400,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.15",
+      "component_id": "U1",
+      "name": "PA5",
+      "number": "15",
+      "x": 1150,
+      "y": 430,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.16",
+      "component_id": "U1",
+      "name": "PA6",
+      "number": "16",
+      "x": 1150,
+      "y": 460,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.17",
+      "component_id": "U1",
+      "name": "PA7",
+      "number": "17",
+      "x": 1150,
+      "y": 490,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.18",
+      "component_id": "U1",
+      "name": "PB0",
+      "number": "18",
+      "x": 190,
+      "y": 610,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.19",
+      "component_id": "U1",
+      "name": "PB1",
+      "number": "19",
+      "x": 190,
+      "y": 640,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.2",
+      "component_id": "U1",
+      "name": "PC13",
+      "number": "2",
+      "x": 190,
+      "y": 490,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.20",
+      "component_id": "U1",
+      "name": "PB2",
+      "number": "20",
+      "x": 190,
+      "y": 670,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.21",
+      "component_id": "U1",
+      "name": "PB10",
+      "number": "21",
+      "x": 190,
+      "y": 910,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.22",
+      "component_id": "U1",
+      "name": "PB11",
+      "number": "22",
+      "x": 190,
+      "y": 940,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.23",
+      "component_id": "U1",
+      "name": "VSS",
+      "number": "23",
+      "x": 670,
+      "y": 1150,
+      "direction": "D",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.24",
+      "component_id": "U1",
+      "name": "VDD",
+      "number": "24",
+      "x": 600,
+      "y": 190,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.25",
+      "component_id": "U1",
+      "name": "PB12",
+      "number": "25",
+      "x": 190,
+      "y": 970,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.26",
+      "component_id": "U1",
+      "name": "PB13",
+      "number": "26",
+      "x": 190,
+      "y": 1000,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.27",
+      "component_id": "U1",
+      "name": "PB14",
+      "number": "27",
+      "x": 190,
+      "y": 1030,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.28",
+      "component_id": "U1",
+      "name": "PB15",
+      "number": "28",
+      "x": 190,
+      "y": 1060,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.29",
+      "component_id": "U1",
+      "name": "PA8",
+      "number": "29",
+      "x": 1150,
+      "y": 520,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.3",
+      "component_id": "U1",
+      "name": "PC14",
+      "number": "3",
+      "x": 190,
+      "y": 520,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.30",
+      "component_id": "U1",
+      "name": "PA9",
+      "number": "30",
+      "x": 1150,
+      "y": 550,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.31",
+      "component_id": "U1",
+      "name": "PA10",
+      "number": "31",
+      "x": 1150,
+      "y": 580,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.32",
+      "component_id": "U1",
+      "name": "PA11",
+      "number": "32",
+      "x": 1150,
+      "y": 610,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.33",
+      "component_id": "U1",
+      "name": "PA12",
+      "number": "33",
+      "x": 1150,
+      "y": 640,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.34",
+      "component_id": "U1",
+      "name": "PA13",
+      "number": "34",
+      "x": 1150,
+      "y": 670,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.35",
+      "component_id": "U1",
+      "name": "VSS",
+      "number": "35",
+      "x": 670,
+      "y": 1150,
+      "direction": "D",
+      "electrical_type": "passive",
+      "length": 30
+    },
+    {
+      "id": "U1.36",
+      "component_id": "U1",
+      "name": "VDD",
+      "number": "36",
+      "x": 670,
+      "y": 190,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.37",
+      "component_id": "U1",
+      "name": "PA14",
+      "number": "37",
+      "x": 1150,
+      "y": 700,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.38",
+      "component_id": "U1",
+      "name": "PA15",
+      "number": "38",
+      "x": 1150,
+      "y": 730,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.39",
+      "component_id": "U1",
+      "name": "PB3",
+      "number": "39",
+      "x": 190,
+      "y": 700,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.4",
+      "component_id": "U1",
+      "name": "PC15",
+      "number": "4",
+      "x": 190,
+      "y": 550,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.40",
+      "component_id": "U1",
+      "name": "PB4",
+      "number": "40",
+      "x": 190,
+      "y": 730,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.41",
+      "component_id": "U1",
+      "name": "PB5",
+      "number": "41",
+      "x": 190,
+      "y": 760,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.42",
+      "component_id": "U1",
+      "name": "PB6",
+      "number": "42",
+      "x": 190,
+      "y": 790,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.43",
+      "component_id": "U1",
+      "name": "PB7",
+      "number": "43",
+      "x": 190,
+      "y": 820,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.44",
+      "component_id": "U1",
+      "name": "BOOT0",
+      "number": "44",
+      "x": 190,
+      "y": 340,
+      "direction": "L",
+      "electrical_type": "input",
+      "length": 70
+    },
+    {
+      "id": "U1.45",
+      "component_id": "U1",
+      "name": "PB8",
+      "number": "45",
+      "x": 190,
+      "y": 850,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.46",
+      "component_id": "U1",
+      "name": "PB9",
+      "number": "46",
+      "x": 190,
+      "y": 880,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.47",
+      "component_id": "U1",
+      "name": "VSS",
+      "number": "47",
+      "x": 670,
+      "y": 1150,
+      "direction": "D",
+      "electrical_type": "passive",
+      "length": 30
+    },
+    {
+      "id": "U1.48",
+      "component_id": "U1",
+      "name": "VDD",
+      "number": "48",
+      "x": 740,
+      "y": 190,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.5",
+      "component_id": "U1",
+      "name": "PD0",
+      "number": "5",
+      "x": 190,
+      "y": 400,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.6",
+      "component_id": "U1",
+      "name": "PD1",
+      "number": "6",
+      "x": 190,
+      "y": 430,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.7",
+      "component_id": "U1",
+      "name": "NRST",
+      "number": "7",
+      "x": 190,
+      "y": 280,
+      "direction": "L",
+      "electrical_type": "input",
+      "length": 70
+    },
+    {
+      "id": "U1.8",
+      "component_id": "U1",
+      "name": "VSSA",
+      "number": "8",
+      "x": 740,
+      "y": 1150,
+      "direction": "D",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.9",
+      "component_id": "U1",
+      "name": "VDDA",
+      "number": "9",
+      "x": 810,
+      "y": 190,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U2.1",
+      "component_id": "U2",
+      "name": "GND",
+      "number": "1",
+      "x": 1800,
+      "y": 310,
+      "direction": "D",
+      "electrical_type": "power_in",
+      "length": 10
+    },
+    {
+      "id": "U2.2",
+      "component_id": "U2",
+      "name": "VO",
+      "number": "2",
+      "x": 1830,
+      "y": 280,
+      "direction": "R",
+      "electrical_type": "power_out",
+      "length": 10
+    },
+    {
+      "id": "U2.3",
+      "component_id": "U2",
+      "name": "VI",
+      "number": "3",
+      "x": 1770,
+      "y": 280,
+      "direction": "L",
+      "electrical_type": "power_in",
+      "length": 10
+    },
+    {
+      "id": "U3.1",
+      "component_id": "U3",
+      "name": "GND",
+      "number": "1",
+      "x": 1490,
+      "y": 300,
+      "direction": "D",
+      "electrical_type": "power_in",
+      "length": 10
+    },
+    {
+      "id": "U3.10",
+      "component_id": "U3",
+      "name": "GND",
+      "number": "10",
+      "x": 1510,
+      "y": 300,
+      "direction": "D",
+      "electrical_type": "power_in",
+      "length": 10
+    },
+    {
+      "id": "U3.11",
+      "component_id": "U3",
+      "name": "DIO3",
+      "number": "11",
+      "x": 1550,
+      "y": 250,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 10
+    },
+    {
+      "id": "U3.12",
+      "component_id": "U3",
+      "name": "DIO4",
+      "number": "12",
+      "x": 1550,
+      "y": 240,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 10
+    },
+    {
+      "id": "U3.13",
+      "component_id": "U3",
+      "name": "3.3V",
+      "number": "13",
+      "x": 1500,
+      "y": 190,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 10
+    },
+    {
+      "id": "U3.14",
+      "component_id": "U3",
+      "name": "DIO0",
+      "number": "14",
+      "x": 1550,
+      "y": 280,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 10
+    },
+    {
+      "id": "U3.15",
+      "component_id": "U3",
+      "name": "DIO1",
+      "number": "15",
+      "x": 1550,
+      "y": 270,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 10
+    },
+    {
+      "id": "U3.16",
+      "component_id": "U3",
+      "name": "DIO2",
+      "number": "16",
+      "x": 1550,
+      "y": 260,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 10
+    },
+    {
+      "id": "U3.2",
+      "component_id": "U3",
+      "name": "MISO",
+      "number": "2",
+      "x": 1450,
+      "y": 230,
+      "direction": "L",
+      "electrical_type": "output",
+      "length": 10
+    },
+    {
+      "id": "U3.3",
+      "component_id": "U3",
+      "name": "MOSI",
+      "number": "3",
+      "x": 1450,
+      "y": 220,
+      "direction": "L",
+      "electrical_type": "input",
+      "length": 10
+    },
+    {
+      "id": "U3.4",
+      "component_id": "U3",
+      "name": "SCK",
+      "number": "4",
+      "x": 1450,
+      "y": 210,
+      "direction": "L",
+      "electrical_type": "input",
+      "length": 10
+    },
+    {
+      "id": "U3.5",
+      "component_id": "U3",
+      "name": "NSS",
+      "number": "5",
+      "x": 1450,
+      "y": 240,
+      "direction": "L",
+      "electrical_type": "input",
+      "length": 10
+    },
+    {
+      "id": "U3.6",
+      "component_id": "U3",
+      "name": "RESET",
+      "number": "6",
+      "x": 1450,
+      "y": 260,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 10
+    },
+    {
+      "id": "U3.7",
+      "component_id": "U3",
+      "name": "DIO5",
+      "number": "7",
+      "x": 1550,
+      "y": 230,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 10
+    },
+    {
+      "id": "U3.8",
+      "component_id": "U3",
+      "name": "GND",
+      "number": "8",
+      "x": 1500,
+      "y": 300,
+      "direction": "D",
+      "electrical_type": "power_in",
+      "length": 10
+    },
+    {
+      "id": "U3.9",
+      "component_id": "U3",
+      "name": "ANT",
+      "number": "9",
+      "x": 1550,
+      "y": 210,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 10
+    },
+    {
+      "id": "U4.1",
+      "component_id": "U4",
+      "name": "1",
+      "number": "1",
+      "x": 2170,
+      "y": 170,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "U4.2",
+      "component_id": "U4",
+      "name": "2",
+      "number": "2",
+      "x": 2200,
+      "y": 190,
+      "direction": "D",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "U4.3",
+      "component_id": "U4",
+      "name": "3",
+      "number": "3",
+      "x": 2230,
+      "y": 170,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 10
+    }
+  ],
+  "routes": [
+    {
+      "net_id": "GND__main_u1",
+      "logical_net_id": "GND",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 0,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "U1.23",
+          "to": "net_label:GND__main_u1:1",
+          "points": [
+            [
+              670,
+              1150
+            ],
+            [
+              670,
+              1210
+            ]
+          ]
+        },
+        {
+          "from": "U1.35",
+          "to": "net_label:GND__main_u1:2",
+          "points": [
+            [
+              670,
+              1150
+            ],
+            [
+              670,
+              1210
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__main_u1:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 670,
+          "y": 1210,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": true
+        },
+        {
+          "id": "net_label:GND__main_u1:2",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 670,
+          "y": 1210,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__main_u3",
+      "logical_net_id": "GND",
+      "region_id": "main:U3",
+      "routing_domain_id": "main:U3",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "U3.1",
+          "to": "net_label:GND__main_u3:1",
+          "points": [
+            [
+              1490,
+              300
+            ],
+            [
+              1490,
+              360
+            ]
+          ]
+        },
+        {
+          "from": "U3.10",
+          "to": "net_label:GND__main_u3:2",
+          "points": [
+            [
+              1510,
+              300
+            ],
+            [
+              1510,
+              360
+            ]
+          ]
+        },
+        {
+          "from": "U3.8",
+          "to": "net_label:GND__main_u3:3",
+          "points": [
+            [
+              1500,
+              300
+            ],
+            [
+              1500,
+              360
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__main_u3:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 1490,
+          "y": 360,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": false
+        },
+        {
+          "id": "net_label:GND__main_u3:2",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 1510,
+          "y": 360,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": false
+        },
+        {
+          "id": "net_label:GND__main_u3:3",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 1500,
+          "y": 360,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": false
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 3
+    },
+    {
+      "net_id": "GND__subcircuit_power_3v3",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:power_3v3",
+      "routing_domain_id": "subcircuit:power_3v3",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "U2.1",
+          "to": "net_label:GND__subcircuit_power_3v3:1",
+          "points": [
+            [
+              1800,
+              310
+            ],
+            [
+              1800,
+              370
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_power_3v3:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 1800,
+          "y": 370,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__subcircuit_rf_filter",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:rf_filter",
+      "routing_domain_id": "subcircuit:rf_filter",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "U4.2",
+          "to": "net_label:GND__subcircuit_rf_filter:1",
+          "points": [
+            [
+              2200,
+              190
+            ],
+            [
+              2200,
+              250
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_rf_filter:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 2200,
+          "y": 250,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "RFM_RESET__main_u1",
+      "logical_net_id": "RFM_RESET",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "RFM_RESET",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.11",
+          "to": "net_label:RFM_RESET__main_u1:1",
+          "points": [
+            [
+              1150,
+              310
+            ],
+            [
+              1210,
+              310
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:RFM_RESET__main_u1:1",
+          "net_id": "RFM_RESET",
+          "text": "RFM_RESET",
+          "x": 1210,
+          "y": 310,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "RFM_RESET__main_u3",
+      "logical_net_id": "RFM_RESET",
+      "region_id": "main:U3",
+      "routing_domain_id": "main:U3",
+      "type": "signal",
+      "label": "RFM_RESET",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U3.6",
+          "to": "net_label:RFM_RESET__main_u3:1",
+          "points": [
+            [
+              1450,
+              260
+            ],
+            [
+              1390,
+              260
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:RFM_RESET__main_u3:1",
+          "net_id": "RFM_RESET",
+          "text": "RFM_RESET",
+          "x": 1390,
+          "y": 260,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": false
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 1
+    },
+    {
+      "net_id": "RF_OUT",
+      "logical_net_id": "RF_OUT",
+      "region_id": "subcircuit:rf_filter",
+      "routing_domain_id": "subcircuit:rf_filter",
+      "type": "signal",
+      "label": "RF_OUT",
+      "status": "routed",
+      "routing_mode": "one_bend_pair",
+      "routing_stage": 2,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "E1.1",
+          "to": "U4.3",
+          "points": [
+            [
+              2400,
+              140
+            ],
+            [
+              2400,
+              170
+            ],
+            [
+              2230,
+              170
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "RF_PA_OUT__main_u3",
+      "logical_net_id": "RF_PA_OUT",
+      "region_id": "main:U3",
+      "routing_domain_id": "main:U3",
+      "type": "signal",
+      "label": "RF_PA_OUT",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U3.9",
+          "to": "net_label:RF_PA_OUT__main_u3:1",
+          "points": [
+            [
+              1550,
+              210
+            ],
+            [
+              1610,
+              210
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:RF_PA_OUT__main_u3:1",
+          "net_id": "RF_PA_OUT",
+          "text": "RF_PA_OUT",
+          "x": 1610,
+          "y": 210,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": false
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 1
+    },
+    {
+      "net_id": "RF_PA_OUT__subcircuit_rf_filter",
+      "logical_net_id": "RF_PA_OUT",
+      "region_id": "subcircuit:rf_filter",
+      "routing_domain_id": "subcircuit:rf_filter",
+      "type": "signal",
+      "label": "RF_PA_OUT",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U4.1",
+          "to": "net_label:RF_PA_OUT__subcircuit_rf_filter:1",
+          "points": [
+            [
+              2170,
+              170
+            ],
+            [
+              2110,
+              170
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:RF_PA_OUT__subcircuit_rf_filter:1",
+          "net_id": "RF_PA_OUT",
+          "text": "RF_PA_OUT",
+          "x": 2110,
+          "y": 170,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "SPI_MISO__main_u1",
+      "logical_net_id": "SPI_MISO",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "SPI_MISO",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.16",
+          "to": "net_label:SPI_MISO__main_u1:1",
+          "points": [
+            [
+              1150,
+              460
+            ],
+            [
+              1210,
+              460
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:SPI_MISO__main_u1:1",
+          "net_id": "SPI_MISO",
+          "text": "SPI_MISO",
+          "x": 1210,
+          "y": 460,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "SPI_MISO__main_u3",
+      "logical_net_id": "SPI_MISO",
+      "region_id": "main:U3",
+      "routing_domain_id": "main:U3",
+      "type": "signal",
+      "label": "SPI_MISO",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U3.2",
+          "to": "net_label:SPI_MISO__main_u3:1",
+          "points": [
+            [
+              1450,
+              230
+            ],
+            [
+              1390,
+              230
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:SPI_MISO__main_u3:1",
+          "net_id": "SPI_MISO",
+          "text": "SPI_MISO",
+          "x": 1390,
+          "y": 230,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": false
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 1
+    },
+    {
+      "net_id": "SPI_MOSI__main_u1",
+      "logical_net_id": "SPI_MOSI",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "SPI_MOSI",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.17",
+          "to": "net_label:SPI_MOSI__main_u1:1",
+          "points": [
+            [
+              1150,
+              490
+            ],
+            [
+              1210,
+              490
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:SPI_MOSI__main_u1:1",
+          "net_id": "SPI_MOSI",
+          "text": "SPI_MOSI",
+          "x": 1210,
+          "y": 490,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "SPI_MOSI__main_u3",
+      "logical_net_id": "SPI_MOSI",
+      "region_id": "main:U3",
+      "routing_domain_id": "main:U3",
+      "type": "signal",
+      "label": "SPI_MOSI",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U3.3",
+          "to": "net_label:SPI_MOSI__main_u3:1",
+          "points": [
+            [
+              1450,
+              220
+            ],
+            [
+              1390,
+              220
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:SPI_MOSI__main_u3:1",
+          "net_id": "SPI_MOSI",
+          "text": "SPI_MOSI",
+          "x": 1390,
+          "y": 220,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": false
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 1
+    },
+    {
+      "net_id": "SPI_NSS__main_u1",
+      "logical_net_id": "SPI_NSS",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "SPI_NSS",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.14",
+          "to": "net_label:SPI_NSS__main_u1:1",
+          "points": [
+            [
+              1150,
+              400
+            ],
+            [
+              1210,
+              400
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:SPI_NSS__main_u1:1",
+          "net_id": "SPI_NSS",
+          "text": "SPI_NSS",
+          "x": 1210,
+          "y": 400,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "SPI_NSS__main_u3",
+      "logical_net_id": "SPI_NSS",
+      "region_id": "main:U3",
+      "routing_domain_id": "main:U3",
+      "type": "signal",
+      "label": "SPI_NSS",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U3.5",
+          "to": "net_label:SPI_NSS__main_u3:1",
+          "points": [
+            [
+              1450,
+              240
+            ],
+            [
+              1390,
+              240
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:SPI_NSS__main_u3:1",
+          "net_id": "SPI_NSS",
+          "text": "SPI_NSS",
+          "x": 1390,
+          "y": 240,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": false
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 1
+    },
+    {
+      "net_id": "SPI_SCK__main_u1",
+      "logical_net_id": "SPI_SCK",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "SPI_SCK",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.15",
+          "to": "net_label:SPI_SCK__main_u1:1",
+          "points": [
+            [
+              1150,
+              430
+            ],
+            [
+              1210,
+              430
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:SPI_SCK__main_u1:1",
+          "net_id": "SPI_SCK",
+          "text": "SPI_SCK",
+          "x": 1210,
+          "y": 430,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "SPI_SCK__main_u3",
+      "logical_net_id": "SPI_SCK",
+      "region_id": "main:U3",
+      "routing_domain_id": "main:U3",
+      "type": "signal",
+      "label": "SPI_SCK",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U3.4",
+          "to": "net_label:SPI_SCK__main_u3:1",
+          "points": [
+            [
+              1450,
+              210
+            ],
+            [
+              1390,
+              210
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:SPI_SCK__main_u3:1",
+          "net_id": "SPI_SCK",
+          "text": "SPI_SCK",
+          "x": 1390,
+          "y": 210,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": false
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 1
+    },
+    {
+      "net_id": "VDD_3V3__main_u1",
+      "logical_net_id": "VDD_3V3",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "supply",
+      "label": "VDD_3V3",
+      "status": "routed",
+      "routing_mode": "astar_pair_with_boundary_label",
+      "routing_stage": 0,
+      "label_policy": "boundary_fragment",
+      "branches": [
+        {
+          "from": "U1.36",
+          "to": "U1.24",
+          "points": [
+            [
+              670,
+              190
+            ],
+            [
+              670,
+              130
+            ],
+            [
+              600,
+              130
+            ],
+            [
+              600,
+              190
+            ]
+          ]
+        },
+        {
+          "from": "U1.24",
+          "to": "net_label:VDD_3V3__main_u1:boundary",
+          "points": [
+            [
+              600,
+              190
+            ],
+            [
+              600,
+              130
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:VDD_3V3__main_u1:boundary",
+          "net_id": "VDD_3V3",
+          "text": "VDD_3V3",
+          "x": 600,
+          "y": 130,
+          "direction": "U",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "VDD_3V3__main_u3",
+      "logical_net_id": "VDD_3V3",
+      "region_id": "main:U3",
+      "routing_domain_id": "main:U3",
+      "type": "supply",
+      "label": "VDD_3V3",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U3.13",
+          "to": "net_label:VDD_3V3__main_u3:1",
+          "points": [
+            [
+              1500,
+              190
+            ],
+            [
+              1500,
+              130
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:VDD_3V3__main_u3:1",
+          "net_id": "VDD_3V3",
+          "text": "VDD_3V3",
+          "x": 1500,
+          "y": 130,
+          "direction": "U",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "VDD_3V3__subcircuit_power_3v3",
+      "logical_net_id": "VDD_3V3",
+      "region_id": "subcircuit:power_3v3",
+      "routing_domain_id": "subcircuit:power_3v3",
+      "type": "supply",
+      "label": "VDD_3V3",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U2.2",
+          "to": "net_label:VDD_3V3__subcircuit_power_3v3:1",
+          "points": [
+            [
+              1830,
+              280
+            ],
+            [
+              1890,
+              280
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:VDD_3V3__subcircuit_power_3v3:1",
+          "net_id": "VDD_3V3",
+          "text": "VDD_3V3",
+          "x": 1890,
+          "y": 280,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "VIN_5V",
+      "logical_net_id": "VIN_5V",
+      "region_id": "subcircuit:power_3v3",
+      "routing_domain_id": "subcircuit:power_3v3",
+      "type": "power",
+      "label": "VIN_5V",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U2.3",
+          "to": "net_label:VIN_5V:1",
+          "points": [
+            [
+              1770,
+              280
+            ],
+            [
+              1710,
+              280
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:VIN_5V:1",
+          "net_id": "VIN_5V",
+          "text": "VIN_5V",
+          "x": 1710,
+          "y": 280,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    }
+  ],
+  "metrics": {
+    "component_overlap_count": 0,
+    "wire_length": 1770,
+    "bend_count": 3,
+    "wire_crossing_count": 0,
+    "wire_overlap_length": 0,
+    "unrouted_net_count": 0,
+    "primary_nonstraight_count": 0,
+    "primary_corridor_intrusion_count": 0,
+    "isolated_net_count": 0,
+    "pin_event_clearance": {
+      "required_distance": 30,
+      "minimum_distance": 30,
+      "violation_count": 0,
+      "violations": []
+    },
+    "pin_event_clearance_violation_count": 0,
+    "outward_label_violation_count": 0,
+    "label_ray_obstruction_count": 9,
+    "maximum_branch_length": 200,
+    "maximum_direct_branch_length": 200,
+    "total_detour_length": 120,
+    "maximum_detour_ratio": 2.7142857142857144,
+    "p95_detour_ratio": 2.7142857142857144,
+    "detour_violation_count": 1,
+    "hard_detour_violation_count": 1,
+    "target_max_detour_ratio": 1.2,
+    "hard_max_detour_ratio": 1.5,
+    "direct_wire_target_length": 200,
+    "direct_wire_hard_limit": 700,
+    "excess_direct_wire_length": 0,
+    "long_direct_wire_count": 0,
+    "excessive_direct_bend_count": 0,
+    "zero_bend_branch_count": 0,
+    "one_bend_branch_count": 1,
+    "excessive_bend_branch_count": 0,
+    "maximum_branch_bends": 2,
+    "network_label_count": 23,
+    "predicted_optional_internal_label_count": 0,
+    "optional_internal_label_count": 0,
+    "mandatory_boundary_label_count": 16,
+    "global_power_label_count": 7,
+    "routing_evaluation_mode": "presentation",
+    "long_wire_label_count": 0,
+    "branch_length_variance": 1343.3599999999994
+  },
+  "optimization_metrics": {
+    "component_overlap_count": 0,
+    "wire_length": 1770,
+    "bend_count": 3,
+    "wire_crossing_count": 0,
+    "wire_overlap_length": 0,
+    "unrouted_net_count": 0,
+    "primary_nonstraight_count": 0,
+    "primary_corridor_intrusion_count": 0,
+    "isolated_net_count": 0,
+    "pin_event_clearance": {
+      "required_distance": 30,
+      "minimum_distance": 30,
+      "violation_count": 0,
+      "violations": []
+    },
+    "pin_event_clearance_violation_count": 0,
+    "outward_label_violation_count": 0,
+    "label_ray_obstruction_count": 9,
+    "maximum_branch_length": 200,
+    "maximum_direct_branch_length": 200,
+    "total_detour_length": 120,
+    "maximum_detour_ratio": 2.7142857142857144,
+    "p95_detour_ratio": 2.7142857142857144,
+    "detour_violation_count": 1,
+    "hard_detour_violation_count": 1,
+    "target_max_detour_ratio": 1.2,
+    "hard_max_detour_ratio": 1.5,
+    "direct_wire_target_length": 200,
+    "direct_wire_hard_limit": 700,
+    "excess_direct_wire_length": 0,
+    "long_direct_wire_count": 0,
+    "excessive_direct_bend_count": 0,
+    "zero_bend_branch_count": 0,
+    "one_bend_branch_count": 1,
+    "excessive_bend_branch_count": 0,
+    "maximum_branch_bends": 2,
+    "network_label_count": 23,
+    "predicted_optional_internal_label_count": 0,
+    "optional_internal_label_count": 0,
+    "mandatory_boundary_label_count": 16,
+    "global_power_label_count": 7,
+    "routing_evaluation_mode": "raw_astar_optimization",
+    "long_wire_label_count": 0,
+    "branch_length_variance": 1343.3599999999994
+  },
+  "warnings": [],
+  "search_timing": {
+    "discovered_at_seconds": 1.28743,
+    "last_improved_at_seconds": 1.28743,
+    "total_search_seconds": 1.918923,
+    "regional_searches": [
+      {
+        "region_id": "subcircuit:power_3v3",
+        "component_count": 1,
+        "routing_net_count": 3,
+        "iteration_budget": 21,
+        "attempted_moves": 21,
+        "accepted_candidates": 9,
+        "elapsed_seconds": 0.586701,
+        "optimization_mode": "independent_simulated_annealing"
+      },
+      {
+        "region_id": "subcircuit:rf_filter",
+        "component_count": 2,
+        "routing_net_count": 3,
+        "iteration_budget": 39,
+        "attempted_moves": 39,
+        "accepted_candidates": 3,
+        "elapsed_seconds": 1.303007,
+        "optimization_mode": "independent_simulated_annealing"
+      }
+    ]
+  }
+}

@@ -1,0 +1,76 @@
+# -*- coding: utf-8 -*-
+"""Generate sheets.json for the simplified 4-block TX demo.
+
+Blocks: 控制芯片(STM32F103C8Tx) / 电源(AMS1117-3.3) / 功放(RFM95W-868S2) /
+滤波器(Filter_EMI_CLC) + 天线端点(Antenna, RF 输出物理锚点)。
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+components = [
+    {"instance": "U1", "library_id": "MCU_ST_STM32F1:STM32F103C8Tx",
+     "value": "STM32F103C8Tx", "pins": ["11", "14", "15", "16", "17",
+                                        "23", "24", "35", "36"],
+     "group": "", "is_main": True},
+    {"instance": "U2", "library_id": "Regulator_Linear:AMS1117-3.3",
+     "value": "AMS1117-3.3", "pins": ["1", "2", "3"], "group": "POWER_3V3",
+     "is_main": False},
+    {"instance": "U3", "library_id": "RF_Module:RFM95W-868S2",
+     "value": "RFM95W-868S2", "pins": ["1", "2", "3", "4", "5", "6",
+                                       "8", "9", "10", "13"],
+     "group": "RF_PA", "is_main": False},
+    {"instance": "U4", "library_id": "Device:Filter_EMI_CLC",
+     "value": "Filter_EMI_CLC", "pins": ["1", "2", "3"], "group": "RF_FILTER",
+     "is_main": False},
+    {"instance": "E1", "library_id": "Device:Antenna",
+     "value": "868MHz", "pins": ["1"], "group": "RF_FILTER",
+     "is_main": False},
+]
+
+nets = [
+    {"name": "GND", "type": "ground", "priority": 5,
+     "pins": [{"instance": "U1", "pin": "23"}, {"instance": "U1", "pin": "35"},
+              {"instance": "U2", "pin": "1"},
+              {"instance": "U3", "pin": "1"}, {"instance": "U3", "pin": "8"},
+              {"instance": "U3", "pin": "10"}, {"instance": "U4", "pin": "2"}]},
+    {"name": "VIN_5V", "type": "power", "priority": 4,
+     "pins": [{"instance": "U2", "pin": "3"}]},
+    {"name": "VDD_3V3", "type": "supply", "priority": 5,
+     "pins": [{"instance": "U2", "pin": "2"}, {"instance": "U1", "pin": "24"},
+              {"instance": "U1", "pin": "36"}, {"instance": "U3", "pin": "13"}]},
+    {"name": "SPI_SCK", "type": "signal", "priority": 3,
+     "pins": [{"instance": "U1", "pin": "15"}, {"instance": "U3", "pin": "4"}]},
+    {"name": "SPI_MISO", "type": "signal", "priority": 3,
+     "pins": [{"instance": "U1", "pin": "16"}, {"instance": "U3", "pin": "2"}]},
+    {"name": "SPI_MOSI", "type": "signal", "priority": 3,
+     "pins": [{"instance": "U1", "pin": "17"}, {"instance": "U3", "pin": "3"}]},
+    {"name": "SPI_NSS", "type": "signal", "priority": 3,
+     "pins": [{"instance": "U1", "pin": "14"}, {"instance": "U3", "pin": "5"}]},
+    {"name": "RFM_RESET", "type": "signal", "priority": 3,
+     "pins": [{"instance": "U1", "pin": "11"}, {"instance": "U3", "pin": "6"}]},
+    {"name": "RF_PA_OUT", "type": "signal", "priority": 5,
+     "pins": [{"instance": "U3", "pin": "9"}, {"instance": "U4", "pin": "1"}]},
+    {"name": "RF_OUT", "type": "signal", "priority": 5,
+     "pins": [{"instance": "U4", "pin": "3"}, {"instance": "E1", "pin": "1"}]},
+]
+
+sheets = {
+    "schema_version": "1",
+    "project": "simple_tx_rf",
+    "description": "简化 TX：控制芯片 STM32F103C8Tx + 电源 AMS1117-3.3 + 功放 "
+                   "RFM95W-868S2 + 滤波器 Filter_EMI_CLC（含天线输出端点）。",
+    "sheets": [{
+        "sheet_id": "TX",
+        "title": "Simplified_TX",
+        "main_chip": {"instance": "U1", "library_id": "MCU_ST_STM32F1:STM32F103C8Tx"},
+        "components": components,
+        "nets": nets,
+    }],
+}
+(HERE / "tx_sheets.json").write_text(
+    json.dumps(sheets, ensure_ascii=False, indent=2), encoding="utf-8")
+print("components:", len(components), "nets:", len(nets))

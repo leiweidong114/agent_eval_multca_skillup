@@ -1,0 +1,13 @@
+{
+  "project_id": "f3737b3ebf3a",
+  "url": "http://127.0.0.1:8631/static_schematic/f3737b3ebf3a/shell.html",
+  "sheet_count": 1,
+  "sheets": [
+    {
+      "index": 0,
+      "title": "TX",
+      "component_count": 5,
+      "page": "pages/p0.html"
+    }
+  ]
+}

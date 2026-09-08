@@ -1,0 +1,45 @@
+circuit = Circuit("stm32_led_demo_S1")
+circuit.add(Template("U1", "MCU_ST_STM32F1:STM32F103C8Tx", "STM32F103C8Tx", ["10", "11", "12", "13", "14", "15", "16", "17", "23", "24", "35", "36"]))
+with circuit.sub_circuit("LED_0"):
+    circuit.add(Template("R1", "Device:R", "470R", ["1", "2"]))
+    circuit.add(Template("LED1", "Device:LED", "LED_RED", ["1", "2"]))
+with circuit.sub_circuit("LED_1"):
+    circuit.add(Template("R2", "Device:R", "470R", ["1", "2"]))
+    circuit.add(Template("LED2", "Device:LED", "LED_RED", ["1", "2"]))
+with circuit.sub_circuit("LED_2"):
+    circuit.add(Template("R3", "Device:R", "470R", ["1", "2"]))
+    circuit.add(Template("LED3", "Device:LED", "LED_RED", ["1", "2"]))
+with circuit.sub_circuit("LED_3"):
+    circuit.add(Template("R4", "Device:R", "470R", ["1", "2"]))
+    circuit.add(Template("LED4", "Device:LED", "LED_RED", ["1", "2"]))
+with circuit.sub_circuit("LED_4"):
+    circuit.add(Template("R5", "Device:R", "470R", ["1", "2"]))
+    circuit.add(Template("LED5", "Device:LED", "LED_RED", ["1", "2"]))
+with circuit.sub_circuit("LED_5"):
+    circuit.add(Template("R6", "Device:R", "470R", ["1", "2"]))
+    circuit.add(Template("LED6", "Device:LED", "LED_RED", ["1", "2"]))
+with circuit.sub_circuit("LED_6"):
+    circuit.add(Template("R7", "Device:R", "470R", ["1", "2"]))
+    circuit.add(Template("LED7", "Device:LED", "LED_RED", ["1", "2"]))
+with circuit.sub_circuit("LED_7"):
+    circuit.add(Template("R8", "Device:R", "470R", ["1", "2"]))
+    circuit.add(Template("LED8", "Device:LED", "LED_RED", ["1", "2"]))
+# ---- 网络对象定义（connect 由各切片代码补充）----
+circuit.add(Net("LED0_DRIVE", "signal", 3))
+circuit.add(Net("LED0_ANODE", "signal", 3))
+circuit.add(Net("GND", "ground", 5))
+circuit.add(Net("LED1_DRIVE", "signal", 3))
+circuit.add(Net("LED1_ANODE", "signal", 3))
+circuit.add(Net("LED2_DRIVE", "signal", 3))
+circuit.add(Net("LED2_ANODE", "signal", 3))
+circuit.add(Net("LED3_DRIVE", "signal", 3))
+circuit.add(Net("LED3_ANODE", "signal", 3))
+circuit.add(Net("LED4_DRIVE", "signal", 3))
+circuit.add(Net("LED4_ANODE", "signal", 3))
+circuit.add(Net("LED5_DRIVE", "signal", 3))
+circuit.add(Net("LED5_ANODE", "signal", 3))
+circuit.add(Net("LED6_DRIVE", "signal", 3))
+circuit.add(Net("LED6_ANODE", "signal", 3))
+circuit.add(Net("LED7_DRIVE", "signal", 3))
+circuit.add(Net("LED7_ANODE", "signal", 3))
+circuit.add(Net("VDD_3V3", "supply", 5))

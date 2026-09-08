@@ -1,0 +1,360 @@
+{
+  "manifest": {
+    "schema_version": 1,
+    "created_at": "2026-09-03T03:53:19.789874+00:00",
+    "git_commit": "198721c7a145d8d29e53cdc03cc11e62618d2145",
+    "profile": "litellm_glm_4_7",
+    "prompt": "HI",
+    "model_prefix": "opencode-go/",
+    "agents": [
+      "claude",
+      "codebuddy",
+      "codex",
+      "justdo",
+      "openclaw",
+      "opencode"
+    ],
+    "catalog_models": [
+      "glm-4.7"
+    ],
+    "catalog_model_count": 1,
+    "models": [
+      "glm-4.7"
+    ],
+    "operational_model_count": 1,
+    "preflight_enabled": true,
+    "adapter_resolution_passed": 6,
+    "adapter_resolution_total": 6,
+    "repeats": 1,
+    "workers": 3,
+    "timeout_seconds": 120,
+    "catalog_errors": [],
+    "agent_executables": {
+      "claude": "claude",
+      "codebuddy": "codebuddy",
+      "codex": "codex",
+      "justdo": "C:\\Users\\leiwe\\AppData\\Roaming\\JustDo\\multica\\development\\JustDo-agent.exe",
+      "openclaw": "openclaw",
+      "opencode": "opencode"
+    }
+  },
+  "results": [
+    {
+      "agent": "claude",
+      "requested_model": "glm-4.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:53:19.830774+00:00",
+      "finished_at": "2026-09-03T03:53:39.099967+00:00",
+      "duration_seconds": 19.269,
+      "status": "failed",
+      "agent_model": "claude-sonnet-4-6",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 0,
+      "response": "Hello! How can I help you today? I'm here to assist with any tasks you might have, whether that's working with files, running commands, or answering questions. What would you like to work on?",
+      "error_type": null,
+      "error": null,
+      "database_trace": {
+        "status": "no_match",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 0,
+        "successful_model_calls": 0,
+        "model_call_success_rate": null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": null,
+        "models": [],
+        "spend": 0,
+        "average_request_duration_ms": null
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "glm-4.7",
+        "accepted_model_groups": [
+          "claude-sonnet-4-6",
+          "glm-4.7",
+          "glm-4.7-anthropic"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_database_interactions",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-10bab0705ffc48ce9cb4c6dfa09e40e9",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-10bab0705ffc48ce9cb4c6dfa09e40e9"
+      }
+    },
+    {
+      "agent": "codebuddy",
+      "requested_model": "glm-4.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": true,
+      "started_at": "2026-09-03T03:53:19.831284+00:00",
+      "finished_at": "2026-09-03T03:53:41.195109+00:00",
+      "duration_seconds": 21.364,
+      "status": "connected",
+      "agent_model": "custom-local:glm-4.7",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 0,
+      "response": "Hi! How can I help you today?",
+      "error_type": null,
+      "error": null,
+      "database_trace": {
+        "status": "matched",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 1,
+        "successful_model_calls": 1,
+        "model_call_success_rate": 100.0,
+        "prompt_tokens": 6297,
+        "completion_tokens": 9,
+        "total_tokens": 6306,
+        "max_prompt_tokens": 6297,
+        "models": [
+          "openai/glm-4.7"
+        ],
+        "spend": 0.0,
+        "average_request_duration_ms": 4180.0
+      },
+      "model_verification": {
+        "status": "verified",
+        "verified": true,
+        "model_matched": true,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "glm-4.7",
+        "accepted_model_groups": [
+          "glm-4.7"
+        ],
+        "successful_matching_calls": 1,
+        "mismatches": [],
+        "reason": null,
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-5d176616489948d3b4167dd09949916a",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-5d176616489948d3b4167dd09949916a"
+      }
+    },
+    {
+      "agent": "codex",
+      "requested_model": "glm-4.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": true,
+      "started_at": "2026-09-03T03:53:19.831284+00:00",
+      "finished_at": "2026-09-03T03:53:56.296687+00:00",
+      "duration_seconds": 36.465,
+      "status": "connected",
+      "agent_model": "glm-4.7",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 0,
+      "response": "Hello! How can I help you today?",
+      "error_type": null,
+      "error": null,
+      "database_trace": {
+        "status": "matched",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 1,
+        "successful_model_calls": 1,
+        "model_call_success_rate": 100.0,
+        "prompt_tokens": 0,
+        "completion_tokens": 9,
+        "total_tokens": 9,
+        "max_prompt_tokens": 0,
+        "models": [
+          "openai/glm-4.7"
+        ],
+        "spend": 0.0,
+        "average_request_duration_ms": 21003.0
+      },
+      "model_verification": {
+        "status": "verified",
+        "verified": true,
+        "model_matched": true,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "glm-4.7",
+        "accepted_model_groups": [
+          "glm-4.7"
+        ],
+        "successful_matching_calls": 1,
+        "mismatches": [],
+        "reason": null,
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-732f69a759bc4797bb743324e00ea2ce",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-732f69a759bc4797bb743324e00ea2ce"
+      }
+    },
+    {
+      "agent": "justdo",
+      "requested_model": "glm-4.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:53:39.099967+00:00",
+      "finished_at": "2026-09-03T03:53:51.633883+00:00",
+      "duration_seconds": 12.534,
+      "status": "failed",
+      "agent_model": "main",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 1,
+      "response": "",
+      "error_type": null,
+      "error": "openclaw --version failed: exit status 69",
+      "database_trace": {
+        "status": "no_match",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 0,
+        "successful_model_calls": 0,
+        "model_call_success_rate": null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": null,
+        "models": [],
+        "spend": 0,
+        "average_request_duration_ms": null
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "glm-4.7",
+        "accepted_model_groups": [
+          "glm-4.7",
+          "main"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_database_interactions",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-3f803afd843f4a2e9c71d97e1fde5382",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-3f803afd843f4a2e9c71d97e1fde5382"
+      }
+    },
+    {
+      "agent": "openclaw",
+      "requested_model": "glm-4.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:53:41.195109+00:00",
+      "finished_at": "2026-09-03T03:54:37.423069+00:00",
+      "duration_seconds": 56.228,
+      "status": "failed",
+      "agent_model": "main",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 0,
+      "response": "Hello! I'm your new assistant. What would you like to call me?",
+      "error_type": null,
+      "error": null,
+      "database_trace": {
+        "status": "no_match",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 0,
+        "successful_model_calls": 0,
+        "model_call_success_rate": null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": null,
+        "models": [],
+        "spend": 0,
+        "average_request_duration_ms": null
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "glm-4.7",
+        "accepted_model_groups": [
+          "glm-4.7",
+          "main"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_database_interactions",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-4a0081e276c8486989c5d6fc9b985eb1",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-4a0081e276c8486989c5d6fc9b985eb1"
+      }
+    },
+    {
+      "agent": "opencode",
+      "requested_model": "glm-4.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": true,
+      "started_at": "2026-09-03T03:53:51.633883+00:00",
+      "finished_at": "2026-09-03T03:54:10.724739+00:00",
+      "duration_seconds": 19.091,
+      "status": "connected",
+      "agent_model": "litellm/glm-4.7",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 0,
+      "response": "老板好！有什么我可以帮您的吗？",
+      "error_type": null,
+      "error": null,
+      "database_trace": {
+        "status": "matched",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 2,
+        "successful_model_calls": 2,
+        "model_call_success_rate": 100.0,
+        "prompt_tokens": 15807,
+        "completion_tokens": 17,
+        "total_tokens": 15824,
+        "max_prompt_tokens": 15282,
+        "models": [
+          "openai/glm-4.7"
+        ],
+        "spend": 0.0,
+        "average_request_duration_ms": 5147.0
+      },
+      "model_verification": {
+        "status": "verified",
+        "verified": true,
+        "model_matched": true,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "glm-4.7",
+        "accepted_model_groups": [
+          "glm-4.7",
+          "litellm/glm-4.7"
+        ],
+        "successful_matching_calls": 2,
+        "mismatches": [],
+        "reason": null,
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-f5e4e2f6dd3d4c75956e2056ca4f4d57",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-f5e4e2f6dd3d4c75956e2056ca4f4d57"
+      }
+    }
+  ]
+}

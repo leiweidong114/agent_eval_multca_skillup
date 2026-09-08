@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from agent_eval.database import search_conversation_interactions
@@ -15,7 +15,8 @@ from app.config import BACKEND_ROOT
 
 
 router = APIRouter(prefix="/api/schematic", tags=["schematic"])
-SKILL_ROOT = BACKEND_ROOT / "skills" / "schematic-generation"
+# Deterministic diagram preview, separate from the four-Skill LLM evaluation.
+SKILL_ROOT = BACKEND_ROOT / "schematic_demo"
 PROJECTS_ROOT = BACKEND_ROOT / "schematic_projects"
 
 
@@ -34,7 +35,8 @@ class JudgeRequest(BaseModel):
 def search_interactions(
     user_id: str | None = None,
     session_id: str | None = None,
-    limit: int = 500,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
     try:
         return search_conversation_interactions(
@@ -42,9 +44,13 @@ def search_interactions(
             user_id=user_id,
             session_id=session_id,
             limit=limit,
+            offset=offset,
+            full_content=True,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="数据库查询失败，请运行 agent-eval check-database 检查连接") from exc
 
 
 def _project(project_id: str) -> Path:

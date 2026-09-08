@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -181,6 +182,53 @@ def _weighted_available(items: list[tuple[float | None, float]]) -> float | None
         return None
     total = sum(weight for _, weight in present)
     return round(sum(float(value) * weight for value, weight in present) / total, 2)
+
+
+def supplement_database_tool_metrics(process: dict[str, Any], interactions: list[dict[str, Any]]) -> None:
+    """Fallback for non-streaming CLIs. Count observed protocol events, not guesses.
+
+    Calls are deduplicated across repeated conversation histories by call ID.
+    Missing results remain missing. This is run-level, not per-case telemetry.
+    """
+    if process.get('tool_calls'):
+        process['tool_event_source'] = 'agent_transcript'
+        return
+    def obj(value):
+        if isinstance(value, str):
+            try: return json.loads(value)
+            except ValueError: return {}
+        return value or {}
+    calls, results, response_calls = {}, {}, {}
+    for row in interactions:
+        request = obj(row.get('proxy_server_request'))
+        request = request if isinstance(request, dict) else {}
+        request = obj(request.get('body')) or request
+        messages = obj(request.get('messages') or row.get('messages'))
+        response = obj(row.get('response'))
+        response = response if isinstance(response, dict) else {}
+        messages = messages if isinstance(messages, list) else []
+        for choice in response.get('choices') or []:
+            for call in (choice.get('message') or {}).get('tool_calls') or []:
+                if call.get('id'): response_calls[call['id']] = (call.get('function') or {}).get('name', '')
+        for message in messages:
+            for call in message.get('tool_calls') or []:
+                if call.get('id'): calls[call['id']] = (call.get('function') or {}).get('name', '')
+            if message.get('role') == 'tool' and message.get('tool_call_id'):
+                results[message['tool_call_id']] = message
+    for cid, name in response_calls.items():
+        # OpenClaw sanitizes upstream call IDs (e.g. call_abc -> callabc).
+        # Join only a unique same-name match, preserving ambiguous IDs.
+        matches = [key for key, tool in calls.items() if tool == name and re.sub(r'[^a-zA-Z0-9]', '', key) == re.sub(r'[^a-zA-Z0-9]', '', cid)]
+        if cid not in calls and len(matches) != 1:
+            calls[cid] = name
+    process['tool_event_source'] = 'litellm_conversation_fallback' if calls else 'not_observed'
+    if calls:
+        completed = len(set(results) & set(calls))
+        process.update(tool_calls=len(calls), tool_results=completed,
+                       tool_completion_rate=round(100*completed/len(calls), 2),
+                       tool_failures=None,
+                       subagent_calls=sum('subagent' in str(n).lower() or 'spawn_agent' in str(n).lower() for n in calls.values()),
+                       tool_failure_measurement='unknown_in_gateway_fallback')
 
 
 def calculate_rule_dimensions(

@@ -154,6 +154,58 @@ func collectArtifacts(workspace string) artifactSet {
 	return result
 }
 
+// Bind OpenClaw/JustDo to the exact Skill-Up case workspace, including the
+// no-Skill control. Never reuse the configured with-Skill runtime workspace.
+func prepareCaseWorkspace(workspace, provider string) error {
+	if err := os.MkdirAll(filepath.Join(workspace, "artifacts"), 0o755); err != nil {
+		return err
+	}
+	if provider != "openclaw" {
+		return nil
+	}
+	source := os.Getenv("OPENCLAW_CONFIG_PATH")
+	if source == "" {
+		return nil
+	}
+	data, err := os.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		return err
+	}
+	agents, ok := config["agents"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("OpenClaw config has no agents mapping")
+	}
+	defaults, ok := agents["defaults"].(map[string]any)
+	if !ok {
+		defaults = map[string]any{}
+		agents["defaults"] = defaults
+	}
+	defaults["workspace"] = workspace
+	if list, ok := agents["list"].([]any); ok {
+		for _, item := range list {
+			if a, ok := item.(map[string]any); ok {
+				a["workspace"] = workspace
+			}
+		}
+	}
+	encoded, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(workspace, "inputs", "openclaw-case-config.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		return err
+	}
+	return os.Setenv("OPENCLAW_CONFIG_PATH", path)
+}
+
 func writeResult(path string, result sessionResult) error {
 	encoded, err := json.Marshal(result)
 	if err != nil {
@@ -238,6 +290,10 @@ func main() {
 		return
 	}
 	provider := normalizeAgent(agentName)
+	if err := prepareCaseWorkspace(workspace, provider); err != nil {
+		fail(fmt.Sprintf("prepare isolated case workspace: %v", err))
+		return
+	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	backend, err := agent.ResolveBackend(provider, agent.Config{
 		ExecutablePath: resolvedExecutable,

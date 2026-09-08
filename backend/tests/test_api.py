@@ -7,7 +7,8 @@ from app.api.routes_eval import RunRequest
 client = TestClient(app)
 
 
-def test_health_and_discovery_endpoints():
+def test_health_and_discovery_endpoints(monkeypatch):
+    monkeypatch.setenv("LITELLM_JUDGE_MODEL", "test-judge-model")
     assert client.get("/api/health").json()["status"] == "ok"
     agents = client.get("/api/agents")
     assert agents.status_code == 200
@@ -22,8 +23,7 @@ def test_health_and_discovery_endpoints():
     model_config = client.get("/api/model-config")
     assert model_config.status_code == 200
     assert "profile" not in model_config.json()["llm_judge"]
-    assert model_config.json()["llm_judge"]["model"] == "glm-4.7"
-    assert model_config.json()["llm_judge"]["model"] == "glm-4.7"
+    assert model_config.json()["llm_judge"]["model"] == "test-judge-model"
 
 
 def test_database_health_never_exposes_credentials_or_crashes():

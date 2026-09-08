@@ -10,7 +10,7 @@ database:
   connect_timeout_seconds: 5
   trace:
     enabled: true
-    include_content: false
+    include_content: true
     lookaround_seconds: 10
     limit: 500
   privacy:

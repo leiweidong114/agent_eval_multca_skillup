@@ -1,0 +1,13 @@
+{
+  "project_id": "a177f13c09d4",
+  "url": "http://127.0.0.1:8631/static_schematic/a177f13c09d4/shell.html",
+  "sheet_count": 1,
+  "sheets": [
+    {
+      "index": 0,
+      "title": "STM32F103C8Tx_LED",
+      "component_count": 17,
+      "page": "pages/p0.html"
+    }
+  ]
+}

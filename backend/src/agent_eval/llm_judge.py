@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from agent_eval.model_config import resolve_model_profile
+from agent_eval.model_config import resolve_model_profile, resolve_config_secret
 from agent_eval.failure import describe_evaluation_failure
 
 
@@ -98,7 +98,7 @@ def run_llm_judge(
         profile = resolve_model_profile(
             project_root,
             profile_name=profile_name,
-            model_override=str(config.get("model") or "").strip() or None,
+            model_override=resolve_config_secret(project_root, "LITELLM_JUDGE_MODEL") or str(config.get("model") or "").strip() or None,
         )
         if not profile.api_base:
             raise ValueError("LLM judge must use the unified LiteLLM HTTP endpoint")

@@ -1,0 +1,6069 @@
+{
+  "pareto_index": 1,
+  "algorithm": "independent-region routing-first pareto-simulated-annealing + detour-guided translate/rotate + staged A-star-v4",
+  "canvas": {
+    "x": 0,
+    "y": 0,
+    "width": 6200,
+    "height": 3800
+  },
+  "options": {
+    "grid_size": 10,
+    "component_gap": 40,
+    "layer_gap": 120,
+    "group_gap": 120,
+    "route_clearance": 10,
+    "route_lane_gap": 20,
+    "bend_penalty": 5,
+    "crossing_penalty": 100,
+    "overlap_penalty": 2400,
+    "parallel_proximity_penalty": 1,
+    "backward_penalty": 1,
+    "crossing_sweeps": 8,
+    "max_route_lanes": 160,
+    "max_layers_per_row": 8,
+    "main_pin_threshold": 10,
+    "subcircuit_min_components": 2,
+    "direct_wire_target_tracks": 20,
+    "long_wire_label_threshold_tracks": 36,
+    "main_long_wire_label_threshold_tracks": 30,
+    "max_direct_wire_tracks": 70,
+    "max_direct_wire_bends": 2,
+    "long_wire_labels": true,
+    "always_label_ground_nets": false,
+    "max_optional_labels_per_domain": 2,
+    "main_component_gap": 220,
+    "subcircuit_gap": 140,
+    "pin_escape_tracks": 8,
+    "pin_event_clearance_tracks": 3,
+    "subnetwork_cluster_gap_tracks": 10,
+    "subnetwork_internal_gap_tracks": 4,
+    "global_net_label_threshold": 12,
+    "large_main_label_pin_threshold": 64,
+    "always_use_astar": false,
+    "label_stub_length": 60,
+    "junction_merge_tracks": 12
+  },
+  "objectives": {
+    "primary_nonstraight_count": 0.0,
+    "wire_overlap_length": 0.0,
+    "wire_crossing_count": 0.0,
+    "pin_event_clearance_violation_count": 0.0,
+    "outward_label_violation_count": 0.0,
+    "label_ray_obstruction_count": 0.0,
+    "hard_detour_violation_count": 4.0,
+    "detour_violation_count": 8.0,
+    "maximum_detour_ratio": 2.7142857142857144,
+    "p95_detour_ratio": 2.7142857142857144,
+    "total_detour_length": 600.0,
+    "excessive_bend_branch_count": 2.0,
+    "maximum_branch_bends": 4.0,
+    "bend_count": 21.0,
+    "wire_length": 3150.0,
+    "maximum_branch_length": 370.0,
+    "maximum_direct_branch_length": 370.0,
+    "excess_direct_wire_length": 29300.0,
+    "predicted_optional_internal_label_count": 0.0,
+    "network_label_count": 26.0,
+    "branch_length_variance": 4257.142857142857,
+    "label_length_deviation": 0.0,
+    "spacing_deviation": 80.0,
+    "alignment_deviation": 0.0,
+    "compactness_area": 2534400.0
+  },
+  "placement_constraints": [],
+  "topology_validation": {
+    "main_component_ids": [
+      "U1"
+    ],
+    "reachable_net_count": 18,
+    "total_net_count": 18,
+    "isolated_net_count": 0,
+    "isolated_nets": [],
+    "isolated_components": [],
+    "valid": true,
+    "main_detection": {
+      "pin_threshold": 10,
+      "comparison": "pin_count > threshold",
+      "detection_method": "automatic_pin_count_only",
+      "explicit_main_component_ids": [],
+      "inferred_main_component_ids": [
+        "U1"
+      ],
+      "main_component_ids": [
+        "U1"
+      ]
+    }
+  },
+  "hierarchical_regions": {
+    "strategy": "independent tight physical regions with single main centered on canvas",
+    "placement_mode": "single_main_centered",
+    "main_detection_policy": "pin_count > main_pin_threshold only",
+    "main_component_ids": [
+      "U1"
+    ],
+    "subcircuit_partition_threshold": 2,
+    "subcircuit_partition_comparison": "component_count >= threshold",
+    "merged_small_subcircuits": [],
+    "ignored_main_group_labels": [],
+    "component_region": {
+      "LED1": "subcircuit:led_0",
+      "LED2": "subcircuit:led_1",
+      "LED3": "subcircuit:led_2",
+      "LED4": "subcircuit:led_3",
+      "LED5": "subcircuit:led_4",
+      "LED6": "subcircuit:led_5",
+      "LED7": "subcircuit:led_6",
+      "LED8": "subcircuit:led_7",
+      "R1": "subcircuit:led_0",
+      "R2": "subcircuit:led_1",
+      "R3": "subcircuit:led_2",
+      "R4": "subcircuit:led_3",
+      "R5": "subcircuit:led_4",
+      "R6": "subcircuit:led_5",
+      "R7": "subcircuit:led_6",
+      "R8": "subcircuit:led_7",
+      "U1": "main:U1"
+    },
+    "component_routing_domain": {
+      "LED1": "subcircuit:led_0",
+      "LED2": "subcircuit:led_1",
+      "LED3": "subcircuit:led_2",
+      "LED4": "subcircuit:led_3",
+      "LED5": "subcircuit:led_4",
+      "LED6": "subcircuit:led_5",
+      "LED7": "subcircuit:led_6",
+      "LED8": "subcircuit:led_7",
+      "R1": "subcircuit:led_0",
+      "R2": "subcircuit:led_1",
+      "R3": "subcircuit:led_2",
+      "R4": "subcircuit:led_3",
+      "R5": "subcircuit:led_4",
+      "R6": "subcircuit:led_5",
+      "R7": "subcircuit:led_6",
+      "R8": "subcircuit:led_7",
+      "U1": "main:U1"
+    },
+    "component_optimization_domain": {
+      "LED1": "subcircuit:led_0",
+      "LED2": "subcircuit:led_1",
+      "LED3": "subcircuit:led_2",
+      "LED4": "subcircuit:led_3",
+      "LED5": "subcircuit:led_4",
+      "LED6": "subcircuit:led_5",
+      "LED7": "subcircuit:led_6",
+      "LED8": "subcircuit:led_7",
+      "R1": "subcircuit:led_0",
+      "R2": "subcircuit:led_1",
+      "R3": "subcircuit:led_2",
+      "R4": "subcircuit:led_3",
+      "R5": "subcircuit:led_4",
+      "R6": "subcircuit:led_5",
+      "R7": "subcircuit:led_6",
+      "R8": "subcircuit:led_7",
+      "U1": "main:U1"
+    },
+    "component_priority": {
+      "LED1": 1,
+      "LED2": 1,
+      "LED3": 1,
+      "LED4": 1,
+      "LED5": 1,
+      "LED6": 1,
+      "LED7": 1,
+      "LED8": 1,
+      "R1": 3,
+      "R2": 3,
+      "R3": 3,
+      "R4": 3,
+      "R5": 3,
+      "R6": 3,
+      "R7": 3,
+      "R8": 3,
+      "U1": 0
+    },
+    "component_role": {
+      "LED1": "topology_anchor",
+      "LED2": "topology_anchor",
+      "LED3": "topology_anchor",
+      "LED4": "topology_anchor",
+      "LED5": "topology_anchor",
+      "LED6": "topology_anchor",
+      "LED7": "topology_anchor",
+      "LED8": "topology_anchor",
+      "R1": "topology_leaf",
+      "R2": "topology_leaf",
+      "R3": "topology_leaf",
+      "R4": "topology_leaf",
+      "R5": "topology_leaf",
+      "R6": "topology_leaf",
+      "R7": "topology_leaf",
+      "R8": "topology_leaf",
+      "U1": "automatic_main_anchor"
+    },
+    "component_preferred_side": {
+      "LED1": "R",
+      "LED2": "R",
+      "LED3": "R",
+      "LED4": "R",
+      "LED5": "R",
+      "LED6": "R",
+      "LED7": "R",
+      "LED8": "R",
+      "R1": "R",
+      "R2": "R",
+      "R3": "R",
+      "R4": "R",
+      "R5": "R",
+      "R6": "R",
+      "R7": "R",
+      "R8": "R"
+    },
+    "internal_component_gap": 90,
+    "subnetworks": [
+      {
+        "id": "subcircuit:led_0",
+        "name": "LED_0",
+        "physical_region_id": "subcircuit:led_0",
+        "partitioned": true,
+        "partition_reason": "component_count >= 2",
+        "preferred_main_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 90
+        },
+        "estimated_width": 230,
+        "estimated_height": 100,
+        "component_ids": [
+          "LED1",
+          "R1"
+        ],
+        "connected_main_component_ids": [
+          "U1"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "adjacency": {
+          "LED1": [
+            "R1"
+          ],
+          "R1": [
+            "LED1"
+          ]
+        },
+        "degrees": {
+          "LED1": 1,
+          "R1": 1
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "LED1",
+        "boundary_net_ids": [
+          "GND",
+          "LED0_DRIVE"
+        ],
+        "boundary_component_ids": [
+          "R1"
+        ],
+        "component_priority": {
+          "LED1": 1,
+          "R1": 3
+        },
+        "component_role": {
+          "LED1": "topology_anchor",
+          "R1": "topology_leaf"
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ]
+      },
+      {
+        "id": "subcircuit:led_1",
+        "name": "LED_1",
+        "physical_region_id": "subcircuit:led_1",
+        "partitioned": true,
+        "partition_reason": "component_count >= 2",
+        "preferred_main_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 120
+        },
+        "estimated_width": 230,
+        "estimated_height": 100,
+        "component_ids": [
+          "LED2",
+          "R2"
+        ],
+        "connected_main_component_ids": [
+          "U1"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "adjacency": {
+          "LED2": [
+            "R2"
+          ],
+          "R2": [
+            "LED2"
+          ]
+        },
+        "degrees": {
+          "LED2": 1,
+          "R2": 1
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "LED2",
+        "boundary_net_ids": [
+          "GND",
+          "LED1_DRIVE"
+        ],
+        "boundary_component_ids": [
+          "R2"
+        ],
+        "component_priority": {
+          "LED2": 1,
+          "R2": 3
+        },
+        "component_role": {
+          "LED2": "topology_anchor",
+          "R2": "topology_leaf"
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ]
+      },
+      {
+        "id": "subcircuit:led_2",
+        "name": "LED_2",
+        "physical_region_id": "subcircuit:led_2",
+        "partitioned": true,
+        "partition_reason": "component_count >= 2",
+        "preferred_main_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 150
+        },
+        "estimated_width": 230,
+        "estimated_height": 100,
+        "component_ids": [
+          "LED3",
+          "R3"
+        ],
+        "connected_main_component_ids": [
+          "U1"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "adjacency": {
+          "LED3": [
+            "R3"
+          ],
+          "R3": [
+            "LED3"
+          ]
+        },
+        "degrees": {
+          "LED3": 1,
+          "R3": 1
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "LED3",
+        "boundary_net_ids": [
+          "GND",
+          "LED2_DRIVE"
+        ],
+        "boundary_component_ids": [
+          "R3"
+        ],
+        "component_priority": {
+          "LED3": 1,
+          "R3": 3
+        },
+        "component_role": {
+          "LED3": "topology_anchor",
+          "R3": "topology_leaf"
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ]
+      },
+      {
+        "id": "subcircuit:led_3",
+        "name": "LED_3",
+        "physical_region_id": "subcircuit:led_3",
+        "partitioned": true,
+        "partition_reason": "component_count >= 2",
+        "preferred_main_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 180
+        },
+        "estimated_width": 230,
+        "estimated_height": 100,
+        "component_ids": [
+          "LED4",
+          "R4"
+        ],
+        "connected_main_component_ids": [
+          "U1"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "adjacency": {
+          "LED4": [
+            "R4"
+          ],
+          "R4": [
+            "LED4"
+          ]
+        },
+        "degrees": {
+          "LED4": 1,
+          "R4": 1
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "LED4",
+        "boundary_net_ids": [
+          "GND",
+          "LED3_DRIVE"
+        ],
+        "boundary_component_ids": [
+          "R4"
+        ],
+        "component_priority": {
+          "LED4": 1,
+          "R4": 3
+        },
+        "component_role": {
+          "LED4": "topology_anchor",
+          "R4": "topology_leaf"
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ]
+      },
+      {
+        "id": "subcircuit:led_4",
+        "name": "LED_4",
+        "physical_region_id": "subcircuit:led_4",
+        "partitioned": true,
+        "partition_reason": "component_count >= 2",
+        "preferred_main_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 210
+        },
+        "estimated_width": 230,
+        "estimated_height": 100,
+        "component_ids": [
+          "LED5",
+          "R5"
+        ],
+        "connected_main_component_ids": [
+          "U1"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "adjacency": {
+          "LED5": [
+            "R5"
+          ],
+          "R5": [
+            "LED5"
+          ]
+        },
+        "degrees": {
+          "LED5": 1,
+          "R5": 1
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "LED5",
+        "boundary_net_ids": [
+          "GND",
+          "LED4_DRIVE"
+        ],
+        "boundary_component_ids": [
+          "R5"
+        ],
+        "component_priority": {
+          "LED5": 1,
+          "R5": 3
+        },
+        "component_role": {
+          "LED5": "topology_anchor",
+          "R5": "topology_leaf"
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ]
+      },
+      {
+        "id": "subcircuit:led_5",
+        "name": "LED_5",
+        "physical_region_id": "subcircuit:led_5",
+        "partitioned": true,
+        "partition_reason": "component_count >= 2",
+        "preferred_main_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 240
+        },
+        "estimated_width": 230,
+        "estimated_height": 100,
+        "component_ids": [
+          "LED6",
+          "R6"
+        ],
+        "connected_main_component_ids": [
+          "U1"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "adjacency": {
+          "LED6": [
+            "R6"
+          ],
+          "R6": [
+            "LED6"
+          ]
+        },
+        "degrees": {
+          "LED6": 1,
+          "R6": 1
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "LED6",
+        "boundary_net_ids": [
+          "GND",
+          "LED5_DRIVE"
+        ],
+        "boundary_component_ids": [
+          "R6"
+        ],
+        "component_priority": {
+          "LED6": 1,
+          "R6": 3
+        },
+        "component_role": {
+          "LED6": "topology_anchor",
+          "R6": "topology_leaf"
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ]
+      },
+      {
+        "id": "subcircuit:led_6",
+        "name": "LED_6",
+        "physical_region_id": "subcircuit:led_6",
+        "partitioned": true,
+        "partition_reason": "component_count >= 2",
+        "preferred_main_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 270
+        },
+        "estimated_width": 230,
+        "estimated_height": 100,
+        "component_ids": [
+          "LED7",
+          "R7"
+        ],
+        "connected_main_component_ids": [
+          "U1"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "adjacency": {
+          "LED7": [
+            "R7"
+          ],
+          "R7": [
+            "LED7"
+          ]
+        },
+        "degrees": {
+          "LED7": 1,
+          "R7": 1
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "LED7",
+        "boundary_net_ids": [
+          "GND",
+          "LED6_DRIVE"
+        ],
+        "boundary_component_ids": [
+          "R7"
+        ],
+        "component_priority": {
+          "LED7": 1,
+          "R7": 3
+        },
+        "component_role": {
+          "LED7": "topology_anchor",
+          "R7": "topology_leaf"
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ]
+      },
+      {
+        "id": "subcircuit:led_7",
+        "name": "LED_7",
+        "physical_region_id": "subcircuit:led_7",
+        "partitioned": true,
+        "partition_reason": "component_count >= 2",
+        "preferred_main_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 300
+        },
+        "estimated_width": 230,
+        "estimated_height": 100,
+        "component_ids": [
+          "LED8",
+          "R8"
+        ],
+        "connected_main_component_ids": [
+          "U1"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "adjacency": {
+          "LED8": [
+            "R8"
+          ],
+          "R8": [
+            "LED8"
+          ]
+        },
+        "degrees": {
+          "LED8": 1,
+          "R8": 1
+        },
+        "articulation_component_ids": [],
+        "anchor_component_id": "LED8",
+        "boundary_net_ids": [
+          "GND",
+          "LED7_DRIVE"
+        ],
+        "boundary_component_ids": [
+          "R8"
+        ],
+        "component_priority": {
+          "LED8": 1,
+          "R8": 3
+        },
+        "component_role": {
+          "LED8": "topology_anchor",
+          "R8": "topology_leaf"
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ]
+      }
+    ],
+    "local_domain_specs": [],
+    "regions": [
+      {
+        "id": "main:U1",
+        "kind": "main",
+        "name": "U1_MAIN",
+        "main_component_id": "U1",
+        "component_ids": [
+          "U1"
+        ],
+        "motif": "single_anchor",
+        "layout_template": "main_centered_optimized",
+        "width": 1140,
+        "height": 1140,
+        "bounds": {
+          "x": 2530,
+          "y": 1330,
+          "width": 1140,
+          "height": 1140
+        },
+        "placement_relation": {
+          "relation": "canvas_center",
+          "aligned_axis": "both"
+        },
+        "minimum_component_bounds": {
+          "x": 2620,
+          "y": 1420,
+          "width": 960,
+          "height": 960
+        },
+        "component_bounds_center": {
+          "x": 3100,
+          "y": 1900
+        },
+        "search_timing": {
+          "region_id": "main:U1",
+          "component_count": 1,
+          "routing_net_count": 10,
+          "iteration_budget": 0,
+          "attempted_moves": 0,
+          "accepted_candidates": 0,
+          "elapsed_seconds": 0.0,
+          "optimization_mode": "deterministic_main_anchor"
+        }
+      },
+      {
+        "id": "subcircuit:led_0",
+        "kind": "subcircuit",
+        "name": "LED_0",
+        "main_component_id": null,
+        "component_ids": [
+          "LED1",
+          "R1"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "preferred_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 90
+        },
+        "width": 330,
+        "height": 200,
+        "bounds": {
+          "x": 3800,
+          "y": 1800,
+          "width": 330,
+          "height": 200
+        },
+        "placement_relation": {
+          "relation": "parallel_to_main",
+          "preferred_side": "R",
+          "actual_side": "R",
+          "aligned_axis": "vertical"
+        },
+        "minimum_component_bounds": {
+          "x": 3880,
+          "y": 1810,
+          "width": 60,
+          "height": 150
+        },
+        "component_bounds_center": {
+          "x": 3910,
+          "y": 1880
+        },
+        "search_timing": {
+          "region_id": "subcircuit:led_0",
+          "component_count": 2,
+          "routing_net_count": 3,
+          "iteration_budget": 8,
+          "attempted_moves": 8,
+          "accepted_candidates": 5,
+          "elapsed_seconds": 0.966165,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      },
+      {
+        "id": "subcircuit:led_1",
+        "kind": "subcircuit",
+        "name": "LED_1",
+        "main_component_id": null,
+        "component_ids": [
+          "LED2",
+          "R2"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "preferred_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 120
+        },
+        "width": 330,
+        "height": 200,
+        "bounds": {
+          "x": 4260,
+          "y": 1800,
+          "width": 330,
+          "height": 200
+        },
+        "placement_relation": {
+          "relation": "parallel_to_main",
+          "preferred_side": "R",
+          "actual_side": "R",
+          "aligned_axis": "vertical"
+        },
+        "minimum_component_bounds": {
+          "x": 4270,
+          "y": 1890,
+          "width": 60,
+          "height": 50
+        },
+        "component_bounds_center": {
+          "x": 4300,
+          "y": 1920
+        },
+        "search_timing": {
+          "region_id": "subcircuit:led_1",
+          "component_count": 2,
+          "routing_net_count": 3,
+          "iteration_budget": 8,
+          "attempted_moves": 8,
+          "accepted_candidates": 4,
+          "elapsed_seconds": 1.004288,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      },
+      {
+        "id": "subcircuit:led_2",
+        "kind": "subcircuit",
+        "name": "LED_2",
+        "main_component_id": null,
+        "component_ids": [
+          "LED3",
+          "R3"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "preferred_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 150
+        },
+        "width": 330,
+        "height": 200,
+        "bounds": {
+          "x": 4720,
+          "y": 1800,
+          "width": 330,
+          "height": 200
+        },
+        "placement_relation": {
+          "relation": "parallel_to_main",
+          "preferred_side": "R",
+          "actual_side": "R",
+          "aligned_axis": "vertical"
+        },
+        "minimum_component_bounds": {
+          "x": 4760,
+          "y": 1850,
+          "width": 40,
+          "height": 60
+        },
+        "component_bounds_center": {
+          "x": 4780,
+          "y": 1880
+        },
+        "search_timing": {
+          "region_id": "subcircuit:led_2",
+          "component_count": 2,
+          "routing_net_count": 3,
+          "iteration_budget": 8,
+          "attempted_moves": 8,
+          "accepted_candidates": 4,
+          "elapsed_seconds": 1.233566,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      },
+      {
+        "id": "subcircuit:led_3",
+        "kind": "subcircuit",
+        "name": "LED_3",
+        "main_component_id": null,
+        "component_ids": [
+          "LED4",
+          "R4"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "preferred_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 180
+        },
+        "width": 330,
+        "height": 200,
+        "bounds": {
+          "x": 3800,
+          "y": 1480,
+          "width": 330,
+          "height": 200
+        },
+        "placement_relation": {
+          "relation": "parallel_to_main",
+          "preferred_side": "R",
+          "actual_side": "R",
+          "aligned_axis": "vertical"
+        },
+        "minimum_component_bounds": {
+          "x": 3890,
+          "y": 1570,
+          "width": 80,
+          "height": 100
+        },
+        "component_bounds_center": {
+          "x": 3930,
+          "y": 1620
+        },
+        "search_timing": {
+          "region_id": "subcircuit:led_3",
+          "component_count": 2,
+          "routing_net_count": 3,
+          "iteration_budget": 8,
+          "attempted_moves": 8,
+          "accepted_candidates": 6,
+          "elapsed_seconds": 1.082359,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      },
+      {
+        "id": "subcircuit:led_4",
+        "kind": "subcircuit",
+        "name": "LED_4",
+        "main_component_id": null,
+        "component_ids": [
+          "LED5",
+          "R5"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "preferred_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 210
+        },
+        "width": 330,
+        "height": 200,
+        "bounds": {
+          "x": 3800,
+          "y": 2120,
+          "width": 330,
+          "height": 200
+        },
+        "placement_relation": {
+          "relation": "parallel_to_main",
+          "preferred_side": "R",
+          "actual_side": "R",
+          "aligned_axis": "vertical"
+        },
+        "minimum_component_bounds": {
+          "x": 3810,
+          "y": 2130,
+          "width": 80,
+          "height": 90
+        },
+        "component_bounds_center": {
+          "x": 3850,
+          "y": 2180
+        },
+        "search_timing": {
+          "region_id": "subcircuit:led_4",
+          "component_count": 2,
+          "routing_net_count": 3,
+          "iteration_budget": 7,
+          "attempted_moves": 7,
+          "accepted_candidates": 6,
+          "elapsed_seconds": 0.983632,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      },
+      {
+        "id": "subcircuit:led_5",
+        "kind": "subcircuit",
+        "name": "LED_5",
+        "main_component_id": null,
+        "component_ids": [
+          "LED6",
+          "R6"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "preferred_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 240
+        },
+        "width": 330,
+        "height": 200,
+        "bounds": {
+          "x": 5180,
+          "y": 1800,
+          "width": 330,
+          "height": 200
+        },
+        "placement_relation": {
+          "relation": "parallel_to_main",
+          "preferred_side": "R",
+          "actual_side": "R",
+          "aligned_axis": "vertical"
+        },
+        "minimum_component_bounds": {
+          "x": 5200,
+          "y": 1830,
+          "width": 60,
+          "height": 50
+        },
+        "component_bounds_center": {
+          "x": 5230,
+          "y": 1860
+        },
+        "search_timing": {
+          "region_id": "subcircuit:led_5",
+          "component_count": 2,
+          "routing_net_count": 3,
+          "iteration_budget": 7,
+          "attempted_moves": 7,
+          "accepted_candidates": 3,
+          "elapsed_seconds": 1.133016,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      },
+      {
+        "id": "subcircuit:led_6",
+        "kind": "subcircuit",
+        "name": "LED_6",
+        "main_component_id": null,
+        "component_ids": [
+          "LED7",
+          "R7"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "preferred_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 270
+        },
+        "width": 330,
+        "height": 200,
+        "bounds": {
+          "x": 4260,
+          "y": 1480,
+          "width": 330,
+          "height": 200
+        },
+        "placement_relation": {
+          "relation": "parallel_to_main",
+          "preferred_side": "R",
+          "actual_side": "R",
+          "aligned_axis": "vertical"
+        },
+        "minimum_component_bounds": {
+          "x": 4300,
+          "y": 1570,
+          "width": 70,
+          "height": 100
+        },
+        "component_bounds_center": {
+          "x": 4340,
+          "y": 1620
+        },
+        "search_timing": {
+          "region_id": "subcircuit:led_6",
+          "component_count": 2,
+          "routing_net_count": 3,
+          "iteration_budget": 7,
+          "attempted_moves": 7,
+          "accepted_candidates": 5,
+          "elapsed_seconds": 1.105631,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      },
+      {
+        "id": "subcircuit:led_7",
+        "kind": "subcircuit",
+        "name": "LED_7",
+        "main_component_id": null,
+        "component_ids": [
+          "LED8",
+          "R8"
+        ],
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "preferred_side": "R",
+        "main_anchor_offset": {
+          "x": 960,
+          "y": 300
+        },
+        "width": 330,
+        "height": 200,
+        "bounds": {
+          "x": 4260,
+          "y": 2120,
+          "width": 330,
+          "height": 200
+        },
+        "placement_relation": {
+          "relation": "parallel_to_main",
+          "preferred_side": "R",
+          "actual_side": "R",
+          "aligned_axis": "vertical"
+        },
+        "minimum_component_bounds": {
+          "x": 4300,
+          "y": 2210,
+          "width": 280,
+          "height": 20
+        },
+        "component_bounds_center": {
+          "x": 4440,
+          "y": 2220
+        },
+        "search_timing": {
+          "region_id": "subcircuit:led_7",
+          "component_count": 2,
+          "routing_net_count": 3,
+          "iteration_budget": 7,
+          "attempted_moves": 7,
+          "accepted_candidates": 2,
+          "elapsed_seconds": 1.098671,
+          "optimization_mode": "independent_simulated_annealing"
+        }
+      }
+    ],
+    "routing_domains": [
+      {
+        "id": "main:U1",
+        "name": "U1_MAIN",
+        "kind": "main",
+        "physical_region_id": "main:U1",
+        "motif": "single_anchor",
+        "layout_template": "main_centered_optimized",
+        "bounds": {
+          "x": 2530,
+          "y": 1330,
+          "width": 1140,
+          "height": 1140
+        },
+        "selected_flow_side": "",
+        "initial_candidate_scores": [],
+        "component_ids": [
+          "U1"
+        ]
+      },
+      {
+        "id": "subcircuit:led_0",
+        "name": "LED_0",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:led_0",
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "bounds": {
+          "x": 3800,
+          "y": 1800,
+          "width": 330,
+          "height": 200
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ],
+        "component_ids": [
+          "LED1",
+          "R1"
+        ]
+      },
+      {
+        "id": "subcircuit:led_1",
+        "name": "LED_1",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:led_1",
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "bounds": {
+          "x": 4260,
+          "y": 1800,
+          "width": 330,
+          "height": 200
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ],
+        "component_ids": [
+          "LED2",
+          "R2"
+        ]
+      },
+      {
+        "id": "subcircuit:led_2",
+        "name": "LED_2",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:led_2",
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "bounds": {
+          "x": 4720,
+          "y": 1800,
+          "width": 330,
+          "height": 200
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ],
+        "component_ids": [
+          "LED3",
+          "R3"
+        ]
+      },
+      {
+        "id": "subcircuit:led_3",
+        "name": "LED_3",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:led_3",
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "bounds": {
+          "x": 3800,
+          "y": 1480,
+          "width": 330,
+          "height": 200
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ],
+        "component_ids": [
+          "LED4",
+          "R4"
+        ]
+      },
+      {
+        "id": "subcircuit:led_4",
+        "name": "LED_4",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:led_4",
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "bounds": {
+          "x": 3800,
+          "y": 2120,
+          "width": 330,
+          "height": 200
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ],
+        "component_ids": [
+          "LED5",
+          "R5"
+        ]
+      },
+      {
+        "id": "subcircuit:led_5",
+        "name": "LED_5",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:led_5",
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "bounds": {
+          "x": 5180,
+          "y": 1800,
+          "width": 330,
+          "height": 200
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ],
+        "component_ids": [
+          "LED6",
+          "R6"
+        ]
+      },
+      {
+        "id": "subcircuit:led_6",
+        "name": "LED_6",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:led_6",
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "bounds": {
+          "x": 4260,
+          "y": 1480,
+          "width": 330,
+          "height": 200
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ],
+        "component_ids": [
+          "LED7",
+          "R7"
+        ]
+      },
+      {
+        "id": "subcircuit:led_7",
+        "name": "LED_7",
+        "kind": "subcircuit",
+        "physical_region_id": "subcircuit:led_7",
+        "motif": "chain",
+        "layout_template": "horizontal_chain",
+        "bounds": {
+          "x": 4260,
+          "y": 2120,
+          "width": 330,
+          "height": 200
+        },
+        "selected_flow_side": "R",
+        "initial_candidate_scores": [
+          {
+            "side": "R",
+            "score": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              250.0
+            ]
+          },
+          {
+            "side": "D",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          },
+          {
+            "side": "U",
+            "score": [
+              0.0,
+              0.0,
+              1.0,
+              1.0,
+              120.0
+            ]
+          }
+        ],
+        "component_ids": [
+          "LED8",
+          "R8"
+        ]
+      }
+    ],
+    "movement_bounds": {
+      "U1": {
+        "x": 2530,
+        "y": 1330,
+        "width": 1140,
+        "height": 1140
+      },
+      "LED1": {
+        "x": 3800,
+        "y": 1800,
+        "width": 330,
+        "height": 200
+      },
+      "R1": {
+        "x": 3800,
+        "y": 1800,
+        "width": 330,
+        "height": 200
+      },
+      "LED2": {
+        "x": 4260,
+        "y": 1800,
+        "width": 330,
+        "height": 200
+      },
+      "R2": {
+        "x": 4260,
+        "y": 1800,
+        "width": 330,
+        "height": 200
+      },
+      "LED3": {
+        "x": 4720,
+        "y": 1800,
+        "width": 330,
+        "height": 200
+      },
+      "R3": {
+        "x": 4720,
+        "y": 1800,
+        "width": 330,
+        "height": 200
+      },
+      "LED4": {
+        "x": 3800,
+        "y": 1480,
+        "width": 330,
+        "height": 200
+      },
+      "R4": {
+        "x": 3800,
+        "y": 1480,
+        "width": 330,
+        "height": 200
+      },
+      "LED5": {
+        "x": 3800,
+        "y": 2120,
+        "width": 330,
+        "height": 200
+      },
+      "R5": {
+        "x": 3800,
+        "y": 2120,
+        "width": 330,
+        "height": 200
+      },
+      "LED6": {
+        "x": 5180,
+        "y": 1800,
+        "width": 330,
+        "height": 200
+      },
+      "R6": {
+        "x": 5180,
+        "y": 1800,
+        "width": 330,
+        "height": 200
+      },
+      "LED7": {
+        "x": 4260,
+        "y": 1480,
+        "width": 330,
+        "height": 200
+      },
+      "R7": {
+        "x": 4260,
+        "y": 1480,
+        "width": 330,
+        "height": 200
+      },
+      "LED8": {
+        "x": 4260,
+        "y": 2120,
+        "width": 330,
+        "height": 200
+      },
+      "R8": {
+        "x": 4260,
+        "y": 2120,
+        "width": 330,
+        "height": 200
+      }
+    },
+    "physical_region_count": 9,
+    "network_naming": {
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "rules": [
+        "uppercase ASCII letters, digits, and underscore only",
+        "names never start with a digit",
+        "duplicate normalized names receive a numeric suffix",
+        "all fragments of one logical connection share the same label"
+      ],
+      "source_to_normalized": {
+        "GND": "GND",
+        "LED0_ANODE": "LED0_ANODE",
+        "LED0_DRIVE": "LED0_DRIVE",
+        "LED1_ANODE": "LED1_ANODE",
+        "LED1_DRIVE": "LED1_DRIVE",
+        "LED2_ANODE": "LED2_ANODE",
+        "LED2_DRIVE": "LED2_DRIVE",
+        "LED3_ANODE": "LED3_ANODE",
+        "LED3_DRIVE": "LED3_DRIVE",
+        "LED4_ANODE": "LED4_ANODE",
+        "LED4_DRIVE": "LED4_DRIVE",
+        "LED5_ANODE": "LED5_ANODE",
+        "LED5_DRIVE": "LED5_DRIVE",
+        "LED6_ANODE": "LED6_ANODE",
+        "LED6_DRIVE": "LED6_DRIVE",
+        "LED7_ANODE": "LED7_ANODE",
+        "LED7_DRIVE": "LED7_DRIVE",
+        "VDD_3V3": "VDD_3V3"
+      }
+    },
+    "cross_region_nets": [
+      {
+        "source_net_id": "GND",
+        "normalized_net_name": "GND",
+        "fragment_ids": [
+          "GND__main_u1",
+          "GND__subcircuit_led_0",
+          "GND__subcircuit_led_1",
+          "GND__subcircuit_led_2",
+          "GND__subcircuit_led_3",
+          "GND__subcircuit_led_4",
+          "GND__subcircuit_led_5",
+          "GND__subcircuit_led_6",
+          "GND__subcircuit_led_7"
+        ],
+        "region_ids": [
+          "main:U1",
+          "subcircuit:led_0",
+          "subcircuit:led_1",
+          "subcircuit:led_2",
+          "subcircuit:led_3",
+          "subcircuit:led_4",
+          "subcircuit:led_5",
+          "subcircuit:led_6",
+          "subcircuit:led_7"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "subcircuit:led_0",
+          "subcircuit:led_1",
+          "subcircuit:led_2",
+          "subcircuit:led_3",
+          "subcircuit:led_4",
+          "subcircuit:led_5",
+          "subcircuit:led_6",
+          "subcircuit:led_7"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "LED0_DRIVE",
+        "normalized_net_name": "LED0_DRIVE",
+        "fragment_ids": [
+          "LED0_DRIVE__main_u1",
+          "LED0_DRIVE__subcircuit_led_0"
+        ],
+        "region_ids": [
+          "main:U1",
+          "subcircuit:led_0"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "subcircuit:led_0"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "LED1_DRIVE",
+        "normalized_net_name": "LED1_DRIVE",
+        "fragment_ids": [
+          "LED1_DRIVE__main_u1",
+          "LED1_DRIVE__subcircuit_led_1"
+        ],
+        "region_ids": [
+          "main:U1",
+          "subcircuit:led_1"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "subcircuit:led_1"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "LED2_DRIVE",
+        "normalized_net_name": "LED2_DRIVE",
+        "fragment_ids": [
+          "LED2_DRIVE__main_u1",
+          "LED2_DRIVE__subcircuit_led_2"
+        ],
+        "region_ids": [
+          "main:U1",
+          "subcircuit:led_2"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "subcircuit:led_2"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "LED3_DRIVE",
+        "normalized_net_name": "LED3_DRIVE",
+        "fragment_ids": [
+          "LED3_DRIVE__main_u1",
+          "LED3_DRIVE__subcircuit_led_3"
+        ],
+        "region_ids": [
+          "main:U1",
+          "subcircuit:led_3"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "subcircuit:led_3"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "LED4_DRIVE",
+        "normalized_net_name": "LED4_DRIVE",
+        "fragment_ids": [
+          "LED4_DRIVE__main_u1",
+          "LED4_DRIVE__subcircuit_led_4"
+        ],
+        "region_ids": [
+          "main:U1",
+          "subcircuit:led_4"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "subcircuit:led_4"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "LED5_DRIVE",
+        "normalized_net_name": "LED5_DRIVE",
+        "fragment_ids": [
+          "LED5_DRIVE__main_u1",
+          "LED5_DRIVE__subcircuit_led_5"
+        ],
+        "region_ids": [
+          "main:U1",
+          "subcircuit:led_5"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "subcircuit:led_5"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "LED6_DRIVE",
+        "normalized_net_name": "LED6_DRIVE",
+        "fragment_ids": [
+          "LED6_DRIVE__main_u1",
+          "LED6_DRIVE__subcircuit_led_6"
+        ],
+        "region_ids": [
+          "main:U1",
+          "subcircuit:led_6"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "subcircuit:led_6"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      },
+      {
+        "source_net_id": "LED7_DRIVE",
+        "normalized_net_name": "LED7_DRIVE",
+        "fragment_ids": [
+          "LED7_DRIVE__main_u1",
+          "LED7_DRIVE__subcircuit_led_7"
+        ],
+        "region_ids": [
+          "main:U1",
+          "subcircuit:led_7"
+        ],
+        "routing_domain_ids": [
+          "main:U1",
+          "subcircuit:led_7"
+        ],
+        "reason": "cross_region_label",
+        "uses_net_labels": true
+      }
+    ],
+    "source_net_count": 18,
+    "routing_fragment_count": 34
+  },
+  "components": [
+    {
+      "id": "LED1",
+      "library_id": "Device:LED",
+      "type": "discrete",
+      "label": "LED1  LED_RED",
+      "group": "LED_0",
+      "main": false,
+      "x": 3910,
+      "y": 1940,
+      "width": 30,
+      "height": 20,
+      "source_width": 30,
+      "source_height": 20,
+      "library_width": 30,
+      "library_height": 20,
+      "rotation": 0,
+      "region_id": "subcircuit:led_0",
+      "routing_domain_id": "subcircuit:led_0",
+      "optimization_domain_id": "subcircuit:led_0",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              4.5,
+              11.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              9.5,
+              11.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              6.5,
+              17.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              3.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              8.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              13.0
+            ],
+            [
+              11.5,
+              3.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              21.5,
+              13.0
+            ],
+            [
+              21.5,
+              3.0
+            ],
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              13.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LED2",
+      "library_id": "Device:LED",
+      "type": "discrete",
+      "label": "LED2  LED_RED",
+      "group": "LED_1",
+      "main": false,
+      "x": 4270,
+      "y": 1920,
+      "width": 30,
+      "height": 20,
+      "source_width": 30,
+      "source_height": 20,
+      "library_width": 30,
+      "library_height": 20,
+      "rotation": 0,
+      "region_id": "subcircuit:led_1",
+      "routing_domain_id": "subcircuit:led_1",
+      "optimization_domain_id": "subcircuit:led_1",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              4.5,
+              11.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              9.5,
+              11.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              6.5,
+              17.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              3.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              8.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              13.0
+            ],
+            [
+              11.5,
+              3.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              21.5,
+              13.0
+            ],
+            [
+              21.5,
+              3.0
+            ],
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              13.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LED3",
+      "library_id": "Device:LED",
+      "type": "discrete",
+      "label": "LED3  LED_RED",
+      "group": "LED_2",
+      "main": false,
+      "x": 4770,
+      "y": 1850,
+      "width": 30,
+      "height": 20,
+      "source_width": 30,
+      "source_height": 20,
+      "library_width": 30,
+      "library_height": 20,
+      "rotation": 0,
+      "region_id": "subcircuit:led_2",
+      "routing_domain_id": "subcircuit:led_2",
+      "optimization_domain_id": "subcircuit:led_2",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              4.5,
+              11.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              9.5,
+              11.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              6.5,
+              17.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              3.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              8.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              13.0
+            ],
+            [
+              11.5,
+              3.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              21.5,
+              13.0
+            ],
+            [
+              21.5,
+              3.0
+            ],
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              13.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LED4",
+      "library_id": "Device:LED",
+      "type": "discrete",
+      "label": "LED4  LED_RED",
+      "group": "LED_3",
+      "main": false,
+      "x": 3940,
+      "y": 1650,
+      "width": 30,
+      "height": 20,
+      "source_width": 30,
+      "source_height": 20,
+      "library_width": 30,
+      "library_height": 20,
+      "rotation": 0,
+      "region_id": "subcircuit:led_3",
+      "routing_domain_id": "subcircuit:led_3",
+      "optimization_domain_id": "subcircuit:led_3",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              4.5,
+              11.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              9.5,
+              11.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              6.5,
+              17.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              3.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              8.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              13.0
+            ],
+            [
+              11.5,
+              3.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              21.5,
+              13.0
+            ],
+            [
+              21.5,
+              3.0
+            ],
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              13.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LED5",
+      "library_id": "Device:LED",
+      "type": "discrete",
+      "label": "LED5  LED_RED",
+      "group": "LED_4",
+      "main": false,
+      "x": 3810,
+      "y": 2130,
+      "width": 30,
+      "height": 20,
+      "source_width": 30,
+      "source_height": 20,
+      "library_width": 30,
+      "library_height": 20,
+      "rotation": 0,
+      "region_id": "subcircuit:led_4",
+      "routing_domain_id": "subcircuit:led_4",
+      "optimization_domain_id": "subcircuit:led_4",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              4.5,
+              11.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              9.5,
+              11.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              6.5,
+              17.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              3.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              8.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              13.0
+            ],
+            [
+              11.5,
+              3.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              21.5,
+              13.0
+            ],
+            [
+              21.5,
+              3.0
+            ],
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              13.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LED6",
+      "library_id": "Device:LED",
+      "type": "discrete",
+      "label": "LED6  LED_RED",
+      "group": "LED_5",
+      "main": false,
+      "x": 5230,
+      "y": 1830,
+      "width": 30,
+      "height": 20,
+      "source_width": 30,
+      "source_height": 20,
+      "library_width": 30,
+      "library_height": 20,
+      "rotation": 0,
+      "region_id": "subcircuit:led_5",
+      "routing_domain_id": "subcircuit:led_5",
+      "optimization_domain_id": "subcircuit:led_5",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              4.5,
+              11.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              9.5,
+              11.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              6.5,
+              17.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              3.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              8.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              13.0
+            ],
+            [
+              11.5,
+              3.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              21.5,
+              13.0
+            ],
+            [
+              21.5,
+              3.0
+            ],
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              13.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LED7",
+      "library_id": "Device:LED",
+      "type": "discrete",
+      "label": "LED7  LED_RED",
+      "group": "LED_6",
+      "main": false,
+      "x": 4340,
+      "y": 1650,
+      "width": 30,
+      "height": 20,
+      "source_width": 30,
+      "source_height": 20,
+      "library_width": 30,
+      "library_height": 20,
+      "rotation": 0,
+      "region_id": "subcircuit:led_6",
+      "routing_domain_id": "subcircuit:led_6",
+      "optimization_domain_id": "subcircuit:led_6",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              4.5,
+              11.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              9.5,
+              11.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              6.5,
+              17.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              3.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              8.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              13.0
+            ],
+            [
+              11.5,
+              3.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              21.5,
+              13.0
+            ],
+            [
+              21.5,
+              3.0
+            ],
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              13.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LED8",
+      "library_id": "Device:LED",
+      "type": "discrete",
+      "label": "LED8  LED_RED",
+      "group": "LED_7",
+      "main": false,
+      "x": 4550,
+      "y": 2210,
+      "width": 30,
+      "height": 20,
+      "source_width": 30,
+      "source_height": 20,
+      "library_width": 30,
+      "library_height": 20,
+      "rotation": 0,
+      "region_id": "subcircuit:led_7",
+      "routing_domain_id": "subcircuit:led_7",
+      "optimization_domain_id": "subcircuit:led_7",
+      "placement_priority": 1,
+      "placement_role": "topology_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              4.5,
+              11.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              17.0
+            ],
+            [
+              -1.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              9.5,
+              11.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              6.5,
+              17.0
+            ],
+            [
+              3.5,
+              17.0
+            ],
+            [
+              3.5,
+              14.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              8.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              11.5,
+              13.0
+            ],
+            [
+              11.5,
+              3.0
+            ]
+          ]
+        },
+        {
+          "kind": "polyline",
+          "closed": false,
+          "points": [
+            [
+              21.5,
+              13.0
+            ],
+            [
+              21.5,
+              3.0
+            ],
+            [
+              11.5,
+              8.0
+            ],
+            [
+              21.5,
+              13.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R1",
+      "library_id": "Device:R",
+      "type": "passive",
+      "label": "R1  470R",
+      "group": "LED_0",
+      "main": false,
+      "x": 3880,
+      "y": 1810,
+      "width": 30,
+      "height": 20,
+      "source_width": 20,
+      "source_height": 30,
+      "library_width": 20,
+      "library_height": 30,
+      "rotation": 270,
+      "region_id": "subcircuit:led_0",
+      "routing_domain_id": "subcircuit:led_0",
+      "optimization_domain_id": "subcircuit:led_0",
+      "placement_priority": 3,
+      "placement_role": "topology_leaf",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              6.0,
+              25.0
+            ],
+            [
+              14.0,
+              25.0
+            ],
+            [
+              14.0,
+              5.0
+            ],
+            [
+              6.0,
+              5.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R2",
+      "library_id": "Device:R",
+      "type": "passive",
+      "label": "R2  470R",
+      "group": "LED_1",
+      "main": false,
+      "x": 4300,
+      "y": 1890,
+      "width": 30,
+      "height": 20,
+      "source_width": 20,
+      "source_height": 30,
+      "library_width": 20,
+      "library_height": 30,
+      "rotation": 270,
+      "region_id": "subcircuit:led_1",
+      "routing_domain_id": "subcircuit:led_1",
+      "optimization_domain_id": "subcircuit:led_1",
+      "placement_priority": 3,
+      "placement_role": "topology_leaf",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              6.0,
+              25.0
+            ],
+            [
+              14.0,
+              25.0
+            ],
+            [
+              14.0,
+              5.0
+            ],
+            [
+              6.0,
+              5.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R3",
+      "library_id": "Device:R",
+      "type": "passive",
+      "label": "R3  470R",
+      "group": "LED_2",
+      "main": false,
+      "x": 4760,
+      "y": 1890,
+      "width": 30,
+      "height": 20,
+      "source_width": 20,
+      "source_height": 30,
+      "library_width": 20,
+      "library_height": 30,
+      "rotation": 270,
+      "region_id": "subcircuit:led_2",
+      "routing_domain_id": "subcircuit:led_2",
+      "optimization_domain_id": "subcircuit:led_2",
+      "placement_priority": 3,
+      "placement_role": "topology_leaf",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              6.0,
+              25.0
+            ],
+            [
+              14.0,
+              25.0
+            ],
+            [
+              14.0,
+              5.0
+            ],
+            [
+              6.0,
+              5.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R4",
+      "library_id": "Device:R",
+      "type": "passive",
+      "label": "R4  470R",
+      "group": "LED_3",
+      "main": false,
+      "x": 3890,
+      "y": 1570,
+      "width": 30,
+      "height": 20,
+      "source_width": 20,
+      "source_height": 30,
+      "library_width": 20,
+      "library_height": 30,
+      "rotation": 270,
+      "region_id": "subcircuit:led_3",
+      "routing_domain_id": "subcircuit:led_3",
+      "optimization_domain_id": "subcircuit:led_3",
+      "placement_priority": 3,
+      "placement_role": "topology_leaf",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              6.0,
+              25.0
+            ],
+            [
+              14.0,
+              25.0
+            ],
+            [
+              14.0,
+              5.0
+            ],
+            [
+              6.0,
+              5.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R5",
+      "library_id": "Device:R",
+      "type": "passive",
+      "label": "R5  470R",
+      "group": "LED_4",
+      "main": false,
+      "x": 3870,
+      "y": 2190,
+      "width": 20,
+      "height": 30,
+      "source_width": 20,
+      "source_height": 30,
+      "library_width": 20,
+      "library_height": 30,
+      "rotation": 180,
+      "region_id": "subcircuit:led_4",
+      "routing_domain_id": "subcircuit:led_4",
+      "optimization_domain_id": "subcircuit:led_4",
+      "placement_priority": 3,
+      "placement_role": "topology_leaf",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              6.0,
+              25.0
+            ],
+            [
+              14.0,
+              25.0
+            ],
+            [
+              14.0,
+              5.0
+            ],
+            [
+              6.0,
+              5.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R6",
+      "library_id": "Device:R",
+      "type": "passive",
+      "label": "R6  470R",
+      "group": "LED_5",
+      "main": false,
+      "x": 5200,
+      "y": 1860,
+      "width": 30,
+      "height": 20,
+      "source_width": 20,
+      "source_height": 30,
+      "library_width": 20,
+      "library_height": 30,
+      "rotation": 270,
+      "region_id": "subcircuit:led_5",
+      "routing_domain_id": "subcircuit:led_5",
+      "optimization_domain_id": "subcircuit:led_5",
+      "placement_priority": 3,
+      "placement_role": "topology_leaf",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              6.0,
+              25.0
+            ],
+            [
+              14.0,
+              25.0
+            ],
+            [
+              14.0,
+              5.0
+            ],
+            [
+              6.0,
+              5.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R7",
+      "library_id": "Device:R",
+      "type": "passive",
+      "label": "R7  470R",
+      "group": "LED_6",
+      "main": false,
+      "x": 4300,
+      "y": 1570,
+      "width": 30,
+      "height": 20,
+      "source_width": 20,
+      "source_height": 30,
+      "library_width": 20,
+      "library_height": 30,
+      "rotation": 270,
+      "region_id": "subcircuit:led_6",
+      "routing_domain_id": "subcircuit:led_6",
+      "optimization_domain_id": "subcircuit:led_6",
+      "placement_priority": 3,
+      "placement_role": "topology_leaf",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              6.0,
+              25.0
+            ],
+            [
+              14.0,
+              25.0
+            ],
+            [
+              14.0,
+              5.0
+            ],
+            [
+              6.0,
+              5.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R8",
+      "library_id": "Device:R",
+      "type": "passive",
+      "label": "R8  470R",
+      "group": "LED_7",
+      "main": false,
+      "x": 4300,
+      "y": 2210,
+      "width": 30,
+      "height": 20,
+      "source_width": 20,
+      "source_height": 30,
+      "library_width": 20,
+      "library_height": 30,
+      "rotation": 270,
+      "region_id": "subcircuit:led_7",
+      "routing_domain_id": "subcircuit:led_7",
+      "optimization_domain_id": "subcircuit:led_7",
+      "placement_priority": 3,
+      "placement_role": "topology_leaf",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              6.0,
+              25.0
+            ],
+            [
+              14.0,
+              25.0
+            ],
+            [
+              14.0,
+              5.0
+            ],
+            [
+              6.0,
+              5.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "U1",
+      "library_id": "MCU_ST_STM32F1:STM32F103C8Tx",
+      "type": "soc",
+      "label": "U1  STM32F103C8Tx",
+      "group": "",
+      "main": true,
+      "x": 2620,
+      "y": 1420,
+      "width": 960,
+      "height": 960,
+      "source_width": 960,
+      "source_height": 960,
+      "library_width": 960,
+      "library_height": 960,
+      "rotation": 0,
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "optimization_domain_id": "main:U1",
+      "placement_priority": 0,
+      "placement_role": "automatic_main_anchor",
+      "symbol_graphics": [
+        {
+          "kind": "polygon",
+          "closed": true,
+          "points": [
+            [
+              68.571,
+              930.0
+            ],
+            [
+              891.429,
+              930.0
+            ],
+            [
+              891.429,
+              30.0
+            ],
+            [
+              68.571,
+              30.0
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "pins": [
+    {
+      "id": "LED1.1",
+      "component_id": "LED1",
+      "name": "K",
+      "number": "1",
+      "x": 3910,
+      "y": 1950,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED1.2",
+      "component_id": "LED1",
+      "name": "A",
+      "number": "2",
+      "x": 3940,
+      "y": 1950,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED2.1",
+      "component_id": "LED2",
+      "name": "K",
+      "number": "1",
+      "x": 4270,
+      "y": 1930,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED2.2",
+      "component_id": "LED2",
+      "name": "A",
+      "number": "2",
+      "x": 4300,
+      "y": 1930,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED3.1",
+      "component_id": "LED3",
+      "name": "K",
+      "number": "1",
+      "x": 4770,
+      "y": 1860,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED3.2",
+      "component_id": "LED3",
+      "name": "A",
+      "number": "2",
+      "x": 4800,
+      "y": 1860,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED4.1",
+      "component_id": "LED4",
+      "name": "K",
+      "number": "1",
+      "x": 3940,
+      "y": 1660,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED4.2",
+      "component_id": "LED4",
+      "name": "A",
+      "number": "2",
+      "x": 3970,
+      "y": 1660,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED5.1",
+      "component_id": "LED5",
+      "name": "K",
+      "number": "1",
+      "x": 3810,
+      "y": 2140,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED5.2",
+      "component_id": "LED5",
+      "name": "A",
+      "number": "2",
+      "x": 3840,
+      "y": 2140,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED6.1",
+      "component_id": "LED6",
+      "name": "K",
+      "number": "1",
+      "x": 5230,
+      "y": 1840,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED6.2",
+      "component_id": "LED6",
+      "name": "A",
+      "number": "2",
+      "x": 5260,
+      "y": 1840,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED7.1",
+      "component_id": "LED7",
+      "name": "K",
+      "number": "1",
+      "x": 4340,
+      "y": 1660,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED7.2",
+      "component_id": "LED7",
+      "name": "A",
+      "number": "2",
+      "x": 4370,
+      "y": 1660,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED8.1",
+      "component_id": "LED8",
+      "name": "K",
+      "number": "1",
+      "x": 4550,
+      "y": 2220,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "LED8.2",
+      "component_id": "LED8",
+      "name": "A",
+      "number": "2",
+      "x": 4580,
+      "y": 2220,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 10
+    },
+    {
+      "id": "R1.1",
+      "component_id": "R1",
+      "name": "1",
+      "number": "1",
+      "x": 3880,
+      "y": 1820,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R1.2",
+      "component_id": "R1",
+      "name": "2",
+      "number": "2",
+      "x": 3910,
+      "y": 1820,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R2.1",
+      "component_id": "R2",
+      "name": "1",
+      "number": "1",
+      "x": 4300,
+      "y": 1900,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R2.2",
+      "component_id": "R2",
+      "name": "2",
+      "number": "2",
+      "x": 4330,
+      "y": 1900,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R3.1",
+      "component_id": "R3",
+      "name": "1",
+      "number": "1",
+      "x": 4760,
+      "y": 1900,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R3.2",
+      "component_id": "R3",
+      "name": "2",
+      "number": "2",
+      "x": 4790,
+      "y": 1900,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R4.1",
+      "component_id": "R4",
+      "name": "1",
+      "number": "1",
+      "x": 3890,
+      "y": 1580,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R4.2",
+      "component_id": "R4",
+      "name": "2",
+      "number": "2",
+      "x": 3920,
+      "y": 1580,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R5.1",
+      "component_id": "R5",
+      "name": "1",
+      "number": "1",
+      "x": 3880,
+      "y": 2220,
+      "direction": "D",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R5.2",
+      "component_id": "R5",
+      "name": "2",
+      "number": "2",
+      "x": 3880,
+      "y": 2190,
+      "direction": "U",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R6.1",
+      "component_id": "R6",
+      "name": "1",
+      "number": "1",
+      "x": 5200,
+      "y": 1870,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R6.2",
+      "component_id": "R6",
+      "name": "2",
+      "number": "2",
+      "x": 5230,
+      "y": 1870,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R7.1",
+      "component_id": "R7",
+      "name": "1",
+      "number": "1",
+      "x": 4300,
+      "y": 1580,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R7.2",
+      "component_id": "R7",
+      "name": "2",
+      "number": "2",
+      "x": 4330,
+      "y": 1580,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R8.1",
+      "component_id": "R8",
+      "name": "1",
+      "number": "1",
+      "x": 4300,
+      "y": 2220,
+      "direction": "L",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "R8.2",
+      "component_id": "R8",
+      "name": "2",
+      "number": "2",
+      "x": 4330,
+      "y": 2220,
+      "direction": "R",
+      "electrical_type": "passive",
+      "length": 5
+    },
+    {
+      "id": "U1.1",
+      "component_id": "U1",
+      "name": "VBAT",
+      "number": "1",
+      "x": 2960,
+      "y": 1420,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.10",
+      "component_id": "U1",
+      "name": "PA0",
+      "number": "10",
+      "x": 3580,
+      "y": 1510,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.11",
+      "component_id": "U1",
+      "name": "PA1",
+      "number": "11",
+      "x": 3580,
+      "y": 1540,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.12",
+      "component_id": "U1",
+      "name": "PA2",
+      "number": "12",
+      "x": 3580,
+      "y": 1570,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.13",
+      "component_id": "U1",
+      "name": "PA3",
+      "number": "13",
+      "x": 3580,
+      "y": 1600,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.14",
+      "component_id": "U1",
+      "name": "PA4",
+      "number": "14",
+      "x": 3580,
+      "y": 1630,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.15",
+      "component_id": "U1",
+      "name": "PA5",
+      "number": "15",
+      "x": 3580,
+      "y": 1660,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.16",
+      "component_id": "U1",
+      "name": "PA6",
+      "number": "16",
+      "x": 3580,
+      "y": 1690,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.17",
+      "component_id": "U1",
+      "name": "PA7",
+      "number": "17",
+      "x": 3580,
+      "y": 1720,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.18",
+      "component_id": "U1",
+      "name": "PB0",
+      "number": "18",
+      "x": 2620,
+      "y": 1840,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.19",
+      "component_id": "U1",
+      "name": "PB1",
+      "number": "19",
+      "x": 2620,
+      "y": 1870,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.2",
+      "component_id": "U1",
+      "name": "PC13",
+      "number": "2",
+      "x": 2620,
+      "y": 1720,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.20",
+      "component_id": "U1",
+      "name": "PB2",
+      "number": "20",
+      "x": 2620,
+      "y": 1900,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.21",
+      "component_id": "U1",
+      "name": "PB10",
+      "number": "21",
+      "x": 2620,
+      "y": 2140,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.22",
+      "component_id": "U1",
+      "name": "PB11",
+      "number": "22",
+      "x": 2620,
+      "y": 2170,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.23",
+      "component_id": "U1",
+      "name": "VSS",
+      "number": "23",
+      "x": 3100,
+      "y": 2380,
+      "direction": "D",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.24",
+      "component_id": "U1",
+      "name": "VDD",
+      "number": "24",
+      "x": 3030,
+      "y": 1420,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.25",
+      "component_id": "U1",
+      "name": "PB12",
+      "number": "25",
+      "x": 2620,
+      "y": 2200,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.26",
+      "component_id": "U1",
+      "name": "PB13",
+      "number": "26",
+      "x": 2620,
+      "y": 2230,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.27",
+      "component_id": "U1",
+      "name": "PB14",
+      "number": "27",
+      "x": 2620,
+      "y": 2260,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.28",
+      "component_id": "U1",
+      "name": "PB15",
+      "number": "28",
+      "x": 2620,
+      "y": 2290,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.29",
+      "component_id": "U1",
+      "name": "PA8",
+      "number": "29",
+      "x": 3580,
+      "y": 1750,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.3",
+      "component_id": "U1",
+      "name": "PC14",
+      "number": "3",
+      "x": 2620,
+      "y": 1750,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.30",
+      "component_id": "U1",
+      "name": "PA9",
+      "number": "30",
+      "x": 3580,
+      "y": 1780,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.31",
+      "component_id": "U1",
+      "name": "PA10",
+      "number": "31",
+      "x": 3580,
+      "y": 1810,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.32",
+      "component_id": "U1",
+      "name": "PA11",
+      "number": "32",
+      "x": 3580,
+      "y": 1840,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.33",
+      "component_id": "U1",
+      "name": "PA12",
+      "number": "33",
+      "x": 3580,
+      "y": 1870,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.34",
+      "component_id": "U1",
+      "name": "PA13",
+      "number": "34",
+      "x": 3580,
+      "y": 1900,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.35",
+      "component_id": "U1",
+      "name": "VSS",
+      "number": "35",
+      "x": 3100,
+      "y": 2380,
+      "direction": "D",
+      "electrical_type": "passive",
+      "length": 30
+    },
+    {
+      "id": "U1.36",
+      "component_id": "U1",
+      "name": "VDD",
+      "number": "36",
+      "x": 3100,
+      "y": 1420,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.37",
+      "component_id": "U1",
+      "name": "PA14",
+      "number": "37",
+      "x": 3580,
+      "y": 1930,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.38",
+      "component_id": "U1",
+      "name": "PA15",
+      "number": "38",
+      "x": 3580,
+      "y": 1960,
+      "direction": "R",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.39",
+      "component_id": "U1",
+      "name": "PB3",
+      "number": "39",
+      "x": 2620,
+      "y": 1930,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.4",
+      "component_id": "U1",
+      "name": "PC15",
+      "number": "4",
+      "x": 2620,
+      "y": 1780,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.40",
+      "component_id": "U1",
+      "name": "PB4",
+      "number": "40",
+      "x": 2620,
+      "y": 1960,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.41",
+      "component_id": "U1",
+      "name": "PB5",
+      "number": "41",
+      "x": 2620,
+      "y": 1990,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.42",
+      "component_id": "U1",
+      "name": "PB6",
+      "number": "42",
+      "x": 2620,
+      "y": 2020,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.43",
+      "component_id": "U1",
+      "name": "PB7",
+      "number": "43",
+      "x": 2620,
+      "y": 2050,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.44",
+      "component_id": "U1",
+      "name": "BOOT0",
+      "number": "44",
+      "x": 2620,
+      "y": 1570,
+      "direction": "L",
+      "electrical_type": "input",
+      "length": 70
+    },
+    {
+      "id": "U1.45",
+      "component_id": "U1",
+      "name": "PB8",
+      "number": "45",
+      "x": 2620,
+      "y": 2080,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.46",
+      "component_id": "U1",
+      "name": "PB9",
+      "number": "46",
+      "x": 2620,
+      "y": 2110,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.47",
+      "component_id": "U1",
+      "name": "VSS",
+      "number": "47",
+      "x": 3100,
+      "y": 2380,
+      "direction": "D",
+      "electrical_type": "passive",
+      "length": 30
+    },
+    {
+      "id": "U1.48",
+      "component_id": "U1",
+      "name": "VDD",
+      "number": "48",
+      "x": 3170,
+      "y": 1420,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.5",
+      "component_id": "U1",
+      "name": "PD0",
+      "number": "5",
+      "x": 2620,
+      "y": 1630,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.6",
+      "component_id": "U1",
+      "name": "PD1",
+      "number": "6",
+      "x": 2620,
+      "y": 1660,
+      "direction": "L",
+      "electrical_type": "bidirectional",
+      "length": 70
+    },
+    {
+      "id": "U1.7",
+      "component_id": "U1",
+      "name": "NRST",
+      "number": "7",
+      "x": 2620,
+      "y": 1510,
+      "direction": "L",
+      "electrical_type": "input",
+      "length": 70
+    },
+    {
+      "id": "U1.8",
+      "component_id": "U1",
+      "name": "VSSA",
+      "number": "8",
+      "x": 3170,
+      "y": 2380,
+      "direction": "D",
+      "electrical_type": "power_in",
+      "length": 30
+    },
+    {
+      "id": "U1.9",
+      "component_id": "U1",
+      "name": "VDDA",
+      "number": "9",
+      "x": 3240,
+      "y": 1420,
+      "direction": "U",
+      "electrical_type": "power_in",
+      "length": 30
+    }
+  ],
+  "routes": [
+    {
+      "net_id": "GND__main_u1",
+      "logical_net_id": "GND",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 0,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "U1.23",
+          "to": "net_label:GND__main_u1:1",
+          "points": [
+            [
+              3100,
+              2380
+            ],
+            [
+              3100,
+              2440
+            ]
+          ]
+        },
+        {
+          "from": "U1.35",
+          "to": "net_label:GND__main_u1:2",
+          "points": [
+            [
+              3100,
+              2380
+            ],
+            [
+              3100,
+              2440
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__main_u1:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 3100,
+          "y": 2440,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": true
+        },
+        {
+          "id": "net_label:GND__main_u1:2",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 3100,
+          "y": 2440,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__subcircuit_led_0",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:led_0",
+      "routing_domain_id": "subcircuit:led_0",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "LED1.1",
+          "to": "net_label:GND__subcircuit_led_0:1",
+          "points": [
+            [
+              3910,
+              1950
+            ],
+            [
+              3850,
+              1950
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_led_0:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 3850,
+          "y": 1950,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__subcircuit_led_1",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:led_1",
+      "routing_domain_id": "subcircuit:led_1",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "LED2.1",
+          "to": "net_label:GND__subcircuit_led_1:1",
+          "points": [
+            [
+              4270,
+              1930
+            ],
+            [
+              4210,
+              1930
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_led_1:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 4210,
+          "y": 1930,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__subcircuit_led_2",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:led_2",
+      "routing_domain_id": "subcircuit:led_2",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "LED3.1",
+          "to": "net_label:GND__subcircuit_led_2:1",
+          "points": [
+            [
+              4770,
+              1860
+            ],
+            [
+              4710,
+              1860
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_led_2:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 4710,
+          "y": 1860,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__subcircuit_led_3",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:led_3",
+      "routing_domain_id": "subcircuit:led_3",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "LED4.1",
+          "to": "net_label:GND__subcircuit_led_3:1",
+          "points": [
+            [
+              3940,
+              1660
+            ],
+            [
+              3880,
+              1660
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_led_3:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 3880,
+          "y": 1660,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__subcircuit_led_4",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:led_4",
+      "routing_domain_id": "subcircuit:led_4",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "LED5.1",
+          "to": "net_label:GND__subcircuit_led_4:1",
+          "points": [
+            [
+              3810,
+              2140
+            ],
+            [
+              3750,
+              2140
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_led_4:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 3750,
+          "y": 2140,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__subcircuit_led_5",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:led_5",
+      "routing_domain_id": "subcircuit:led_5",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "LED6.1",
+          "to": "net_label:GND__subcircuit_led_5:1",
+          "points": [
+            [
+              5230,
+              1840
+            ],
+            [
+              5170,
+              1840
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_led_5:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 5170,
+          "y": 1840,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__subcircuit_led_6",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:led_6",
+      "routing_domain_id": "subcircuit:led_6",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "LED7.1",
+          "to": "net_label:GND__subcircuit_led_6:1",
+          "points": [
+            [
+              4340,
+              1660
+            ],
+            [
+              4280,
+              1660
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_led_6:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 4280,
+          "y": 1660,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "GND__subcircuit_led_7",
+      "logical_net_id": "GND",
+      "region_id": "subcircuit:led_7",
+      "routing_domain_id": "subcircuit:led_7",
+      "type": "ground",
+      "label": "GND",
+      "status": "routed",
+      "routing_mode": "ground_labels",
+      "routing_stage": 1,
+      "label_policy": "global_ground",
+      "branches": [
+        {
+          "from": "LED8.1",
+          "to": "net_label:GND__subcircuit_led_7:1",
+          "points": [
+            [
+              4550,
+              2220
+            ],
+            [
+              4490,
+              2220
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:GND__subcircuit_led_7:1",
+          "net_id": "GND",
+          "text": "GND",
+          "x": 4490,
+          "y": 2220,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED0_ANODE",
+      "logical_net_id": "LED0_ANODE",
+      "region_id": "subcircuit:led_0",
+      "routing_domain_id": "subcircuit:led_0",
+      "type": "signal",
+      "label": "LED0_ANODE",
+      "status": "routed",
+      "routing_mode": "astar_pair",
+      "routing_stage": 2,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "LED1.2",
+          "to": "R1.2",
+          "points": [
+            [
+              3940,
+              1950
+            ],
+            [
+              3970,
+              1950
+            ],
+            [
+              3970,
+              1820
+            ],
+            [
+              3910,
+              1820
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED0_DRIVE__main_u1",
+      "logical_net_id": "LED0_DRIVE",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "LED0_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.10",
+          "to": "net_label:LED0_DRIVE__main_u1:1",
+          "points": [
+            [
+              3580,
+              1510
+            ],
+            [
+              3640,
+              1510
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED0_DRIVE__main_u1:1",
+          "net_id": "LED0_DRIVE",
+          "text": "LED0_DRIVE",
+          "x": 3640,
+          "y": 1510,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED0_DRIVE__subcircuit_led_0",
+      "logical_net_id": "LED0_DRIVE",
+      "region_id": "subcircuit:led_0",
+      "routing_domain_id": "subcircuit:led_0",
+      "type": "signal",
+      "label": "LED0_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "R1.1",
+          "to": "net_label:LED0_DRIVE__subcircuit_led_0:1",
+          "points": [
+            [
+              3880,
+              1820
+            ],
+            [
+              3820,
+              1820
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED0_DRIVE__subcircuit_led_0:1",
+          "net_id": "LED0_DRIVE",
+          "text": "LED0_DRIVE",
+          "x": 3820,
+          "y": 1820,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED1_ANODE",
+      "logical_net_id": "LED1_ANODE",
+      "region_id": "subcircuit:led_1",
+      "routing_domain_id": "subcircuit:led_1",
+      "type": "signal",
+      "label": "LED1_ANODE",
+      "status": "routed",
+      "routing_mode": "astar_pair",
+      "routing_stage": 2,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "R2.2",
+          "to": "LED2.2",
+          "points": [
+            [
+              4330,
+              1900
+            ],
+            [
+              4360,
+              1900
+            ],
+            [
+              4360,
+              1930
+            ],
+            [
+              4300,
+              1930
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED1_DRIVE__main_u1",
+      "logical_net_id": "LED1_DRIVE",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "LED1_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.11",
+          "to": "net_label:LED1_DRIVE__main_u1:1",
+          "points": [
+            [
+              3580,
+              1540
+            ],
+            [
+              3640,
+              1540
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED1_DRIVE__main_u1:1",
+          "net_id": "LED1_DRIVE",
+          "text": "LED1_DRIVE",
+          "x": 3640,
+          "y": 1540,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED1_DRIVE__subcircuit_led_1",
+      "logical_net_id": "LED1_DRIVE",
+      "region_id": "subcircuit:led_1",
+      "routing_domain_id": "subcircuit:led_1",
+      "type": "signal",
+      "label": "LED1_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "R2.1",
+          "to": "net_label:LED1_DRIVE__subcircuit_led_1:1",
+          "points": [
+            [
+              4300,
+              1900
+            ],
+            [
+              4240,
+              1900
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED1_DRIVE__subcircuit_led_1:1",
+          "net_id": "LED1_DRIVE",
+          "text": "LED1_DRIVE",
+          "x": 4240,
+          "y": 1900,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED2_ANODE",
+      "logical_net_id": "LED2_ANODE",
+      "region_id": "subcircuit:led_2",
+      "routing_domain_id": "subcircuit:led_2",
+      "type": "signal",
+      "label": "LED2_ANODE",
+      "status": "routed",
+      "routing_mode": "astar_pair",
+      "routing_stage": 2,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "LED3.2",
+          "to": "R3.2",
+          "points": [
+            [
+              4800,
+              1860
+            ],
+            [
+              4830,
+              1860
+            ],
+            [
+              4830,
+              1900
+            ],
+            [
+              4790,
+              1900
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED2_DRIVE__main_u1",
+      "logical_net_id": "LED2_DRIVE",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "LED2_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.12",
+          "to": "net_label:LED2_DRIVE__main_u1:1",
+          "points": [
+            [
+              3580,
+              1570
+            ],
+            [
+              3640,
+              1570
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED2_DRIVE__main_u1:1",
+          "net_id": "LED2_DRIVE",
+          "text": "LED2_DRIVE",
+          "x": 3640,
+          "y": 1570,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED2_DRIVE__subcircuit_led_2",
+      "logical_net_id": "LED2_DRIVE",
+      "region_id": "subcircuit:led_2",
+      "routing_domain_id": "subcircuit:led_2",
+      "type": "signal",
+      "label": "LED2_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "R3.1",
+          "to": "net_label:LED2_DRIVE__subcircuit_led_2:1",
+          "points": [
+            [
+              4760,
+              1900
+            ],
+            [
+              4700,
+              1900
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED2_DRIVE__subcircuit_led_2:1",
+          "net_id": "LED2_DRIVE",
+          "text": "LED2_DRIVE",
+          "x": 4700,
+          "y": 1900,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED3_ANODE",
+      "logical_net_id": "LED3_ANODE",
+      "region_id": "subcircuit:led_3",
+      "routing_domain_id": "subcircuit:led_3",
+      "type": "signal",
+      "label": "LED3_ANODE",
+      "status": "routed",
+      "routing_mode": "astar_pair",
+      "routing_stage": 2,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "LED4.2",
+          "to": "R4.2",
+          "points": [
+            [
+              3970,
+              1660
+            ],
+            [
+              4000,
+              1660
+            ],
+            [
+              4000,
+              1580
+            ],
+            [
+              3920,
+              1580
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED3_DRIVE__main_u1",
+      "logical_net_id": "LED3_DRIVE",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "LED3_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.13",
+          "to": "net_label:LED3_DRIVE__main_u1:1",
+          "points": [
+            [
+              3580,
+              1600
+            ],
+            [
+              3640,
+              1600
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED3_DRIVE__main_u1:1",
+          "net_id": "LED3_DRIVE",
+          "text": "LED3_DRIVE",
+          "x": 3640,
+          "y": 1600,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED3_DRIVE__subcircuit_led_3",
+      "logical_net_id": "LED3_DRIVE",
+      "region_id": "subcircuit:led_3",
+      "routing_domain_id": "subcircuit:led_3",
+      "type": "signal",
+      "label": "LED3_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "R4.1",
+          "to": "net_label:LED3_DRIVE__subcircuit_led_3:1",
+          "points": [
+            [
+              3890,
+              1580
+            ],
+            [
+              3830,
+              1580
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED3_DRIVE__subcircuit_led_3:1",
+          "net_id": "LED3_DRIVE",
+          "text": "LED3_DRIVE",
+          "x": 3830,
+          "y": 1580,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED4_ANODE",
+      "logical_net_id": "LED4_ANODE",
+      "region_id": "subcircuit:led_4",
+      "routing_domain_id": "subcircuit:led_4",
+      "type": "signal",
+      "label": "LED4_ANODE",
+      "status": "routed",
+      "routing_mode": "astar_pair",
+      "routing_stage": 2,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "R5.2",
+          "to": "LED5.2",
+          "points": [
+            [
+              3880,
+              2190
+            ],
+            [
+              3880,
+              2160
+            ],
+            [
+              3870,
+              2160
+            ],
+            [
+              3870,
+              2140
+            ],
+            [
+              3840,
+              2140
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED4_DRIVE__main_u1",
+      "logical_net_id": "LED4_DRIVE",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "LED4_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.14",
+          "to": "net_label:LED4_DRIVE__main_u1:1",
+          "points": [
+            [
+              3580,
+              1630
+            ],
+            [
+              3640,
+              1630
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED4_DRIVE__main_u1:1",
+          "net_id": "LED4_DRIVE",
+          "text": "LED4_DRIVE",
+          "x": 3640,
+          "y": 1630,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED4_DRIVE__subcircuit_led_4",
+      "logical_net_id": "LED4_DRIVE",
+      "region_id": "subcircuit:led_4",
+      "routing_domain_id": "subcircuit:led_4",
+      "type": "signal",
+      "label": "LED4_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "R5.1",
+          "to": "net_label:LED4_DRIVE__subcircuit_led_4:1",
+          "points": [
+            [
+              3880,
+              2220
+            ],
+            [
+              3880,
+              2280
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED4_DRIVE__subcircuit_led_4:1",
+          "net_id": "LED4_DRIVE",
+          "text": "LED4_DRIVE",
+          "x": 3880,
+          "y": 2280,
+          "direction": "D",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED5_ANODE",
+      "logical_net_id": "LED5_ANODE",
+      "region_id": "subcircuit:led_5",
+      "routing_domain_id": "subcircuit:led_5",
+      "type": "signal",
+      "label": "LED5_ANODE",
+      "status": "routed",
+      "routing_mode": "astar_pair",
+      "routing_stage": 2,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "LED6.2",
+          "to": "R6.2",
+          "points": [
+            [
+              5260,
+              1840
+            ],
+            [
+              5290,
+              1840
+            ],
+            [
+              5290,
+              1870
+            ],
+            [
+              5230,
+              1870
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED5_DRIVE__main_u1",
+      "logical_net_id": "LED5_DRIVE",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "LED5_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.15",
+          "to": "net_label:LED5_DRIVE__main_u1:1",
+          "points": [
+            [
+              3580,
+              1660
+            ],
+            [
+              3640,
+              1660
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED5_DRIVE__main_u1:1",
+          "net_id": "LED5_DRIVE",
+          "text": "LED5_DRIVE",
+          "x": 3640,
+          "y": 1660,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED5_DRIVE__subcircuit_led_5",
+      "logical_net_id": "LED5_DRIVE",
+      "region_id": "subcircuit:led_5",
+      "routing_domain_id": "subcircuit:led_5",
+      "type": "signal",
+      "label": "LED5_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "R6.1",
+          "to": "net_label:LED5_DRIVE__subcircuit_led_5:1",
+          "points": [
+            [
+              5200,
+              1870
+            ],
+            [
+              5140,
+              1870
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED5_DRIVE__subcircuit_led_5:1",
+          "net_id": "LED5_DRIVE",
+          "text": "LED5_DRIVE",
+          "x": 5140,
+          "y": 1870,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED6_ANODE",
+      "logical_net_id": "LED6_ANODE",
+      "region_id": "subcircuit:led_6",
+      "routing_domain_id": "subcircuit:led_6",
+      "type": "signal",
+      "label": "LED6_ANODE",
+      "status": "routed",
+      "routing_mode": "astar_pair",
+      "routing_stage": 2,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "LED7.2",
+          "to": "R7.2",
+          "points": [
+            [
+              4370,
+              1660
+            ],
+            [
+              4400,
+              1660
+            ],
+            [
+              4400,
+              1580
+            ],
+            [
+              4330,
+              1580
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED6_DRIVE__main_u1",
+      "logical_net_id": "LED6_DRIVE",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "LED6_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.16",
+          "to": "net_label:LED6_DRIVE__main_u1:1",
+          "points": [
+            [
+              3580,
+              1690
+            ],
+            [
+              3640,
+              1690
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED6_DRIVE__main_u1:1",
+          "net_id": "LED6_DRIVE",
+          "text": "LED6_DRIVE",
+          "x": 3640,
+          "y": 1690,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED6_DRIVE__subcircuit_led_6",
+      "logical_net_id": "LED6_DRIVE",
+      "region_id": "subcircuit:led_6",
+      "routing_domain_id": "subcircuit:led_6",
+      "type": "signal",
+      "label": "LED6_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "R7.1",
+          "to": "net_label:LED6_DRIVE__subcircuit_led_6:1",
+          "points": [
+            [
+              4300,
+              1580
+            ],
+            [
+              4240,
+              1580
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED6_DRIVE__subcircuit_led_6:1",
+          "net_id": "LED6_DRIVE",
+          "text": "LED6_DRIVE",
+          "x": 4240,
+          "y": 1580,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED7_ANODE",
+      "logical_net_id": "LED7_ANODE",
+      "region_id": "subcircuit:led_7",
+      "routing_domain_id": "subcircuit:led_7",
+      "type": "signal",
+      "label": "LED7_ANODE",
+      "status": "routed",
+      "routing_mode": "astar_pair",
+      "routing_stage": 0,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "LED8.2",
+          "to": "R8.2",
+          "points": [
+            [
+              4580,
+              2220
+            ],
+            [
+              4610,
+              2220
+            ],
+            [
+              4610,
+              2250
+            ],
+            [
+              4360,
+              2250
+            ],
+            [
+              4360,
+              2220
+            ],
+            [
+              4330,
+              2220
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED7_DRIVE__main_u1",
+      "logical_net_id": "LED7_DRIVE",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "signal",
+      "label": "LED7_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "U1.17",
+          "to": "net_label:LED7_DRIVE__main_u1:1",
+          "points": [
+            [
+              3580,
+              1720
+            ],
+            [
+              3640,
+              1720
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED7_DRIVE__main_u1:1",
+          "net_id": "LED7_DRIVE",
+          "text": "LED7_DRIVE",
+          "x": 3640,
+          "y": 1720,
+          "direction": "R",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "LED7_DRIVE__subcircuit_led_7",
+      "logical_net_id": "LED7_DRIVE",
+      "region_id": "subcircuit:led_7",
+      "routing_domain_id": "subcircuit:led_7",
+      "type": "signal",
+      "label": "LED7_DRIVE",
+      "status": "routed",
+      "routing_mode": "single_pin_label",
+      "routing_stage": 1,
+      "label_policy": "single_pin_fragment",
+      "branches": [
+        {
+          "from": "R8.1",
+          "to": "net_label:LED7_DRIVE__subcircuit_led_7:1",
+          "points": [
+            [
+              4300,
+              2220
+            ],
+            [
+              4240,
+              2220
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [
+        {
+          "id": "net_label:LED7_DRIVE__subcircuit_led_7:1",
+          "net_id": "LED7_DRIVE",
+          "text": "LED7_DRIVE",
+          "x": 4240,
+          "y": 2220,
+          "direction": "L",
+          "outward": true,
+          "outward_clearance_valid": true
+        }
+      ],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    },
+    {
+      "net_id": "VDD_3V3",
+      "logical_net_id": "VDD_3V3",
+      "region_id": "main:U1",
+      "routing_domain_id": "main:U1",
+      "type": "supply",
+      "label": "VDD_3V3",
+      "status": "routed",
+      "routing_mode": "astar_pair",
+      "routing_stage": 0,
+      "label_policy": "",
+      "branches": [
+        {
+          "from": "U1.36",
+          "to": "U1.24",
+          "points": [
+            [
+              3100,
+              1420
+            ],
+            [
+              3100,
+              1360
+            ],
+            [
+              3030,
+              1360
+            ],
+            [
+              3030,
+              1420
+            ]
+          ]
+        }
+      ],
+      "junctions": [],
+      "labels": [],
+      "outward_label_violation_count": 0,
+      "label_ray_obstruction_count": 0
+    }
+  ],
+  "metrics": {
+    "component_overlap_count": 0,
+    "wire_length": 3150,
+    "bend_count": 21,
+    "wire_crossing_count": 0,
+    "wire_overlap_length": 0,
+    "unrouted_net_count": 0,
+    "primary_nonstraight_count": 0,
+    "primary_corridor_intrusion_count": 0,
+    "isolated_net_count": 0,
+    "pin_event_clearance": {
+      "required_distance": 30,
+      "minimum_distance": 30,
+      "violation_count": 0,
+      "violations": []
+    },
+    "pin_event_clearance_violation_count": 0,
+    "outward_label_violation_count": 0,
+    "label_ray_obstruction_count": 0,
+    "maximum_branch_length": 370,
+    "maximum_direct_branch_length": 370,
+    "total_detour_length": 600,
+    "maximum_detour_ratio": 2.7142857142857144,
+    "p95_detour_ratio": 2.7142857142857144,
+    "detour_violation_count": 8,
+    "hard_detour_violation_count": 4,
+    "target_max_detour_ratio": 1.2,
+    "hard_max_detour_ratio": 1.5,
+    "direct_wire_target_length": 200,
+    "direct_wire_hard_limit": 700,
+    "excess_direct_wire_length": 29300,
+    "long_direct_wire_count": 0,
+    "excessive_direct_bend_count": 2,
+    "zero_bend_branch_count": 0,
+    "one_bend_branch_count": 0,
+    "excessive_bend_branch_count": 2,
+    "maximum_branch_bends": 4,
+    "network_label_count": 26,
+    "predicted_optional_internal_label_count": 0,
+    "optional_internal_label_count": 0,
+    "mandatory_boundary_label_count": 16,
+    "global_power_label_count": 10,
+    "routing_evaluation_mode": "presentation",
+    "long_wire_label_count": 0,
+    "branch_length_variance": 4257.142857142857
+  },
+  "optimization_metrics": {
+    "component_overlap_count": 0,
+    "wire_length": 3150,
+    "bend_count": 21,
+    "wire_crossing_count": 0,
+    "wire_overlap_length": 0,
+    "unrouted_net_count": 0,
+    "primary_nonstraight_count": 0,
+    "primary_corridor_intrusion_count": 0,
+    "isolated_net_count": 0,
+    "pin_event_clearance": {
+      "required_distance": 30,
+      "minimum_distance": 30,
+      "violation_count": 0,
+      "violations": []
+    },
+    "pin_event_clearance_violation_count": 0,
+    "outward_label_violation_count": 0,
+    "label_ray_obstruction_count": 0,
+    "maximum_branch_length": 370,
+    "maximum_direct_branch_length": 370,
+    "total_detour_length": 600,
+    "maximum_detour_ratio": 2.7142857142857144,
+    "p95_detour_ratio": 2.7142857142857144,
+    "detour_violation_count": 8,
+    "hard_detour_violation_count": 4,
+    "target_max_detour_ratio": 1.2,
+    "hard_max_detour_ratio": 1.5,
+    "direct_wire_target_length": 200,
+    "direct_wire_hard_limit": 700,
+    "excess_direct_wire_length": 29300,
+    "long_direct_wire_count": 0,
+    "excessive_direct_bend_count": 2,
+    "zero_bend_branch_count": 0,
+    "one_bend_branch_count": 0,
+    "excessive_bend_branch_count": 2,
+    "maximum_branch_bends": 4,
+    "network_label_count": 26,
+    "predicted_optional_internal_label_count": 0,
+    "optional_internal_label_count": 0,
+    "mandatory_boundary_label_count": 16,
+    "global_power_label_count": 10,
+    "routing_evaluation_mode": "raw_astar_optimization",
+    "long_wire_label_count": 0,
+    "branch_length_variance": 4257.142857142857
+  },
+  "warnings": [],
+  "search_timing": {
+    "discovered_at_seconds": 7.030869,
+    "last_improved_at_seconds": 7.030869,
+    "total_search_seconds": 8.717804,
+    "regional_searches": [
+      {
+        "region_id": "subcircuit:led_0",
+        "component_count": 2,
+        "routing_net_count": 3,
+        "iteration_budget": 8,
+        "attempted_moves": 8,
+        "accepted_candidates": 5,
+        "elapsed_seconds": 0.966165,
+        "optimization_mode": "independent_simulated_annealing"
+      },
+      {
+        "region_id": "subcircuit:led_1",
+        "component_count": 2,
+        "routing_net_count": 3,
+        "iteration_budget": 8,
+        "attempted_moves": 8,
+        "accepted_candidates": 4,
+        "elapsed_seconds": 1.004288,
+        "optimization_mode": "independent_simulated_annealing"
+      },
+      {
+        "region_id": "subcircuit:led_2",
+        "component_count": 2,
+        "routing_net_count": 3,
+        "iteration_budget": 8,
+        "attempted_moves": 8,
+        "accepted_candidates": 4,
+        "elapsed_seconds": 1.233566,
+        "optimization_mode": "independent_simulated_annealing"
+      },
+      {
+        "region_id": "subcircuit:led_3",
+        "component_count": 2,
+        "routing_net_count": 3,
+        "iteration_budget": 8,
+        "attempted_moves": 8,
+        "accepted_candidates": 6,
+        "elapsed_seconds": 1.082359,
+        "optimization_mode": "independent_simulated_annealing"
+      },
+      {
+        "region_id": "subcircuit:led_4",
+        "component_count": 2,
+        "routing_net_count": 3,
+        "iteration_budget": 7,
+        "attempted_moves": 7,
+        "accepted_candidates": 6,
+        "elapsed_seconds": 0.983632,
+        "optimization_mode": "independent_simulated_annealing"
+      },
+      {
+        "region_id": "subcircuit:led_5",
+        "component_count": 2,
+        "routing_net_count": 3,
+        "iteration_budget": 7,
+        "attempted_moves": 7,
+        "accepted_candidates": 3,
+        "elapsed_seconds": 1.133016,
+        "optimization_mode": "independent_simulated_annealing"
+      },
+      {
+        "region_id": "subcircuit:led_6",
+        "component_count": 2,
+        "routing_net_count": 3,
+        "iteration_budget": 7,
+        "attempted_moves": 7,
+        "accepted_candidates": 5,
+        "elapsed_seconds": 1.105631,
+        "optimization_mode": "independent_simulated_annealing"
+      },
+      {
+        "region_id": "subcircuit:led_7",
+        "component_count": 2,
+        "routing_net_count": 3,
+        "iteration_budget": 7,
+        "attempted_moves": 7,
+        "accepted_candidates": 2,
+        "elapsed_seconds": 1.098671,
+        "optimization_mode": "independent_simulated_annealing"
+      }
+    ]
+  }
+}

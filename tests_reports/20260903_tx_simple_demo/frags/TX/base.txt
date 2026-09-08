@@ -1,0 +1,20 @@
+circuit = Circuit("simple_tx_rf_TX")
+circuit.add(Template("U1", "MCU_ST_STM32F1:STM32F103C8Tx", "STM32F103C8Tx", ["11", "14", "15", "16", "17", "23", "24", "35", "36"]))
+with circuit.sub_circuit("POWER_3V3"):
+    circuit.add(Template("U2", "Regulator_Linear:AMS1117-3.3", "AMS1117-3.3", ["1", "2", "3"]))
+with circuit.sub_circuit("RF_PA"):
+    circuit.add(Template("U3", "RF_Module:RFM95W-868S2", "RFM95W-868S2", ["1", "2", "3", "4", "5", "6", "8", "9", "10", "13"]))
+with circuit.sub_circuit("RF_FILTER"):
+    circuit.add(Template("U4", "Device:Filter_EMI_CLC", "Filter_EMI_CLC", ["1", "2", "3"]))
+    circuit.add(Template("E1", "Device:Antenna", "868MHz", ["1"]))
+# ---- 网络对象定义（connect 由各切片代码补充）----
+circuit.add(Net("GND", "ground", 5))
+circuit.add(Net("VIN_5V", "power", 4))
+circuit.add(Net("VDD_3V3", "supply", 5))
+circuit.add(Net("RF_PA_OUT", "signal", 5))
+circuit.add(Net("RF_OUT", "signal", 5))
+circuit.add(Net("SPI_SCK", "signal", 3))
+circuit.add(Net("SPI_MISO", "signal", 3))
+circuit.add(Net("SPI_MOSI", "signal", 3))
+circuit.add(Net("SPI_NSS", "signal", 3))
+circuit.add(Net("RFM_RESET", "signal", 3))

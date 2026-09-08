@@ -1,0 +1,354 @@
+{
+  "manifest": {
+    "schema_version": 1,
+    "created_at": "2026-09-03T03:24:10.909390+00:00",
+    "git_commit": "fac355003c78547ccbbcdef223743fd6e384e7b9",
+    "profile": "litellm_opencode_go",
+    "prompt": "HI",
+    "model_prefix": "opencode-go/",
+    "agents": [
+      "claude",
+      "codebuddy",
+      "codex",
+      "justdo",
+      "openclaw",
+      "opencode"
+    ],
+    "models": [
+      "opencode-go/minimax-m2.7"
+    ],
+    "repeats": 1,
+    "workers": 3,
+    "timeout_seconds": 120,
+    "catalog_errors": [],
+    "agent_executables": {
+      "claude": "claude",
+      "codebuddy": "codebuddy",
+      "codex": "codex",
+      "justdo": "C:\\Users\\leiwe\\AppData\\Roaming\\JustDo\\multica\\development\\JustDo-agent.exe",
+      "openclaw": "openclaw",
+      "opencode": "opencode"
+    }
+  },
+  "results": [
+    {
+      "agent": "claude",
+      "requested_model": "opencode-go/minimax-m2.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:24:10.945875+00:00",
+      "finished_at": "2026-09-03T03:26:12.213414+00:00",
+      "duration_seconds": 121.268,
+      "status": "failed",
+      "agent_model": "sonnet",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 1,
+      "response": "",
+      "error_type": null,
+      "error": "claude timed out after 2m0s; claude stderr: [claude-code:unrecognized_model] {\"model\":\"sonnet\",\"query_source\":\"sdk\"}",
+      "database_trace": {
+        "status": "matched",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 16,
+        "successful_model_calls": 0,
+        "model_call_success_rate": 0.0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": 0,
+        "models": [
+          "opencode-go/minimax-m2.7"
+        ],
+        "spend": 0.0,
+        "average_request_duration_ms": 0.0
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "opencode-go/minimax-m2.7",
+        "accepted_model_groups": [
+          "opencode-go/minimax-m2.7",
+          "sonnet"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_successful_model_call",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-ddc1d86ffb734e28b053ac451676049c",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-ddc1d86ffb734e28b053ac451676049c"
+      }
+    },
+    {
+      "agent": "codebuddy",
+      "requested_model": "opencode-go/minimax-m2.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:24:10.945875+00:00",
+      "finished_at": "2026-09-03T03:26:12.847248+00:00",
+      "duration_seconds": 121.901,
+      "status": "failed",
+      "agent_model": "custom-local:MiniMax-M2.7",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 1,
+      "response": "",
+      "error_type": null,
+      "error": "codebuddy timed out after 2m0s",
+      "database_trace": {
+        "status": "matched",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 16,
+        "successful_model_calls": 0,
+        "model_call_success_rate": 0.0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": 0,
+        "models": [
+          "anthropic/minimax-m2.7"
+        ],
+        "spend": 0.0,
+        "average_request_duration_ms": 0.0
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "opencode-go/minimax-m2.7",
+        "accepted_model_groups": [
+          "minimax-m2.7",
+          "opencode-go/minimax-m2.7"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_successful_model_call",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-f40bca30c23943e682f4399a347687fb",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-f40bca30c23943e682f4399a347687fb"
+      }
+    },
+    {
+      "agent": "codex",
+      "requested_model": "opencode-go/minimax-m2.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:24:10.946630+00:00",
+      "finished_at": "2026-09-03T03:24:24.441083+00:00",
+      "duration_seconds": 13.494,
+      "status": "failed",
+      "agent_model": "opencode-go/minimax-m2.7",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 1,
+      "response": "",
+      "error_type": null,
+      "error": "exceeded retry limit, last status: 429 Too Many Requests",
+      "database_trace": {
+        "status": "matched",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 1,
+        "successful_model_calls": 0,
+        "model_call_success_rate": 0.0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": 0,
+        "models": [
+          "opencode-go/minimax-m2.7"
+        ],
+        "spend": 0.0,
+        "average_request_duration_ms": 0.0
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "opencode-go/minimax-m2.7",
+        "accepted_model_groups": [
+          "opencode-go/minimax-m2.7"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_successful_model_call",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-4860c571d28e441eb018e6273b0b81cb",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-4860c571d28e441eb018e6273b0b81cb"
+      }
+    },
+    {
+      "agent": "justdo",
+      "requested_model": "opencode-go/minimax-m2.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:24:24.441604+00:00",
+      "finished_at": "2026-09-03T03:24:41.460316+00:00",
+      "duration_seconds": 17.019,
+      "status": "failed",
+      "agent_model": "main",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 1,
+      "response": "",
+      "error_type": null,
+      "error": "openclaw --version failed: exit status 69",
+      "database_trace": {
+        "status": "no_match",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 0,
+        "successful_model_calls": 0,
+        "model_call_success_rate": null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": null,
+        "models": [],
+        "spend": 0,
+        "average_request_duration_ms": null
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "opencode-go/minimax-m2.7",
+        "accepted_model_groups": [
+          "main",
+          "opencode-go/minimax-m2.7"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_database_interactions",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-2851cec7197f4f658eb9e40d169bb98e",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-2851cec7197f4f658eb9e40d169bb98e"
+      }
+    },
+    {
+      "agent": "openclaw",
+      "requested_model": "opencode-go/minimax-m2.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:24:41.460316+00:00",
+      "finished_at": "2026-09-03T03:26:54.251851+00:00",
+      "duration_seconds": 132.792,
+      "status": "failed",
+      "agent_model": "main",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 1,
+      "response": "",
+      "error_type": null,
+      "error": "openclaw timed out after 2m0s",
+      "database_trace": {
+        "status": "no_match",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 0,
+        "successful_model_calls": 0,
+        "model_call_success_rate": null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": null,
+        "models": [],
+        "spend": 0,
+        "average_request_duration_ms": null
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "opencode-go/minimax-m2.7",
+        "accepted_model_groups": [
+          "main",
+          "opencode-go/minimax-m2.7"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_database_interactions",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-4b57b00750fb43a3a65964d63382723f",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-4b57b00750fb43a3a65964d63382723f"
+      }
+    },
+    {
+      "agent": "opencode",
+      "requested_model": "opencode-go/minimax-m2.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:26:12.214418+00:00",
+      "finished_at": "2026-09-03T03:28:03.600772+00:00",
+      "duration_seconds": 111.386,
+      "status": "failed",
+      "agent_model": "litellm/opencode-go/minimax-m2.7",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 1,
+      "response": "",
+      "error_type": null,
+      "error": "litellm.RateLimitError: AnthropicException - b'{\"type\":\"error\",\"error\":{\"type\":\"GoUsageLimitError\",\"message\":\"Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go\"},\"metadata\":{\"workspace\":\"wrk_01M1DK6R91D6CARKBJRAPV07RY\",\"limitName\":\"weekly\"}}'. Received Model Group=opencode-go/minimax-m2.7\nAvailable Model Group Fallbacks=None",
+      "database_trace": {
+        "status": "matched",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 8,
+        "successful_model_calls": 0,
+        "model_call_success_rate": 0.0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": 0,
+        "models": [
+          "anthropic/minimax-m2.7"
+        ],
+        "spend": 0.0,
+        "average_request_duration_ms": 0.0
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "opencode-go/minimax-m2.7",
+        "accepted_model_groups": [
+          "litellm/opencode-go/minimax-m2.7",
+          "opencode-go/minimax-m2.7"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_successful_model_call",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-cf0ee4c0df0d42e0b6b5559939a194f2",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-cf0ee4c0df0d42e0b6b5559939a194f2"
+      }
+    }
+  ]
+}

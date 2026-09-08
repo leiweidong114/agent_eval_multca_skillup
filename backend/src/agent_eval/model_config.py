@@ -197,7 +197,10 @@ def resolve_model_profile(
     if not isinstance(profile, dict):
         raise ValueError(f"Model profile must be a mapping: {selected}")
 
-    model = (model_override or str(profile.get("model") or "")).strip()
+    source_environment = environ if environ is not None else os.environ
+    env_secrets = load_env_secrets(project_root)
+    default_model = source_environment.get("LITELLM_MODEL") or env_secrets.get("LITELLM_MODEL")
+    model = (model_override or default_model or str(profile.get("model") or "")).strip()
     if not model:
         raise ValueError(f"Model profile has no model: {selected}")
     if selected == "litellm" and "no-thinking" in model.lower():
@@ -250,8 +253,8 @@ def resolve_model_profile(
     )
     api_key = str(
         source_environment.get(key_name)
-        or local_secrets.get(key_name)
         or env_secrets.get(key_name)
+        or local_secrets.get(key_name)
         or ""
     ).strip()
     if not api_key:
@@ -275,13 +278,17 @@ def resolve_model_profile(
         if str(name).strip() and str(value).strip()
     }
     configured_model = str(profile.get("model") or "").strip()
-    if model_override and model != configured_model and agent:
+    if selected == "litellm":
+        # The unified protocol adapter targets the requested deployment exactly.
+        # Legacy default-model aliases must not silently redirect that selection.
+        gateway_models = {}
+    if model != configured_model and agent:
         # Agent/gateway mappings describe aliases for the configured default
         # deployment. They must never replace an explicit CLI model choice.
         gateway_models.pop(agent, None)
     if agent == "codebuddy":
         derived_codebuddy_model = _codebuddy_custom_model(model)
-        if model_override:
+        if model_override or default_model:
             agent_models["codebuddy"] = derived_codebuddy_model
         elif "codebuddy" not in agent_models:
             agent_models["codebuddy"] = derived_codebuddy_model
@@ -375,6 +382,8 @@ def resolve_model_profile(
             'model_providers.litellm.wire_api="responses"',
             "-c",
             'model_reasoning_effort="high"',
+            "-c",
+            'web_search="disabled"',
         )
     return ResolvedModelProfile(
         selected,
@@ -397,17 +406,24 @@ def load_env_secrets(project_root: Path) -> dict[str, str]:
     for path in (
         project_root / "config" / "secrets.env",
         project_root / "config" / "litellm.env",
+        project_root / ".env",
+        project_root.parent / ".env" if project_root.name == "backend" else project_root / ".env",
     ):
         if not path.is_file():
             continue
-        for raw_line in path.read_text(encoding="utf-8").splitlines():
+        for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = line.split("=", 1)
-            key = key.strip()
+            key = key.strip().removeprefix("export ").strip()
             if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
-                result[key] = value.strip().strip('"').strip("'")
+                value = value.strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                    value = value[1:-1]
+                else:
+                    value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+                result[key] = value
     return result
 
 
@@ -421,7 +437,7 @@ def resolve_config_secret(
     secrets = config.get("secrets") or {}
     env_secrets = load_env_secrets(project_root)
     source_environment = environ if environ is not None else os.environ
-    return str(source_environment.get(name) or secrets.get(name) or env_secrets.get(name) or "").strip()
+    return str(source_environment.get(name) or env_secrets.get(name) or secrets.get(name) or "").strip()
 
 
 def _profile_compatible_agents(protocol: str) -> list[str]:
@@ -635,8 +651,8 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
         profile_models["litellm"] = unified["model"]
     common = {
         "default_profile": default_name or None,
-        "default_model": default.get("model") if isinstance(default, dict) else None,
-        "api_base": default.get("api_base") if isinstance(default, dict) else None,
+        "default_model": resolve_config_secret(project_root, "LITELLM_MODEL") or (default.get("model") if isinstance(default, dict) else None),
+        "api_base": resolve_config_secret(project_root, "LITELLM_API_BASE") or (default.get("api_base") if isinstance(default, dict) else None),
         "api_key_env": key_name,
         "api_key_configured": bool(resolve_config_secret(project_root, key_name)),
     }
@@ -684,6 +700,9 @@ def discover_available_models(
     models: dict[str, dict[str, Any]] = {}
     gateways: dict[str, list[str]] = {}
     errors: list[dict[str, str]] = []
+    if isinstance(config.get("litellm"), dict):
+        resolved = resolve_model_profile(project_root)
+        profiles = {"litellm": {**config["litellm"], "api_base": resolved.api_base}}
     for name, value in profiles.items():
         if not isinstance(value, dict):
             continue
@@ -780,7 +799,7 @@ def refresh_litellm_model_catalog(
         started = time.perf_counter()
         try:
             profile = resolve_model_profile(project_root, model_override=model_id)
-            endpoint_name = "responses" if probe_agent == "codex" else "chat/completions"
+            endpoint_name = "chat/completions"
             endpoint = profile.api_base.rstrip("/") + f"/{endpoint_name}"
             api_key = profile.environment.get(profile.api_key_env, "")
             request_body = (
@@ -800,12 +819,20 @@ def refresh_litellm_model_catalog(
                 )
             latency_ms = round((time.perf_counter() - started) * 1000, 2)
             if response.is_success:
+                payload = response.json()
+                if not isinstance(payload, dict) or payload.get("error") or not (
+                    payload.get("choices") if endpoint_name == "chat/completions"
+                    else payload.get("output") or payload.get("output_text")
+                ):
+                    raise ValueError("Model returned HTTP 200 but no inference output (invalid/empty response)")
                 return {
                     "id": model_id,
                     "owned_by": item.get("owned_by"),
                     "available": True,
                     "enabled": "no-thinking" not in model_id.lower(),
-                    "reasoning": "no-thinking" not in model_id.lower(),
+                    "reasoning": None,
+                    "reasoning_policy": "provider_default_not_disabled",
+                    "probe_scope": "text_only_not_tool_or_agent_validation",
                     "probe_endpoint": endpoint_name,
                     "probe_status_code": response.status_code,
                     "probe_latency_ms": latency_ms,
@@ -816,6 +843,8 @@ def refresh_litellm_model_catalog(
                 status_code=response.status_code,
                 component="litellm_model_probe",
             )
+            if failure:
+                failure.pop("technical_detail", None)
             return {
                 "id": model_id,
                 "available": False,
@@ -853,7 +882,7 @@ def refresh_litellm_model_catalog(
         "catalog_visible_only": False,
         "connectivity_tested": True,
         "probe_agent": probe_agent,
-        "probe_endpoint": "responses" if probe_agent == "codex" else "chat/completions",
+        "probe_endpoint": "chat/completions",
         "probe_prompt": "HI",
         "probe_workers": safe_workers,
         "visible_model_count": len(visible_models),

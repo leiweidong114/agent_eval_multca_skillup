@@ -12,8 +12,15 @@ from agent_eval.runner import (
     attach_session_evidence,
     build_eval_config,
     classify_evaluation_failure,
+    cases_completed,
 )
 from agent_eval.runtime import SUPPORTED_AGENTS, agent_capabilities, backend_agent
+
+
+def test_negative_control_failure_is_scored_evidence_not_runtime_failure():
+    assert cases_completed([{"case_results": [{"status": "PASS"}, {"status": "FAIL"}]}])
+    assert not cases_completed([{"case_results": [{"status": "PASS"}, {"status": "ERROR"}]}])
+    assert not cases_completed([])
 
 
 def test_eval_config_uses_local_multica_without_auth_or_database(tmp_path):

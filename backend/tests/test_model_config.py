@@ -76,6 +76,8 @@ def test_resolves_default_litellm_profile_and_agent_environment(tmp_path):
         'model_providers.litellm.wire_api="responses"',
         "-c",
         'model_reasoning_effort="high"',
+        "-c",
+        'web_search="disabled"',
     )
 
 
@@ -126,6 +128,8 @@ profiles: {}
     assert overridden.model_for_agent("opencode") == "litellm/glm-4.5-air"
     assert overridden.gateway_model_for_agent("opencode") == "glm-4.5-air"
     assert '"glm-4.5-air"' in overridden.environment["OPENCODE_CONFIG_CONTENT"]
+    claude = resolve_model_profile(tmp_path, model_override="glm-4.7", agent="claude", environ={"TEST_LITELLM_KEY": "virtual-key"})
+    assert claude.gateway_model_for_agent("claude") == "glm-4.7"
 
 
 def test_unified_litellm_reads_ignored_env_file_and_rejects_no_thinking(tmp_path):
@@ -378,18 +382,15 @@ def test_refresh_excludes_models_that_fail_real_inference(tmp_path, monkeypatch)
     assert failed["failure"]["category"] == "gateway_quota_exhausted"
 
 
-def test_refresh_can_probe_codex_responses_protocol(tmp_path, monkeypatch):
+def test_codex_catalog_probes_the_upstream_chat_protocol_used_by_adapter(tmp_path, monkeypatch):
     _write_config(tmp_path)
     monkeypatch.setenv("TEST_LITELLM_KEY", "virtual-key")
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/v1/models":
             return httpx.Response(200, json={"data": [{"id": "chat-only-model"}]})
-        assert request.url.path == "/v1/responses"
-        return httpx.Response(
-            404,
-            json={"error": {"message": "Not Found", "path": "/v4/responses"}},
-        )
+        assert request.url.path == "/v1/chat/completions"
+        return httpx.Response(200, json={"choices": [{"message": {"content": "HI"}}]})
 
     snapshot = refresh_litellm_model_catalog(
         tmp_path,
@@ -397,12 +398,10 @@ def test_refresh_can_probe_codex_responses_protocol(tmp_path, monkeypatch):
         probe_agent="codex",
     )
 
-    assert snapshot["probe_endpoint"] == "responses"
-    assert snapshot["models"] == []
+    assert snapshot["probe_endpoint"] == "chat/completions"
+    assert snapshot["models"][0]["id"] == "chat-only-model"
     assert not (tmp_path / "config" / "litellm-models.json").exists()
-    assert snapshot["unavailable_models"][0]["failure"]["category"] == (
-        "model_protocol_incompatible"
-    )
+    assert snapshot["unavailable_models"] == []
 
 
 def test_discovered_model_prefers_the_profile_configured_for_its_exact_id(tmp_path, monkeypatch):

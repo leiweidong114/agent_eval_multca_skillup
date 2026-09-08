@@ -1,0 +1,7 @@
+﻿agent,requested_model,attempt,passed,status,agent_model,runtime_exit_code,agent_exit_code,db_status,db_calls,db_successes,db_models,model_verified,verification_reason,trace_key_alias,trace_key_cleanup,duration_seconds,error
+claude,glm-4.7,1,False,failed,claude-sonnet-4-6,0,0,no_match,0,0,,False,no_database_interactions,agent-eval-connectivity-10bab0705ffc48ce9cb4c6dfa09e40e9,deleted,19.269,
+codebuddy,glm-4.7,1,True,connected,custom-local:glm-4.7,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-5d176616489948d3b4167dd09949916a,deleted,21.364,
+codex,glm-4.7,1,True,connected,glm-4.7,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-732f69a759bc4797bb743324e00ea2ce,deleted,36.465,
+justdo,glm-4.7,1,False,failed,main,0,1,no_match,0,0,,False,no_database_interactions,agent-eval-connectivity-3f803afd843f4a2e9c71d97e1fde5382,deleted,12.534,openclaw --version failed: exit status 69
+openclaw,glm-4.7,1,False,failed,main,0,0,no_match,0,0,,False,no_database_interactions,agent-eval-connectivity-4a0081e276c8486989c5d6fc9b985eb1,deleted,56.228,
+opencode,glm-4.7,1,True,connected,litellm/glm-4.7,0,0,matched,2,2,openai/glm-4.7,True,,agent-eval-connectivity-f5e4e2f6dd3d4c75956e2056ca4f4d57,deleted,19.091,

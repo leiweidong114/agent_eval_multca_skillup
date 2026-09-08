@@ -144,6 +144,7 @@ def get_model_config() -> dict[str, object]:
     """Return non-secret model defaults used by the CLI and Web UI."""
     result = describe_model_config(BACKEND_ROOT)
     judge = (load_scoring_config(BACKEND_ROOT).get("llm_judge") or {}).copy()
+    judge["model"] = resolve_config_secret(BACKEND_ROOT, "LITELLM_JUDGE_MODEL") or judge.get("model")
     result["llm_judge"] = {
         key: judge.get(key)
         for key in (
@@ -194,8 +195,6 @@ def remove_model_profile(profile_name: str) -> dict[str, object]:
 def list_models() -> dict[str, object]:
     """Return models discovered from LiteLLM plus configured native fallbacks."""
     result = discover_available_models(BACKEND_ROOT)
-    excluded = {"deepseek", "deepseek-v4-flash", "deepseek-v4-pro"}
-    result["models"] = [item for item in result.get("models", []) if item.get("id") not in excluded]
     return result
 
 

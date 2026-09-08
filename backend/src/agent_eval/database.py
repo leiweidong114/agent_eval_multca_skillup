@@ -89,13 +89,13 @@ def resolve_database_config(
     env_secrets = load_env_secrets(project_root)
     url_env = str(database.get("url_env") or "DATABASE_URL")
     database_url = str(
-        source_environment.get(url_env) or secrets.get(url_env) or env_secrets.get(url_env) or ""
+        source_environment.get(url_env) or env_secrets.get(url_env) or secrets.get(url_env) or ""
     ).strip()
     password_env = str(database.get("password_env") or "LITELLM_DATABASE_PASSWORD")
     password = str(
         source_environment.get(password_env)
-        or secrets.get(password_env)
         or env_secrets.get(password_env)
+        or secrets.get(password_env)
         or ""
     )
     host = str(database.get("host") or "127.0.0.1")
@@ -207,11 +207,11 @@ def _json_value(value: Any) -> Any:
         return str(value)
 
 
-_SENSITIVE_KEYS = {"authorization", "api_key", "apikey", "password", "secret", "token"}
+_SENSITIVE_KEYS = {"authorization", "api_key", "apikey", "password", "secret", "token", "cookie", "set_cookie"}
 
 
 def _sensitive_key(key: str) -> bool:
-    normalized = key.lower()
+    normalized = key.lower().replace("-", "_")
     return (
         normalized in _SENSITIVE_KEYS
         or "password" in normalized
@@ -222,7 +222,7 @@ def _sensitive_key(key: str) -> bool:
     )
 
 
-def _sanitize(value: Any, *, max_chars: int) -> Any:
+def _sanitize(value: Any, *, max_chars: int | None) -> Any:
     if isinstance(value, dict):
         return {
             key: "[REDACTED]" if _sensitive_key(key) else _sanitize(item, max_chars=max_chars)
@@ -230,9 +230,36 @@ def _sanitize(value: Any, *, max_chars: int) -> Any:
         }
     if isinstance(value, list):
         return [_sanitize(item, max_chars=max_chars) for item in value]
-    if isinstance(value, str) and len(value) > max_chars:
+    if isinstance(value, str) and value.lstrip().startswith(("{", "[")):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, (dict, list)):
+                return json.dumps(_sanitize(parsed, max_chars=max_chars), ensure_ascii=False)
+        except (ValueError, TypeError):
+            pass
+    if isinstance(value, str) and max_chars is not None and len(value) > max_chars:
         return value[:max_chars] + "...[TRUNCATED]"
     return value
+
+
+def wait_for_model_interactions(project_root: Path, **kwargs: Any) -> list[dict[str, Any]]:
+    """Bounded eventual-consistency wait; never claim database logging is lossless.
+
+    Wait at least 10 seconds and three unchanged snapshots after a success.
+    Slow writers may still lag past this one-minute collection window.
+    """
+    previous = None
+    stable = 0
+    for attempt in range(31):
+        rows = fetch_model_interactions(project_root, **kwargs)
+        signature = tuple((r.get("request_id"), r.get("status"), r.get("total_tokens")) for r in rows)
+        stable = stable + 1 if signature == previous else 0
+        previous = signature
+        if attempt >= 5 and stable >= 3 and any(r.get("status") == "success" for r in rows):
+            return rows
+        if attempt < 30:
+            time.sleep(2)
+    return rows
 
 
 def fetch_model_interactions(
@@ -249,7 +276,7 @@ def fetch_model_interactions(
     psycopg, dict_row = _driver()
     start = started_at - timedelta(seconds=config.lookaround_seconds)
     end = finished_at + timedelta(seconds=config.lookaround_seconds)
-    content_columns = ", messages, response" if config.include_content else ""
+    content_columns = ", messages, response, proxy_server_request" if config.include_content else ""
     match_sql = '''(
         metadata->>'user_api_key_alias' = %s
         or metadata->'spend_logs_metadata'->>'user_api_key_alias' = %s
@@ -284,12 +311,14 @@ def search_conversation_interactions(
     user_id: str | None = None,
     session_id: str | None = None,
     limit: int = 500,
+    offset: int = 0,
+    full_content: bool = False,
 ) -> dict[str, Any]:
     """Search LiteLLM request/response content by user or conversation session."""
     user_id = (user_id or "").strip()
     session_id = (session_id or "").strip()
-    if not user_id and not session_id:
-        raise ValueError("Provide user_id or session_id")
+    if offset < 0:
+        raise ValueError("offset must be non-negative")
     config = resolve_database_config(project_root)
     if not config.enabled:
         return {"status": "disabled", "interactions": [], "sessions": []}
@@ -316,17 +345,19 @@ def search_conversation_interactions(
         prompt_tokens, completion_tokens, total_tokens, spend,
         messages, response, proxy_server_request, metadata
         from "LiteLLM_SpendLogs"
-        where {' and '.join(clauses)}
-        order by "startTime" asc
-        limit %s'''
+        where {' and '.join(clauses) or 'true'}
+        order by "startTime" {'asc' if user_id or session_id else 'desc'}, request_id
+        limit %s offset %s'''
     safe_limit = max(1, min(int(limit), config.limit, 1000))
     psycopg, dict_row = _driver()
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
-            cursor.execute(query, (*parameters, safe_limit))
+            cursor.execute(query, (*parameters, safe_limit + 1, offset))
             rows = cursor.fetchall()
+    has_more = len(rows) > safe_limit
+    rows = rows[:safe_limit]
     interactions = [
-        _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=config.max_content_chars)
+        _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=None if full_content else config.max_content_chars)
         for row in rows
     ]
     session_map: dict[str, dict[str, Any]] = {}
@@ -360,7 +391,12 @@ def search_conversation_interactions(
         "count": len(interactions),
         "sessions": sessions,
         "interactions": interactions,
-        "truncated": len(interactions) >= safe_limit,
+        "truncated": has_more,
+        "has_more": has_more,
+        "offset": offset,
+        "next_offset": offset + len(interactions) if has_more else None,
+        "content_truncation_enabled": not full_content,
+        "content_source": "LiteLLM_SpendLogs; absent upstream content cannot be reconstructed",
     }
 
 
@@ -409,6 +445,8 @@ def verify_requested_model(
     def matches(row: dict[str, Any]) -> bool:
         model = str(row.get("model") or "").lower()
         group = str(row.get("model_group") or "").lower()
+        if group:
+            return group in groups
         return (
             group in groups
             or model in groups

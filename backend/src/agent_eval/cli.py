@@ -26,11 +26,13 @@ from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.database import (
     database_health,
     fetch_model_interactions,
+    wait_for_model_interactions,
     summarize_model_interactions,
     verify_requested_model,
 )
 from agent_eval.model_config import (
     describe_model_config,
+    discover_available_models,
     load_litellm_model_catalog,
     refresh_litellm_model_catalog,
     resolve_config_secret,
@@ -125,6 +127,10 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     commands.add_parser("doctor", help="Check the local skill-up and Multica runtime")
+    gateway_check = commands.add_parser("check-litellm", help="Check API authentication and optional real inference")
+    gateway_check.add_argument("--model", help="Also send HI to this model")
+    gateway_check.add_argument("--timeout", type=float, default=30)
+    commands.add_parser("check-database", help="Check PostgreSQL and LiteLLM SpendLogs access")
     agents = commands.add_parser("agents", help="List locally available evaluation Agents")
     agents.add_argument(
         "--all", action="store_true",
@@ -138,9 +144,10 @@ def _parser() -> argparse.ArgumentParser:
         help="Query LiteLLM and update config/litellm-models.json",
     )
     models.add_argument("--prefix", help="Only show model ids beginning with this prefix")
+    models.add_argument("--list", action="store_true", help="Fetch all visible models without paid inference probes")
     models.add_argument(
         "--agent",
-        help="Probe the protocol required by this Agent (Codex uses /v1/responses)",
+        help="Label an Agent-specific upstream text probe; use check-agent for actual Agent/tool verification",
     )
     models.add_argument(
         "--timeout", type=float, default=15.0,
@@ -169,7 +176,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     check.add_argument("--agent", required=True)
     check.add_argument("--profile", help=argparse.SUPPRESS)
-    check.add_argument("--model", required=True, help="LiteLLM model id")
+    check.add_argument("--model", help="LiteLLM model id; defaults to LITELLM_MODEL or gateway default")
     check.add_argument("--agent-executable")
     check.add_argument("--timeout", type=int, default=120)
     check.add_argument(
@@ -282,17 +289,17 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             env[key_name] = trace_key.key
     protocol_probe: dict[str, object] = {"status": "not_required"}
     if profile.api_base and runtime_agent == "codex":
-        endpoint = profile.api_base.rstrip("/") + "/responses"
+        endpoint = profile.api_base.rstrip("/") + "/chat/completions"
         try:
             response = httpx.post(
                 endpoint,
-                headers={"Authorization": f"Bearer {env['LITELLM_API_KEY']}"},
-                json={"model": profile.model, "input": "HI", "stream": False},
+                headers={"Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}"},
+                json={"model": profile.model, "messages": [{"role": "user", "content": "HI"}], "stream": False},
                 timeout=min(float(args.timeout), 45.0),
             )
             protocol_probe = {
                 "status": "available" if response.is_success else "unavailable",
-                "endpoint": "responses",
+                "endpoint": "chat/completions (local Responses adapter)",
                 "status_code": response.status_code,
             }
             if not response.is_success:
@@ -382,16 +389,20 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         for value in profile.agent_args:
             command.extend(["--extra-arg", value])
         resilience_proxy = None
-        if profile.api_base and runtime_agent in {"claude", "codebuddy", "openclaw"}:
+        if profile.api_base and runtime_agent in {"claude", "codex", "codebuddy", "openclaw"}:
             resilience_proxy = CodeBuddyCompatibilityProxy(
                 profile.api_base,
                 timeout=args.timeout,
                 forced_model=profile.gateway_model_for_agent(runtime_agent),
-                strip_tools_after_result=runtime_agent == "codebuddy",
+            strip_tools_after_result=False,
+                translate_protocols=runtime_agent in {"claude", "codex"},
             )
             resilience_proxy.start()
             if runtime_agent == "claude":
                 env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+            elif runtime_agent == "codex":
+                command.extend(["--extra-arg", "-c", "--extra-arg",
+                                f'model_providers.litellm.base_url="{resilience_proxy.openai_base_url}"'])
             elif runtime_agent == "codebuddy":
                 write_codebuddy_profile_config(
                     Path(env["CODEBUDDY_CONFIG_DIR"]) / "models.json",
@@ -437,23 +448,18 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
     if args.database_verify and profile.api_base:
         try:
             rows: list[dict[str, object]] = []
-            for attempt in range(6):
-                rows = fetch_model_interactions(
+            rows = wait_for_model_interactions(
                     PROJECT_ROOT,
                     started_at=started_at,
                     finished_at=finished_at,
                     model=profile.model,
                     key_alias=trace_key.alias if trace_key else None,
                 )
-                if rows or attempt == 5:
-                    break
-                time.sleep(2)
             database_trace = summarize_model_interactions(rows, exact=trace_key is not None)
             model_verification = verify_requested_model(
                 rows,
                 expected_model=profile.model,
                 accepted_model_groups=[
-                    profile.model_for_agent(runtime_agent).removeprefix("custom-local:"),
                     profile.gateway_model_for_agent(runtime_agent),
                 ],
                 exact=trace_key is not None,
@@ -478,6 +484,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
     ok = (
         process.returncode == 0
         and result.get("exit_code") == 0
+        and bool(str(result.get("final_message") or "").strip())
         and marker is None
         and (not args.database_verify or not profile.api_base or model_verification.get("verified") is True)
         and (trace_key is None or trace_key_cleanup["status"] == "deleted")
@@ -488,6 +495,15 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         returncode=int(result.get("exit_code") or process.returncode or 1),
         component="agent_model_connectivity",
     )
+    if not ok and process.returncode == 0 and result.get("exit_code") == 0 and not marker:
+        if args.database_verify and model_verification.get("verified") is not True:
+            failure = {"category": "model_verification_failed", "retryable": True,
+                       "summary": "Agent 已返回，但数据库尚未确认指定模型调用",
+                       "detail": model_verification.get("reason"),
+                       "suggested_action": "检查数据库日志延迟及模型映射后重试；不能把未核验结果当作成功。"}
+        elif trace_key_cleanup.get("status") == "delete_failed":
+            failure = {"category": "trace_key_cleanup_failed", "retryable": True,
+                       "summary": "模型已调用，但本次临时 trace key 清理失败"}
     return {
         "status": "connected" if ok else "failed", "agent": args.agent,
         "model": profile.model, "agent_model": profile.model_for_agent(runtime_agent),
@@ -510,7 +526,7 @@ def _unique_agents(values: list[str], workers: int) -> list[str]:
     return agents
 
 
-def _probe_local_agent(executable: str, *, timeout: float = 8.0) -> dict[str, object]:
+def _probe_local_agent(executable: str, *, timeout: float = 20.0) -> dict[str, object]:
     """Check that a discovered CLI can actually start, not merely exist on PATH."""
     try:
         process = subprocess.run(
@@ -664,6 +680,12 @@ def _evaluation_batch(
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command in {"check-litellm", "check-database"}:
+        from agent_eval.diagnostics import check_database, check_litellm
+        result = (check_database(PROJECT_ROOT) if args.command == "check-database"
+                  else check_litellm(PROJECT_ROOT, model=args.model, timeout=args.timeout))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        raise SystemExit(0 if result["status"] == "ok" else 1)
     if args.command == "agents":
         result = []
         for agent in SUPPORTED_AGENTS:
@@ -702,6 +724,13 @@ def main() -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     if args.command == "models":
+        if args.list:
+            result = discover_available_models(PROJECT_ROOT)
+            result["connectivity_tested"] = False
+            if args.prefix:
+                result["models"] = [m for m in result["models"] if m["id"].startswith(args.prefix)]
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            raise SystemExit(0 if result["litellm_available"] else 1)
         if args.agent and not args.refresh:
             print(json.dumps({
                 "status": "failed",
@@ -733,7 +762,7 @@ def main() -> None:
             result = dict(result)
             result.pop("unavailable_models", None)
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return
+        raise SystemExit(0 if result.get("status") != "failed" else 1)
     if args.command == "skills":
         print(
             json.dumps(

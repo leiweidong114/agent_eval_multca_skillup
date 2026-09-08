@@ -1,0 +1,299 @@
+[
+  {
+    "model": "opencode-go/deepseek-v4-flash",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 403,
+    "duration_seconds": 5.859,
+    "error": "{\"error\":{\"message\":\"litellm.APIError: APIError: OpenAIException - The latest version of this model is only available hosted in China and requires explicit opt in: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/deepseek-v4-flash\\nAvailable Model Group Fallbacks=None\",\"type\":null,\"param\":null,\"code\":\"403\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/deepseek-v4-flash-vision-exp",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.765,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/deepseek-v4-flash-vision-exp\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/deepseek-v4-pro",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 403,
+    "duration_seconds": 6.187,
+    "error": "{\"error\":{\"message\":\"litellm.APIError: APIError: OpenAIException - The latest version of this model is only available hosted in China and requires explicit opt in: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/deepseek-v4-pro\\nAvailable Model Group Fallbacks=None\",\"type\":null,\"param\":null,\"code\":\"403\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/glm-5",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.906,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/glm-5\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/glm-5.1",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.938,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/glm-5.1\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/glm-5.2",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.062,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/glm-5.2\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/glm-5.3",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.172,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/glm-5.3\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/glm-5.3-flash",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.844,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/glm-5.3-flash\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/gpt-5.6-luna",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.093,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - {\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"type\\\":\\\"GoUsageLimitError\\\",\\\"message\\\":\\\"Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go\\\"},\\\"metadata\\\":{\\\"workspace\\\":\\\"wrk_01M1DK6R91D6CARKBJRAPV07RY\\\",\\\"limitName\\\":\\\"weekly\\\"}}. Received Model Group=opencode-go/gpt-5.6-luna\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/grok-4.5",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.766,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - {\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"type\\\":\\\"GoUsageLimitError\\\",\\\"message\\\":\\\"Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go\\\"},\\\"metadata\\\":{\\\"workspace\\\":\\\"wrk_01M1DK6R91D6CARKBJRAPV07RY\\\",\\\"limitName\\\":\\\"weekly\\\"}}. Received Model Group=opencode-go/grok-4.5\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/grok-4.6",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.031,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - {\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"type\\\":\\\"GoUsageLimitError\\\",\\\"message\\\":\\\"Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go\\\"},\\\"metadata\\\":{\\\"workspace\\\":\\\"wrk_01M1DK6R91D6CARKBJRAPV07RY\\\",\\\"limitName\\\":\\\"weekly\\\"}}. Received Model Group=opencode-go/grok-4.6\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/hy3",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.656,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/hy3\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/hy3-preview",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.906,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/hy3-preview\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/hy4-preview",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.391,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/hy4-preview\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/kimi-k2.5",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.891,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/kimi-k2.5\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/kimi-k2.6",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.578,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/kimi-k2.6\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/kimi-k2.7-code",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.125,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/kimi-k2.7-code\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/kimi-k3",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.688,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/kimi-k3\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/longcat-2.0",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.375,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/longcat-2.0\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/mimo-v2-omni",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.75,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/mimo-v2-omni\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/mimo-v2-pro",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.797,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/mimo-v2-pro\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/mimo-v2.5",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.203,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/mimo-v2.5\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/mimo-v2.5-pro",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.078,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/mimo-v2.5-pro\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/minimax-m2.5",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.171,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: AnthropicException - {\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"type\\\":\\\"GoUsageLimitError\\\",\\\"message\\\":\\\"Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go\\\"},\\\"metadata\\\":{\\\"workspace\\\":\\\"wrk_01M1DK6R91D6CARKBJRAPV07RY\\\",\\\"limitName\\\":\\\"weekly\\\"}}. Received Model Group=opencode-go/minimax-m2.5\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/minimax-m2.7",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.625,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: AnthropicException - {\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"type\\\":\\\"GoUsageLimitError\\\",\\\"message\\\":\\\"Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go\\\"},\\\"metadata\\\":{\\\"workspace\\\":\\\"wrk_01M1DK6R91D6CARKBJRAPV07RY\\\",\\\"limitName\\\":\\\"weekly\\\"}}. Received Model Group=opencode-go/minimax-m2.7\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/minimax-m3",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 7.234,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: AnthropicException - {\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"type\\\":\\\"GoUsageLimitError\\\",\\\"message\\\":\\\"Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go\\\"},\\\"metadata\\\":{\\\"workspace\\\":\\\"wrk_01M1DK6R91D6CARKBJRAPV07RY\\\",\\\"limitName\\\":\\\"weekly\\\"}}. Received Model Group=opencode-go/minimax-m3\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/muse-spark-1.2-contributor",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 403,
+    "duration_seconds": 5.937,
+    "error": "{\"error\":{\"message\":\"litellm.APIError: APIError: OpenAIException - {\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"type\\\":\\\"RegionError\\\",\\\"message\\\":\\\"This model is not available in your country.\\\"}}. Received Model Group=opencode-go/muse-spark-1.2-contributor\\nAvailable Model Group Fallbacks=None\",\"type\":null,\"param\":null,\"code\":\"403\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/qwen3.5-plus",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.344,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/qwen3.5-plus\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/qwen3.6-plus",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.516,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/qwen3.6-plus\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/qwen3.7-max",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.969,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/qwen3.7-max\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/qwen3.7-plus",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 6.578,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/qwen3.7-plus\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/qwen3.8-flash",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.75,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: AnthropicException - {\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"type\\\":\\\"GoUsageLimitError\\\",\\\"message\\\":\\\"Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go\\\"},\\\"metadata\\\":{\\\"workspace\\\":\\\"wrk_01M1DK6R91D6CARKBJRAPV07RY\\\",\\\"limitName\\\":\\\"weekly\\\"}}. Received Model Group=opencode-go/qwen3.8-flash\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  },
+  {
+    "model": "opencode-go/qwen3.8-max",
+    "prompt": "HI",
+    "passed": false,
+    "http_status": 429,
+    "duration_seconds": 5.844,
+    "error": "{\"error\":{\"message\":\"litellm.RateLimitError: RateLimitError: OpenAIException - Weekly usage limit reached. Resets in 3 days. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_01M1DK6R91D6CARKBJRAPV07RY/go. Received Model Group=opencode-go/qwen3.8-max\\nAvailable Model Group Fallbacks=None\",\"type\":\"throttling_error\",\"param\":null,\"code\":\"429\"}}",
+    "response_excerpt": null
+  }
+]

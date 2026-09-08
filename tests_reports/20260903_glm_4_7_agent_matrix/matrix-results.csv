@@ -1,0 +1,19 @@
+﻿agent,requested_model,attempt,passed,status,agent_model,runtime_exit_code,agent_exit_code,db_status,db_calls,db_successes,db_models,model_verified,verification_reason,trace_key_alias,trace_key_cleanup,duration_seconds,error
+claude,glm-4.7,1,True,connected,claude-sonnet-4-6,0,0,matched,1,1,anthropic/glm-4.7,True,,agent-eval-connectivity-b1d25f05a89d41b5a9f225d6c5d6591a,deleted,18.842,
+claude,glm-4.7,2,False,failed,claude-sonnet-4-6,0,1,matched,1,1,anthropic/glm-4.7,True,,agent-eval-connectivity-1e351b1e1cfe4a06803cdee584b4f80d,deleted,17.911,claude returned an error result without details
+claude,glm-4.7,3,True,connected,claude-sonnet-4-6,0,0,matched,2,2,anthropic/glm-4.7,True,,agent-eval-connectivity-bde14e00416c48b6b0edb3a939ec85b4,deleted,14.34,
+codebuddy,glm-4.7,1,True,connected,custom-local:glm-4.7,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-224cd2c078594542acda5fdf3d9514a2,deleted,17.822,
+codebuddy,glm-4.7,2,True,connected,custom-local:glm-4.7,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-7196861b718045cb8678270497c28434,deleted,17.325,
+codebuddy,glm-4.7,3,True,connected,custom-local:glm-4.7,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-f840af57af2f4838ac9ae61143b2eb91,deleted,21.279,
+codex,glm-4.7,1,True,connected,glm-4.7,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-faeffdd19b37429db711cab1960b9348,deleted,30.057,
+codex,glm-4.7,2,False,failed,glm-4.7,0,1,matched,4,4,openai/glm-4.7,True,,agent-eval-connectivity-276ec860d47b420fb4c51ae6327ceb85,deleted,121.106,codex timed out after 2m0s
+codex,glm-4.7,3,True,connected,glm-4.7,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-7ddeb4f9a59d4b3c875241fca7b2772d,deleted,11.007,
+justdo,glm-4.7,1,False,failed,main,0,1,no_match,0,0,,False,no_database_interactions,agent-eval-connectivity-11dd8696a560446fbbe252431fabb58c,deleted,14.762,openclaw --version failed: exit status 69
+justdo,glm-4.7,2,False,failed,main,0,1,no_match,0,0,,False,no_database_interactions,agent-eval-connectivity-d9cb8498b76a45b78050c897d808bce3,deleted,12.951,openclaw --version failed: exit status 69
+justdo,glm-4.7,3,False,failed,main,0,1,no_match,0,0,,False,no_database_interactions,agent-eval-connectivity-155c93a28b784d2b947e6ec15b684e82,deleted,13.062,openclaw --version failed: exit status 69
+openclaw,glm-4.7,1,True,connected,main,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-06d4648659164ff8b8ebf7c8d487f1d2,deleted,88.516,
+openclaw,glm-4.7,2,True,connected,main,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-c2cda38023b5419383e296643a5e12d6,deleted,65.828,
+openclaw,glm-4.7,3,True,connected,main,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-0d421572280e4132ba8cb6695274279e,deleted,50.076,
+opencode,glm-4.7,1,True,connected,litellm/glm-4.7-no-thinking,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-2a46d916054d4575906dc7250d0cdb75,deleted,54.775,
+opencode,glm-4.7,2,True,connected,litellm/glm-4.7-no-thinking,0,0,matched,2,2,openai/glm-4.7,True,,agent-eval-connectivity-cd3fb7d16a96407caab24119e29ab396,deleted,17.538,
+opencode,glm-4.7,3,True,connected,litellm/glm-4.7-no-thinking,0,0,matched,1,1,openai/glm-4.7,True,,agent-eval-connectivity-53e9024c43854e9e95a9b3c7b8bb402e,deleted,10.792,

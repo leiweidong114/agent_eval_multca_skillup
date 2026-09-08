@@ -1,0 +1,11 @@
+[
+  {
+    "model": "glm-4.7",
+    "prompt": "HI",
+    "passed": true,
+    "http_status": 200,
+    "duration_seconds": 7.047,
+    "error": null,
+    "response_excerpt": "{\"id\":\"20260903114600557edeedfb964e6e\",\"created\":1788407167,\"model\":\"glm-4.7\",\"object\":\"chat.completion\",\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello! I'm the GLM language model trained by Z.ai. How can I assist you today? Whether you have questions, need information, or just want to chat, I'm here to help. What would you like to discuss?\",\"role\":\"assistant\",\"reasoning_content\":\"\\nLet me analyze this greeting and consider how to respond appropriately.\\n\\nLooking at th"
+  }
+]

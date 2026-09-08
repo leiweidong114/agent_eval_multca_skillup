@@ -9,6 +9,7 @@ from collections import Counter
 from email.utils import parsedate_to_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
+from agent_eval.protocol_adapter import to_chat, from_chat
 
 
 RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
@@ -88,7 +89,8 @@ class CodeBuddyCompatibilityProxy:
         max_attempts: int = 4,
         backoff_seconds: float = 0.5,
         forced_model: str | None = None,
-        strip_tools_after_result: bool = True,
+        strip_tools_after_result: bool = False,
+        translate_protocols: bool = False,
     ) -> None:
         self.upstream_url = upstream_url.rstrip("/")
         self.timeout = timeout
@@ -96,6 +98,7 @@ class CodeBuddyCompatibilityProxy:
         self.backoff_seconds = max(0.0, backoff_seconds)
         self.forced_model = forced_model
         self.strip_tools_after_result = strip_tools_after_result
+        self.translate_protocols = translate_protocols
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -164,8 +167,13 @@ class CodeBuddyCompatibilityProxy:
                 length = int(self.headers.get("Content-Length") or "0")
                 body = self.rfile.read(length)
                 client_model: str | None = None
+                protocol = urlsplit(self.path).path.rsplit("/", 1)[-1]
+                translate = owner.translate_protocols and protocol in {"responses", "messages"}
+                stream = False
                 try:
                     payload = json.loads(body)
+                    original_payload = payload.copy()
+                    stream = bool(payload.get("stream"))
                     if owner.forced_model and isinstance(payload, dict) and "model" in payload:
                         client_model = str(payload["model"])
                         payload["model"] = owner.forced_model
@@ -177,7 +185,12 @@ class CodeBuddyCompatibilityProxy:
                     ):
                         payload.pop("tools", None)
                         payload.pop("tool_choice", None)
+                    if translate:
+                        payload = to_chat(payload, protocol)
                     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                except ValueError as exc:
+                    self.send_error(422, str(exc))
+                    return
                 except (json.JSONDecodeError, AttributeError, TypeError):
                     pass
 
@@ -189,12 +202,16 @@ class CodeBuddyCompatibilityProxy:
                     upstream_path = upstream.path.rstrip("/") + "/" + relative.lstrip("/")
                 if incoming_path.query:
                     upstream_path += f"?{incoming_path.query}"
+                if translate:
+                    upstream_path = upstream.path.rstrip("/") + "/chat/completions"
                 headers = {
                     key: value for key, value in self.headers.items()
                     if key.lower() not in HOP_BY_HOP_HEADERS
                 }
                 headers["Content-Length"] = str(len(body))
                 headers["Accept-Encoding"] = "identity"
+                if translate and not any(k.lower() == "authorization" for k in headers) and self.headers.get("x-api-key"):
+                    headers["Authorization"] = "Bearer " + self.headers["x-api-key"]
                 headers.setdefault("Idempotency-Key", f"agent-eval-{uuid.uuid4().hex}")
 
                 last_error: Exception | None = None
@@ -209,6 +226,14 @@ class CodeBuddyCompatibilityProxy:
                         response = connection.getresponse()
                         response_body = response.read()
                         response_headers = list(response.getheaders())
+                        if translate and response.status < 300:
+                            try:
+                                response_body, content_type = from_chat(json.loads(response_body), protocol, client_model or owner.forced_model, stream, original_payload)
+                            except (ValueError, KeyError, IndexError, TypeError) as exc:
+                                self.send_error(502, f"Invalid upstream inference response: {type(exc).__name__}")
+                                return
+                            response_headers = [(k, v) for k, v in response_headers if k.lower() != "content-type"]
+                            response_headers.append(("Content-Type", content_type))
                         if owner.forced_model and client_model and client_model != owner.forced_model:
                             response_body = _restore_client_model(
                                 response_body,

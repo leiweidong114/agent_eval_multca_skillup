@@ -1,0 +1,143 @@
+{
+  "manifest": {
+    "schema_version": 1,
+    "created_at": "2026-09-03T03:36:48.830075+00:00",
+    "git_commit": "fac355003c78547ccbbcdef223743fd6e384e7b9",
+    "profile": "litellm_opencode_go",
+    "prompt": "HI",
+    "model_prefix": "opencode-go/",
+    "agents": [
+      "claude",
+      "codebuddy"
+    ],
+    "catalog_models": [
+      "opencode-go/minimax-m2.7"
+    ],
+    "catalog_model_count": 1,
+    "models": [
+      "opencode-go/minimax-m2.7"
+    ],
+    "operational_model_count": 1,
+    "preflight_enabled": false,
+    "adapter_resolution_passed": 2,
+    "adapter_resolution_total": 2,
+    "repeats": 1,
+    "workers": 2,
+    "timeout_seconds": 45,
+    "catalog_errors": [],
+    "agent_executables": {
+      "claude": "claude",
+      "codebuddy": "codebuddy"
+    }
+  },
+  "results": [
+    {
+      "agent": "claude",
+      "requested_model": "opencode-go/minimax-m2.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:36:48.877803+00:00",
+      "finished_at": "2026-09-03T03:37:34.669297+00:00",
+      "duration_seconds": 45.791,
+      "status": "failed",
+      "agent_model": "claude-sonnet-4-6",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 1,
+      "response": "",
+      "error_type": null,
+      "error": "claude timed out after 45s",
+      "database_trace": {
+        "status": "matched",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 4,
+        "successful_model_calls": 0,
+        "model_call_success_rate": 0.0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": 0,
+        "models": [
+          "opencode-go/minimax-m2.7"
+        ],
+        "spend": 0.0,
+        "average_request_duration_ms": 0.0
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "opencode-go/minimax-m2.7",
+        "accepted_model_groups": [
+          "claude-sonnet-4-6",
+          "opencode-go/minimax-m2.7"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_successful_model_call",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-7d99e772147d4cf092ae1cde906ad378",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-7d99e772147d4cf092ae1cde906ad378"
+      }
+    },
+    {
+      "agent": "codebuddy",
+      "requested_model": "opencode-go/minimax-m2.7",
+      "attempt": 1,
+      "prompt": "HI",
+      "passed": false,
+      "started_at": "2026-09-03T03:36:48.877803+00:00",
+      "finished_at": "2026-09-03T03:37:35.501067+00:00",
+      "duration_seconds": 46.623,
+      "status": "failed",
+      "agent_model": "custom-local:MiniMax-M2.7",
+      "runtime_exit_code": 0,
+      "agent_exit_code": 1,
+      "response": "",
+      "error_type": null,
+      "error": "codebuddy timed out after 45s",
+      "database_trace": {
+        "status": "matched",
+        "correlation": "run_scoped_virtual_key",
+        "model_call_count": 4,
+        "successful_model_calls": 0,
+        "model_call_success_rate": 0.0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "max_prompt_tokens": 0,
+        "models": [
+          "anthropic/minimax-m2.7"
+        ],
+        "spend": 0.0,
+        "average_request_duration_ms": 0.0
+      },
+      "model_verification": {
+        "status": "unverified",
+        "verified": false,
+        "model_matched": false,
+        "agent_attribution": "exact_run_key",
+        "exact_agent_attribution": true,
+        "expected_model": "opencode-go/minimax-m2.7",
+        "accepted_model_groups": [
+          "minimax-m2.7",
+          "opencode-go/minimax-m2.7"
+        ],
+        "successful_matching_calls": 0,
+        "mismatches": [],
+        "reason": "no_successful_model_call",
+        "warning": null
+      },
+      "trace_key_alias": "agent-eval-connectivity-a5f57eabfcdf4450a5b79101839803e7",
+      "trace_key_cleanup": {
+        "status": "deleted",
+        "alias": "agent-eval-connectivity-a5f57eabfcdf4450a5b79101839803e7"
+      }
+    }
+  ]
+}

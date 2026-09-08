@@ -524,6 +524,9 @@ agent-eval doctor
 
 ## 15. 推荐工作顺序
 
+2026-09-07 更新：当前已实测的默认 Agent/Judge 模型是 `glm-4.5-air`，
+历史示例中的 `glm-4.7` 仍可作为模型 ID 配置，但当日上游额度不足时不能推理。
+
 ```text
 agent-eval doctor
   → agent-eval models --refresh
@@ -533,3 +536,76 @@ agent-eval doctor
   → agent-eval run-multi 或 pipeline-eval
   → agent-eval results
 ```
+
+## 16. 根目录 .env、连接诊断与自动启动 JustDo
+
+统一代码路径：`D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup`。
+根目录 `.env.example` 是不含真实凭据的模板，`.env` 已被 Git 忽略。
+已有 `.env` 时请编辑原文件，不要用模板覆盖。配置示例：
+
+```dotenv
+LITELLM_API_BASE=http://your-litellm:4000/v1
+LITELLM_API_KEY=your-inference-key
+LITELLM_MASTER_KEY=your-existing-key-with-key-management-permission
+LITELLM_MODEL=glm-4.5-air
+LITELLM_JUDGE_MODEL=glm-4.5-air
+LITELLM_USERNAME=admin
+LITELLM_PASSWORD=your-dashboard-password
+DATABASE_URL=postgresql://reader:password@your-database:5432/litellm
+```
+
+配置优先级：当前进程环境变量 > 根目录 `.env` > `backend/.env` >
+旧 `backend/config/litellm.env` / `secrets.env` > `local.yaml`。
+显式 `--model` 覆盖默认模型。数据库 URL 中的特殊字符需要 URL 编码。
+LiteLLM 控制台账号密码、推理 API Key、数据库账号密码是三套不同用途的凭据：
+`check-litellm` 使用 API Key，不把控制台密码当作推理 Key，不测试网页登录。
+临时 trace key 使用你原有的 Master Key 权限创建，未修改服务器鉴权。
+
+```powershell
+cd "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup"
+agent-eval check-litellm                         # /models 访问检查，不消耗推理 token
+agent-eval check-litellm --model glm-4.5-air      # 再发送 HI，验证真实推理
+agent-eval check-database                       # PostgreSQL 连接及 SpendLogs 读取
+agent-eval models --list                        # 最新可见模型；可见不等于可用
+agent-eval models --refresh --timeout 30 --workers 3  # 对全部可见模型发 HI，缓存成功模型
+agent-eval models --refresh --show-unavailable   # 同时输出失败模型及原因
+agent-eval models                              # 查看上次连通性探测缓存
+agent-eval agents                              # 只列出可执行且版本探测成功的 Agent
+agent-eval check-agent --agent justdo            # 自动启动 JustDo CLI，使用默认模型/提示词
+agent-eval check-agent --agent justdo --model glm-4.5-air --prompt "你是谁" --database-verify
+```
+
+`models --refresh` 会消耗真实推理额度。“可用”只表示本次文本 HI 成功；
+不是所有模型、工具、多模态和全部 Agent 的永久兼容认证。
+数据库日志异步写入：严格核验等待记录稳定，最长约 60 秒，因此有回答后命令可能还需等待。
+trace key 与本次运行绑定；查询到其他 Agent 或探针的调用不能作为本 Agent 调用成功的证据。
+
+新的 LiteLLM 模型可直接 `--model "LiteLLM返回的完整模型ID"`，不必新增 Profile。
+统一适配层将 Claude Messages、Codex Responses 的文本/函数工具请求转换为 Chat Completions；
+不支持的输入形态会明确报错，不能把视觉、嵌入、服务端搜索能力自动变成文本模型能力。
+Codex 的内置 hosted web_search 在该转换模式中关闭，本地文件/命令工具仍可用。
+转换模式目前缓冲上游完整响应后输出 SSE，首字延迟不等于原生流式响应。
+推理未被关闭；模型自身是否支持/返回 reasoning 字段取决于部署，不能仅看模型名称断言。
+
+## 17. 可重复的系统验收
+
+```powershell
+python test/verify_system.py --phase connectivity --model glm-4.5-air --workers 2 --timeout 180
+python test/verify_system.py --phase evaluation --model glm-4.5-air --workers 2 --timeout 240
+python -m pytest backend/tests -q
+```
+
+前两条命令会调用真实模型，默认覆盖当前检测到的六个 Agent；可以重复 `--agent` 缩小范围。
+测试文件保存在 `test/`，原始运行证据保存在 `.runtime/verification/`，正式评测报告在
+`backend/evaluation_results/`，可在网页“评测结果”中查看。
+完整验收额外检查工具调用、落盘 marker 文件、有 Skill=100 / 无 Skill=0、精确模型核验和 LLM Judge。
+只有回答正确而文件未落盘，不算通过这套验收。测试不触发 subagent，也不代表四个原理图 Skill 已验收。
+
+原理图总览默认显示最近交互，支持用户/会话过滤、加载更多、展开完整原始请求和响应；
+保留数据库已记录的正文并隐藏凭据字段。上游没记录的内容、被上游截断的内容无法补回。
+这里只适用于原有受信任本机服务，不新增公网权限；若部署多人环境，需要另行确认访问控制方案。
+
+JustDo 迁移：复制源码后，在目标 Windows 上准备 Node 24、npm 依赖、Electron 原生模块和
+OpenClaw runtime，再运行 `npm run multica:build-agent` 重新生成 launcher。
+不要只复制 `%APPDATA%\JustDo\multica\development\JustDo-agent.exe`。
+详细说明见相邻 JustDo 项目的 `docs/features/multica-headless-cli.md`。

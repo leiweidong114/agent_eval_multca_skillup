@@ -28,7 +28,7 @@ def test_proxy_strips_tools_only_after_a_tool_result():
     thread.start()
     host, port = upstream.server_address[:2]
     try:
-        with CodeBuddyCompatibilityProxy(f"http://{host}:{port}/v1/chat/completions") as proxy:
+        with CodeBuddyCompatibilityProxy(f"http://{host}:{port}/v1/chat/completions", strip_tools_after_result=True) as proxy:
             payload = {
                 "model": "opencode-go/minimax-m2.7",
                 "messages": [{"role": "tool", "tool_call_id": "call_1", "content": "ok"}],

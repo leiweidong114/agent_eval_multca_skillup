@@ -21,6 +21,7 @@ from agent_eval.codebuddy_proxy import CodeBuddyCompatibilityProxy
 from agent_eval.database import (
     database_health,
     fetch_model_interactions,
+    wait_for_model_interactions,
     summarize_model_interactions,
     verify_requested_model,
 )
@@ -39,6 +40,7 @@ from agent_eval.llm_judge import run_llm_judge
 from agent_eval.scoring import (
     calculate_rule_dimensions,
     collect_process_metrics,
+    supplement_database_tool_metrics,
     combine_dimensions,
     load_scoring_config,
 )
@@ -96,6 +98,11 @@ def _retryable_infrastructure_message(value: str) -> bool:
 
 def classify_evaluation_failure(text: str, returncode: int) -> dict[str, Any] | None:
     return describe_evaluation_failure(text, returncode=returncode)
+
+
+def cases_completed(results: list[dict[str, Any]]) -> bool:
+    cases = [case for result in results for case in result.get("case_results", [])]
+    return bool(cases) and all(case.get("status") in {"PASS", "FAIL"} for case in cases)
 
 
 def _execute_process(
@@ -566,12 +573,13 @@ def run_evaluation(
     progress("running", 25, "Agent evaluation is running")
     resilience_proxy = None
     gateway_resilience: dict[str, Any] = {"status": "not_used"}
-    if resolved_profile.api_base and agent in {"claude", "codebuddy", "openclaw"}:
+    if resolved_profile.api_base and agent in {"claude", "codex", "codebuddy", "openclaw"}:
         resilience_proxy = CodeBuddyCompatibilityProxy(
             resolved_profile.api_base,
             timeout=timeout_seconds,
             forced_model=gateway_model,
-            strip_tools_after_result=agent == "codebuddy",
+            strip_tools_after_result=False,
+            translate_protocols=agent in {"claude", "codex"},
         )
         try:
             resilience_proxy.start()
@@ -584,6 +592,12 @@ def run_evaluation(
         gateway_resilience = {"status": "active"}
         if agent == "claude":
             env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+        elif agent == "codex":
+            eval_config["engine"]["custom"]["local"]["args"].extend([
+                "--extra-arg", "-c", "--extra-arg",
+                f'model_providers.litellm.base_url="{resilience_proxy.openai_base_url}"',
+            ])
+            eval_path.write_text(yaml.safe_dump(eval_config, allow_unicode=True, sort_keys=False), encoding="utf-8")
         elif agent == "codebuddy":
             codebuddy_config = Path(env["CODEBUDDY_CONFIG_DIR"])
             write_codebuddy_profile_config(
@@ -628,6 +642,7 @@ def run_evaluation(
     scores = aggregate_scores(results)
     scores["skill_quality_score"] = skill_quality["score"]
     database_trace: dict[str, Any] = {"status": "disabled"}
+    interactions: list[dict[str, Any]] = []
     model_verification: dict[str, Any] = {
         "status": "not_requested", "verified": None, "expected_model": provider_model
     }
@@ -639,24 +654,18 @@ def run_evaluation(
             # LiteLLM writes SpendLogs asynchronously. Slower providers and a
             # remote PostgreSQL instance can lag several seconds behind a
             # successfully completed Agent process.
-            for attempt in range(8):
-                interactions = fetch_model_interactions(
+            interactions = wait_for_model_interactions(
                     project_root,
                     started_at=evaluation_started_at,
                     finished_at=evaluation_finished_at,
                     model=provider_model,
                     key_alias=trace_key.alias if trace_key else None,
                 )
-                if interactions or attempt == 7:
-                    break
-                time.sleep(2)
             database_trace = summarize_model_interactions(interactions, exact=trace_key is not None)
+            database_trace["collection_policy"] = "bounded_60s_wait_for_stable_rows_not_lossless_guarantee"
             if trace_key_error:
                 database_trace["exact_correlation_error"] = trace_key_error
-            agent_model = resolved_profile.model_for_agent(agent)
-            accepted_groups = [
-                agent_model.removeprefix("custom-local:"), gateway_model
-            ]
+            accepted_groups = [gateway_model]
             model_verification = verify_requested_model(
                 interactions,
                 expected_model=provider_model,
@@ -693,7 +702,12 @@ def run_evaluation(
         )
     )
     failure = classify_evaluation_failure(combined_failure_text, completed.returncode)
-    evaluation_status = "failed" if completed.returncode or verification_failed else "completed"
+    # Skill-Up exits nonzero for assertion FAIL too. A scored negative control
+    # is valid evidence, unlike an ERROR/TIMEOUT or a missing result.
+    cases_executed = cases_completed(results)
+    evaluation_status = "completed" if cases_executed and not verification_failed else "failed"
+    if evaluation_status == "completed":
+        failure = None
     if verification_failed and failure is None:
         failure = {
             "category": "model_verification_failed",
@@ -717,6 +731,7 @@ def run_evaluation(
 
     progress("scoring", 92, "Calculating rule and LLM evaluation scores")
     process_metrics = collect_process_metrics(results, database_trace)
+    supplement_database_tool_metrics(process_metrics, interactions)
     process_metrics["total_duration_ms"] = scores.get("total_duration_ms", 0)
     scoring_config = load_scoring_config(project_root)
     rule_dimensions = calculate_rule_dimensions(
@@ -759,8 +774,9 @@ def run_evaluation(
         llm_judge=llm_judge,
         config=scoring_config,
     )
-    scoring["valid_for_ranking"] = evaluation_status == "completed"
-    scoring["diagnostic_only"] = evaluation_status != "completed"
+    scoring["status"] = "completed" if not run_llm_judge_enabled or llm_judge.get("status") == "completed" else "partial"
+    scoring["valid_for_ranking"] = evaluation_status == "completed" and scoring["status"] == "completed"
+    scoring["diagnostic_only"] = not scoring["valid_for_ranking"]
     scores["overall_score"] = scoring["overall_score"]
     scores["result_dimension_score"] = scoring["dimensions"]["result"]["score"]
     scores["process_dimension_score"] = scoring["dimensions"]["process"]["score"]
@@ -769,7 +785,7 @@ def run_evaluation(
         agent=agent,
         requested_model=model,
         process_metrics=process_metrics,
-        skill_up_exit_code=completed.returncode,
+        skill_up_exit_code=0 if cases_executed else completed.returncode or 1,
     )
     summary = {
         "run_id": operation_id,

@@ -1,0 +1,1528 @@
+{
+  "count": 17,
+  "devices": [
+    {
+      "library_id": "Device:C",
+      "name": "C",
+      "category": "passive",
+      "subtype": "capacitor",
+      "pin_count": 2,
+      "width": 20,
+      "height": 30,
+      "description": "Unpolarized capacitor",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "direction": "D",
+          "electrical_type": "passive"
+        }
+      ]
+    },
+    {
+      "library_id": "Device:D",
+      "name": "D",
+      "category": "discrete",
+      "subtype": "diode",
+      "pin_count": 2,
+      "width": 30,
+      "height": 20,
+      "description": "Diode",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "K",
+          "direction": "L",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "2",
+          "name": "A",
+          "direction": "R",
+          "electrical_type": "passive"
+        }
+      ]
+    },
+    {
+      "library_id": "Device:D_Zener",
+      "name": "D_Zener",
+      "category": "protection",
+      "subtype": "zener",
+      "pin_count": 2,
+      "width": 30,
+      "height": 20,
+      "description": "Zener diode",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "K",
+          "direction": "L",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "2",
+          "name": "A",
+          "direction": "R",
+          "electrical_type": "passive"
+        }
+      ]
+    },
+    {
+      "library_id": "Device:Fuse",
+      "name": "Fuse",
+      "category": "protection",
+      "subtype": "fuse",
+      "pin_count": 2,
+      "width": 20,
+      "height": 30,
+      "description": "Fuse",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "direction": "D",
+          "electrical_type": "passive"
+        }
+      ]
+    },
+    {
+      "library_id": "Device:L",
+      "name": "L",
+      "category": "passive",
+      "subtype": "inductor",
+      "pin_count": 2,
+      "width": 20,
+      "height": 30,
+      "description": "Inductor",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "direction": "D",
+          "electrical_type": "passive"
+        }
+      ]
+    },
+    {
+      "library_id": "Device:LED",
+      "name": "LED",
+      "category": "discrete",
+      "subtype": "led",
+      "pin_count": 2,
+      "width": 30,
+      "height": 20,
+      "description": "Light emitting diode",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "K",
+          "direction": "L",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "2",
+          "name": "A",
+          "direction": "R",
+          "electrical_type": "passive"
+        }
+      ]
+    },
+    {
+      "library_id": "Device:R",
+      "name": "R",
+      "category": "passive",
+      "subtype": "resistor",
+      "pin_count": 2,
+      "width": 20,
+      "height": 30,
+      "description": "Resistor",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "direction": "D",
+          "electrical_type": "passive"
+        }
+      ]
+    },
+    {
+      "library_id": "Device:Varistor",
+      "name": "Varistor",
+      "category": "protection",
+      "subtype": "varistor",
+      "pin_count": 2,
+      "width": 20,
+      "height": 30,
+      "description": "Voltage dependent resistor",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "direction": "D",
+          "electrical_type": "passive"
+        }
+      ]
+    },
+    {
+      "library_id": "MCU_Microchip_ATmega:ATmega328P-A",
+      "name": "ATmega328P-A",
+      "category": "soc",
+      "subtype": "mcu",
+      "pin_count": 32,
+      "width": 900,
+      "height": 900,
+      "description": "20MHz, 32kB Flash, 2kB SRAM, 1kB EEPROM, TQFP-32",
+      "is_main_candidate": true,
+      "pins": [
+        {
+          "number": "1",
+          "name": "PD3",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "2",
+          "name": "PD4",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "3",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "4",
+          "name": "VCC",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "5",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "6",
+          "name": "VCC",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "7",
+          "name": "XTAL1/PB6",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "8",
+          "name": "XTAL2/PB7",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "9",
+          "name": "PD5",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "10",
+          "name": "PD6",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "11",
+          "name": "PD7",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "12",
+          "name": "PB0",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "13",
+          "name": "PB1",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "14",
+          "name": "PB2",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "15",
+          "name": "PB3",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "16",
+          "name": "PB4",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "17",
+          "name": "PB5",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "18",
+          "name": "AVCC",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "19",
+          "name": "ADC6",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "20",
+          "name": "AREF",
+          "direction": "L",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "21",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "22",
+          "name": "ADC7",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "23",
+          "name": "PC0",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "24",
+          "name": "PC1",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "25",
+          "name": "PC2",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "26",
+          "name": "PC3",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "27",
+          "name": "PC4",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "28",
+          "name": "PC5",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "29",
+          "name": "~{RESET}/PC6",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "30",
+          "name": "PD0",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "31",
+          "name": "PD1",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "32",
+          "name": "PD2",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        }
+      ]
+    },
+    {
+      "library_id": "MCU_RaspberryPi:RP2040",
+      "name": "RP2040",
+      "category": "soc",
+      "subtype": "mcu",
+      "pin_count": 57,
+      "width": 1080,
+      "height": 1080,
+      "description": "A microcontroller by Raspberry Pi, Dual ARM Cortex-M0+, 133MHz, no flash, 264KB SRAM, 8 PIO state machines, VQFN-56",
+      "is_main_candidate": true,
+      "pins": [
+        {
+          "number": "1",
+          "name": "IOVDD",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "2",
+          "name": "GPIO0",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "3",
+          "name": "GPIO1",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "4",
+          "name": "GPIO2",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "5",
+          "name": "GPIO3",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "6",
+          "name": "GPIO4",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "7",
+          "name": "GPIO5",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "8",
+          "name": "GPIO6",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "9",
+          "name": "GPIO7",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "10",
+          "name": "IOVDD",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "11",
+          "name": "GPIO8",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "12",
+          "name": "GPIO9",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "13",
+          "name": "GPIO10",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "14",
+          "name": "GPIO11",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "15",
+          "name": "GPIO12",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "16",
+          "name": "GPIO13",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "17",
+          "name": "GPIO14",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "18",
+          "name": "GPIO15",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "19",
+          "name": "TESTEN",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "20",
+          "name": "XIN",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "21",
+          "name": "XOUT",
+          "direction": "L",
+          "electrical_type": "output"
+        },
+        {
+          "number": "22",
+          "name": "IOVDD",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "23",
+          "name": "DVDD",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "24",
+          "name": "SWCLK",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "25",
+          "name": "SWDIO",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "26",
+          "name": "RUN",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "27",
+          "name": "GPIO16",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "28",
+          "name": "GPIO17",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "29",
+          "name": "GPIO18",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "30",
+          "name": "GPIO19",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "31",
+          "name": "GPIO20",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "32",
+          "name": "GPIO21",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "33",
+          "name": "IOVDD",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "34",
+          "name": "GPIO22",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "35",
+          "name": "GPIO23",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "36",
+          "name": "GPIO24",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "37",
+          "name": "GPIO25",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "38",
+          "name": "GPIO26/ADC0",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "39",
+          "name": "GPIO27/ADC1",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "40",
+          "name": "GPIO28/ADC2",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "41",
+          "name": "GPIO29/ADC3",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "42",
+          "name": "IOVDD",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "43",
+          "name": "ADC_AVDD",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "44",
+          "name": "VREG_VIN",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "45",
+          "name": "VREG_VOUT",
+          "direction": "U",
+          "electrical_type": "power_out"
+        },
+        {
+          "number": "46",
+          "name": "USB_DM",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "47",
+          "name": "USB_DP",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "48",
+          "name": "USB_VDD",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "49",
+          "name": "IOVDD",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "50",
+          "name": "DVDD",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "51",
+          "name": "QSPI_SD3",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "52",
+          "name": "QSPI_SCLK",
+          "direction": "L",
+          "electrical_type": "output"
+        },
+        {
+          "number": "53",
+          "name": "QSPI_SD0",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "54",
+          "name": "QSPI_SD2",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "55",
+          "name": "QSPI_SD1",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "56",
+          "name": "~{QSPI_SS}",
+          "direction": "L",
+          "electrical_type": "output"
+        },
+        {
+          "number": "57",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "power_in"
+        }
+      ]
+    },
+    {
+      "library_id": "MCU_ST_STM32F1:STM32F103C8Tx",
+      "name": "STM32F103C8Tx",
+      "category": "soc",
+      "subtype": "mcu",
+      "pin_count": 48,
+      "width": 960,
+      "height": 960,
+      "description": "STMicroelectronics Arm Cortex-M3 MCU, 64KB flash, 20KB RAM, 72 MHz, 2.0-3.6V, 37 GPIO, LQFP48",
+      "is_main_candidate": true,
+      "pins": [
+        {
+          "number": "1",
+          "name": "VBAT",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "2",
+          "name": "PC13",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "3",
+          "name": "PC14",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "4",
+          "name": "PC15",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "5",
+          "name": "PD0",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "6",
+          "name": "PD1",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "7",
+          "name": "NRST",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "8",
+          "name": "VSSA",
+          "direction": "D",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "9",
+          "name": "VDDA",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "10",
+          "name": "PA0",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "11",
+          "name": "PA1",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "12",
+          "name": "PA2",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "13",
+          "name": "PA3",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "14",
+          "name": "PA4",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "15",
+          "name": "PA5",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "16",
+          "name": "PA6",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "17",
+          "name": "PA7",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "18",
+          "name": "PB0",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "19",
+          "name": "PB1",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "20",
+          "name": "PB2",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "21",
+          "name": "PB10",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "22",
+          "name": "PB11",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "23",
+          "name": "VSS",
+          "direction": "D",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "24",
+          "name": "VDD",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "25",
+          "name": "PB12",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "26",
+          "name": "PB13",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "27",
+          "name": "PB14",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "28",
+          "name": "PB15",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "29",
+          "name": "PA8",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "30",
+          "name": "PA9",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "31",
+          "name": "PA10",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "32",
+          "name": "PA11",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "33",
+          "name": "PA12",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "34",
+          "name": "PA13",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "35",
+          "name": "VSS",
+          "direction": "D",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "36",
+          "name": "VDD",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "37",
+          "name": "PA14",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "38",
+          "name": "PA15",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "39",
+          "name": "PB3",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "40",
+          "name": "PB4",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "41",
+          "name": "PB5",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "42",
+          "name": "PB6",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "43",
+          "name": "PB7",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "44",
+          "name": "BOOT0",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "45",
+          "name": "PB8",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "46",
+          "name": "PB9",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "47",
+          "name": "VSS",
+          "direction": "D",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "48",
+          "name": "VDD",
+          "direction": "U",
+          "electrical_type": "power_in"
+        }
+      ]
+    },
+    {
+      "library_id": "RF_Module:ESP32-S3-WROOM-1",
+      "name": "ESP32-S3-WROOM-1",
+      "category": "soc",
+      "subtype": "wireless_soc",
+      "pin_count": 41,
+      "width": 660,
+      "height": 660,
+      "description": "RF Module, ESP32-S3 SoC, Wi-Fi 802.11b/g/n, Bluetooth, BLE, 32-bit, 3.3V, onboard antenna, SMD",
+      "is_main_candidate": true,
+      "pins": [
+        {
+          "number": "1",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "2",
+          "name": "3V3",
+          "direction": "U",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "3",
+          "name": "EN",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "4",
+          "name": "IO4",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "5",
+          "name": "IO5",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "6",
+          "name": "IO6",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "7",
+          "name": "IO7",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "8",
+          "name": "IO15",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "9",
+          "name": "IO16",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "10",
+          "name": "IO17",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "11",
+          "name": "IO18",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "12",
+          "name": "IO8",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "13",
+          "name": "USB_D-",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "14",
+          "name": "USB_D+",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "15",
+          "name": "IO3",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "16",
+          "name": "IO46",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "17",
+          "name": "IO9",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "18",
+          "name": "IO10",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "19",
+          "name": "IO11",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "20",
+          "name": "IO12",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "21",
+          "name": "IO13",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "22",
+          "name": "IO14",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "23",
+          "name": "IO21",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "24",
+          "name": "IO47",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "25",
+          "name": "IO48",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "26",
+          "name": "IO45",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "27",
+          "name": "IO0",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "28",
+          "name": "IO35",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "29",
+          "name": "IO36",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "30",
+          "name": "IO37",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "31",
+          "name": "IO38",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "32",
+          "name": "IO39",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "33",
+          "name": "IO40",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "34",
+          "name": "IO41",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "35",
+          "name": "IO42",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "36",
+          "name": "RXD0",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "37",
+          "name": "TXD0",
+          "direction": "R",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "38",
+          "name": "IO2",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "39",
+          "name": "IO1",
+          "direction": "L",
+          "electrical_type": "bidirectional"
+        },
+        {
+          "number": "40",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "41",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "passive"
+        }
+      ]
+    },
+    {
+      "library_id": "Regulator_Linear:AMS1117-3.3",
+      "name": "AMS1117-3.3",
+      "category": "power",
+      "subtype": "ldo",
+      "pin_count": 3,
+      "width": 60,
+      "height": 40,
+      "description": "1A Low Dropout regulator, positive, 3.3V fixed output, SOT-223",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "2",
+          "name": "VO",
+          "direction": "R",
+          "electrical_type": "power_out"
+        },
+        {
+          "number": "3",
+          "name": "VI",
+          "direction": "L",
+          "electrical_type": "power_in"
+        }
+      ]
+    },
+    {
+      "library_id": "Regulator_Linear:L7805",
+      "name": "L7805",
+      "category": "power",
+      "subtype": "linear_regulator",
+      "pin_count": 3,
+      "width": 60,
+      "height": 40,
+      "description": "Positive 1.5A 35V Linear Regulator, Fixed Output 5V, TO-220/TO-263/TO-252",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "IN",
+          "direction": "L",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "2",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "3",
+          "name": "OUT",
+          "direction": "R",
+          "electrical_type": "power_out"
+        }
+      ]
+    },
+    {
+      "library_id": "Regulator_Switching:LM2596S-ADJ",
+      "name": "LM2596S-ADJ",
+      "category": "power",
+      "subtype": "buck_regulator",
+      "pin_count": 5,
+      "width": 100,
+      "height": 50,
+      "description": "Adjustable 3A Step-Down Voltage Regulator, TO-263",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "VIN",
+          "direction": "L",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "2",
+          "name": "OUT",
+          "direction": "R",
+          "electrical_type": "output"
+        },
+        {
+          "number": "3",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "4",
+          "name": "FB",
+          "direction": "R",
+          "electrical_type": "input"
+        },
+        {
+          "number": "5",
+          "name": "~{ON}/OFF",
+          "direction": "L",
+          "electrical_type": "input"
+        }
+      ]
+    },
+    {
+      "library_id": "Regulator_Switching:TPS5430DDA",
+      "name": "TPS5430DDA",
+      "category": "power",
+      "subtype": "buck_regulator",
+      "pin_count": 9,
+      "width": 100,
+      "height": 70,
+      "description": "3A, Step Down Swift Converter, Adjustable Output Voltage, 5.5-36V Input Voltage, PowerSO-8",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "BOOT",
+          "direction": "R",
+          "electrical_type": "input"
+        },
+        {
+          "number": "2",
+          "name": "NC",
+          "direction": "L",
+          "electrical_type": "no_connect"
+        },
+        {
+          "number": "3",
+          "name": "NC",
+          "direction": "L",
+          "electrical_type": "no_connect"
+        },
+        {
+          "number": "4",
+          "name": "VSENSE",
+          "direction": "R",
+          "electrical_type": "input"
+        },
+        {
+          "number": "5",
+          "name": "EN",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "6",
+          "name": "GND",
+          "direction": "D",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "7",
+          "name": "VIN",
+          "direction": "L",
+          "electrical_type": "power_in"
+        },
+        {
+          "number": "8",
+          "name": "PH",
+          "direction": "R",
+          "electrical_type": "output"
+        },
+        {
+          "number": "9",
+          "name": "GNDPAD",
+          "direction": "D",
+          "electrical_type": "power_in"
+        }
+      ]
+    },
+    {
+      "library_id": "Transistor_BJT:Q_NPN_CBE",
+      "name": "Q_NPN_CBE",
+      "category": "discrete",
+      "subtype": "npn_transistor",
+      "pin_count": 3,
+      "width": 60,
+      "height": 60,
+      "description": "Generic NPN transistor, C-B-E pin order",
+      "is_main_candidate": false,
+      "pins": [
+        {
+          "number": "1",
+          "name": "C",
+          "direction": "U",
+          "electrical_type": "passive"
+        },
+        {
+          "number": "2",
+          "name": "B",
+          "direction": "L",
+          "electrical_type": "input"
+        },
+        {
+          "number": "3",
+          "name": "E",
+          "direction": "D",
+          "electrical_type": "passive"
+        }
+      ]
+    }
+  ]
+}

@@ -9,7 +9,7 @@ from app.main import app
 
 
 BACKEND = Path(__file__).resolve().parents[1]
-SKILL = BACKEND / "skills" / "schematic-generation"
+SKILL = BACKEND / "schematic_demo"
 
 
 def test_schematic_pipeline_and_judge(tmp_path):
@@ -25,7 +25,8 @@ def test_schematic_pipeline_and_judge(tmp_path):
     assert len([event for event in events if event["event"] == "component_finished"]) == 6
 
 
-def test_schematic_api_returns_openable_project_url():
+def test_schematic_api_returns_openable_project_url(tmp_path, monkeypatch):
+    monkeypatch.setattr('app.api.routes_schematic.PROJECTS_ROOT', tmp_path)
     client = TestClient(app)
     diagram = client.get("/api/schematic/example").json()
     response = client.post("/api/schematic/generate", json=diagram)
@@ -40,8 +41,7 @@ def test_schematic_api_returns_openable_project_url():
     assert judged.json()["score"] == 100
 
 
-def test_schematic_interaction_search_requires_an_identifier():
+def test_schematic_interaction_search_rejects_negative_offset():
     client = TestClient(app)
-    response = client.get("/api/schematic/interactions")
-    assert response.status_code == 400
-    assert "user_id or session_id" in response.json()["detail"]
+    response = client.get("/api/schematic/interactions?offset=-1")
+    assert response.status_code == 422

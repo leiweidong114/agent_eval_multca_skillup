@@ -1,0 +1,3 @@
+﻿agent,requested_model,attempt,passed,status,agent_model,runtime_exit_code,agent_exit_code,db_status,db_calls,db_successes,db_models,model_verified,verification_reason,trace_key_alias,trace_key_cleanup,duration_seconds,error
+claude,opencode-go/minimax-m2.7,1,False,failed,claude-sonnet-4-6,0,1,matched,4,0,opencode-go/minimax-m2.7,False,no_successful_model_call,agent-eval-connectivity-7d99e772147d4cf092ae1cde906ad378,deleted,45.791,claude timed out after 45s
+codebuddy,opencode-go/minimax-m2.7,1,False,failed,custom-local:MiniMax-M2.7,0,1,matched,4,0,anthropic/minimax-m2.7,False,no_successful_model_call,agent-eval-connectivity-a5f57eabfcdf4450a5b79101839803e7,deleted,46.623,codebuddy timed out after 45s

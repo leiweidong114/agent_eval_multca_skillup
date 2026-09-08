@@ -1,11 +1,47 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/multica-ai/multica/server/pkg/agent"
 )
+
+func TestCaseWorkspaceKeepsControlIsolatedAndDoesNotModifySource(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "source.json")
+	original := `{"agents":{"defaults":{},"list":[{"id":"main","workspace":"with-skill"}]}}`
+	if err := os.WriteFile(source, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPENCLAW_CONFIG_PATH", source)
+	workspace := filepath.Join(root, "without-skill")
+	if err := prepareCaseWorkspace(workspace, "openclaw"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(os.Getenv("OPENCLAW_CONFIG_PATH"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	agents := config["agents"].(map[string]any)
+	if agents["defaults"].(map[string]any)["workspace"] != workspace {
+		t.Fatal("wrong workspace")
+	}
+	unchanged, _ := os.ReadFile(source)
+	if string(unchanged) != original {
+		t.Fatal("source configuration modified")
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "artifacts")); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestExactPromptSingleMessageIsUnchanged(t *testing.T) {
 	want := "Generate the requested schematic."

@@ -81,7 +81,7 @@
           <el-form-item label="原理图需求 Prompt">
             <el-input v-model="form.prompt" type="textarea" :rows="6" placeholder="例如：设计一套 24V 转 5V/3A 的降压电源，包含输入保护、状态指示和测试点……" />
           </el-form-item>
-          <el-alert type="info" :closable="false" show-icon title="系统会使用 schematic-generation Skill，并执行结构、规则及产物完整性评测。" />
+          <el-alert type="info" :closable="false" show-icon title="使用原理图 pipeline 的四个 Skill，调用指定 Agent 和模型执行生成与评测。" />
         </template>
 
         <template v-else>
@@ -106,7 +106,7 @@
           :type="modelConfig.llm_judge.enabled ? 'success' : 'warning'"
           :closable="false"
           show-icon
-          :title="modelConfig.llm_judge.enabled ? `LLM Judge：${modelConfig.llm_judge.model}（${modelConfig.llm_judge.profile}）` : 'LLM Judge 已在评分配置中关闭'"
+          :title="modelConfig.llm_judge.enabled ? `LLM Judge：${modelConfig.llm_judge.model}（LiteLLM）` : 'LLM Judge 已在评分配置中关闭'"
         />
         <div class="form-grid runtime-grid">
           <el-form-item label="并行度"><el-input-number v-model="form.concurrency" :min="1" :max="16" /></el-form-item>
@@ -240,7 +240,7 @@ async function submit() {
   }
 }
 async function submitAgentRun() {
-  const selectedSkills = form.type === 'schematic' ? ['schematic-generation'] : form.skills
+  const selectedSkills = form.type === 'schematic' ? ['schematic-pipeline','signal-interface-generation','schematic-layout-codegen','schematic-web-apply'] : form.skills
   const base = { evaluation_type: form.type, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: 12, benchmark: form.baseline, collect_database_trace: true, require_model_verification: true, llm_judge: true }
   if (form.batchMode) {
     const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })

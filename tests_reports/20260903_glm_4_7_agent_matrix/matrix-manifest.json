@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-09-03T03:48:22.227764+00:00",
+  "git_commit": "198721c7a145d8d29e53cdc03cc11e62618d2145",
+  "profile": "litellm_glm_4_7",
+  "prompt": "HI",
+  "model_prefix": "opencode-go/",
+  "agents": [
+    "claude",
+    "codebuddy",
+    "codex",
+    "justdo",
+    "openclaw",
+    "opencode"
+  ],
+  "catalog_models": [
+    "glm-4.7"
+  ],
+  "catalog_model_count": 1,
+  "models": [
+    "glm-4.7"
+  ],
+  "operational_model_count": 1,
+  "preflight_enabled": true,
+  "adapter_resolution_passed": 4,
+  "adapter_resolution_total": 6,
+  "repeats": 3,
+  "workers": 3,
+  "timeout_seconds": 120,
+  "catalog_errors": [],
+  "agent_executables": {
+    "claude": "claude",
+    "codebuddy": "codebuddy",
+    "codex": "codex",
+    "justdo": "C:\\Users\\leiwe\\AppData\\Roaming\\JustDo\\multica\\development\\JustDo-agent.exe",
+    "openclaw": "openclaw",
+    "opencode": "opencode"
+  }
+}
