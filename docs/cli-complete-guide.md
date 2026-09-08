@@ -1388,3 +1388,172 @@ npm run dev
 ```powershell
 python -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',8000)); print('PORT_8000_FREE'); s.close()"
 ```
+
+## 24. 启动原理图自动布局与配图服务
+
+原理图四 Skill 依赖外部 `auto_layout_service`。它是一个 FastAPI 进程，同时提供：
+
+- `auto_layout`：电路 DSL Python 代码转布局 JSON；
+- `apply_schematic`：布局 JSON 转多图页原理图网页和访问 URL。
+
+本机服务路径为：
+
+```text
+D:\AI_FOR_WORLD\14_AI_workspace\common_tools\自动布局算法\auto_layout_service
+```
+
+首次安装依赖：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\自动布局算法"
+python -m pip install -r .\auto_layout_service\requirements.txt
+```
+
+前台启动（推荐调试时使用，关闭终端即停止）：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\自动布局算法"
+python .\auto_layout_service\main.py
+```
+
+后台启动（日志写入 `auto_layout_service/artifacts/server.log`）：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\自动布局算法"
+python .\auto_layout_service\tools\start_service.py
+```
+
+默认地址是 `http://127.0.0.1:8631`。启动后必须同时检查两个服务：
+
+```powershell
+curl.exe --noproxy "*" http://127.0.0.1:8631/api/auto_layout/health
+curl.exe --noproxy "*" http://127.0.0.1:8631/api/apply_schematic/health
+curl.exe --noproxy "*" http://127.0.0.1:8631/api/auto_layout/devices
+```
+
+完整 HTTP 冒烟测试：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\自动布局算法"
+python .\auto_layout_service\tools\http_smoke.py
+```
+
+布局 JSON、网页和日志位于：
+
+```text
+auto_layout_service/artifacts/
+```
+
+端口和产物目录可在 `auto_layout_service/config.json` 修改。若修改了端口，还需同步修改
+四个原理图 Skill 使用的服务地址或相关运行环境变量。
+
+## 25. JustDo Windows 与 Linux 打包
+
+JustDo 源码目录：
+
+```text
+D:\AI_FOR_WORLD\14_AI_workspace\common_tools\JustDo
+```
+
+项目要求 Node.js 24（`package.json` 当前约束为 `>=24.15 <25`）。构建前先确认：
+
+```powershell
+node --version
+npm --version
+```
+
+### 25.1 Windows x64 安装包
+
+在 Windows PowerShell 中执行：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\JustDo"
+npm ci
+npm run dist:win
+```
+
+标准输出目录是 `release/`，其中包括：
+
+```text
+release/JustDo Setup <version>.exe
+release/win-unpacked/JustDo.exe
+release/win-unpacked/JustDo-agent.exe
+```
+
+迁移到新 Windows 电脑时，应复制并运行 `JustDo Setup <version>.exe`。不要只复制
+`JustDo-agent.exe`：它只是桥接启动器，仍依赖 JustDo 主程序和打包资源。安装程序会展开
+OpenClaw、Python 和 MinGit 运行时。安装完成后评测系统可直接执行：
+
+```powershell
+agent-eval check-agent `
+  --agent justdo `
+  --model glm-4.5-air `
+  --prompt "hi" `
+  --timeout 120 `
+  --database-verify
+```
+
+### 25.2 Linux x64 单文件包（推荐在 Linux 或 WSL2 中构建）
+
+AppImage/DEB 的最后封装依赖 Linux 工具链。即使使用同一台 Windows 电脑，也应在 WSL2
+Ubuntu 内使用独立源码副本构建；不要共用 Windows 的 `node_modules`：
+
+```bash
+cd /path/to/JustDo
+npm ci
+npm run dist:linux
+```
+
+标准输出目录 `release/` 中会生成 AppImage、DEB 和 `linux-unpacked/`。在目标 Linux 上：
+
+```bash
+chmod +x ./JustDo-*.AppImage
+export JUSTDO_AGENT_EXECUTABLE="$PWD/JustDo-2026.8.27.AppImage"
+
+agent-eval check-agent \
+  --agent justdo \
+  --model glm-4.5-air \
+  --prompt "hi" \
+  --timeout 120 \
+  --database-verify
+```
+
+### 25.3 仅在 Windows 上生成可搬运的 Linux 目录
+
+Windows 可以交叉生成经过校验的 `linux-unpacked`，但不能可靠完成 AppImage 的
+`mksquashfs` 封装：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\JustDo"
+npm ci
+$env:OPENCLAW_FORCE_INSTALL = "1"
+npm run openclaw:runtime:linux-x64
+Remove-Item Env:OPENCLAW_FORCE_INSTALL
+npm run build
+npm run compile:electron
+npx electron-builder --config electron-builder.config.cjs --linux --x64 --dir `
+  --config.directories.output=release-linux
+```
+
+需要复制整个 `release-linux/linux-unpacked/`，不能只复制里面约 200 MB 的 `JustDo`
+ELF 文件，因为旁边的共享库和 `resources/` 同样必需。在目标 Linux 上设置：
+
+```bash
+chmod +x /opt/JustDo/JustDo
+export JUSTDO_AGENT_EXECUTABLE=/opt/JustDo/JustDo
+```
+
+然后即可使用相同的 `agent-eval check-agent --agent justdo ...` 命令。
+
+## 26. 题库评测瞬间显示 0/N 失败
+
+如果实验在不到一秒内失败、完成数为 0，并显示类似：
+
+```text
+'codex_cli_direct'
+```
+
+说明任务尚未调用模型，失败发生在 Provider 类型到执行适配器的内部映射阶段，不是模型额度
+或题目评分失败。`2026-09-08` 的问题由自动 Provider 保存 `codex_cli_direct`、执行引擎仅登记
+旧别名 `codex_direct` 导致；当前版本已同时兼容规范名称和旧名称。升级后重新创建评测即可，
+旧的失败记录不会自动重跑。

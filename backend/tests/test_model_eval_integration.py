@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from maeval.webapp.api import create_app
+from maeval.webapp.engine import KIND_TO_ADAPTER
 from agent_eval.model_config import ResolvedModelProfile
 from maeval.webapp.benchmarks import seed_catalog
 from maeval.webapp.db import Database
@@ -108,3 +109,4 @@ def test_unified_ui_can_create_server_managed_litellm_provider(tmp_path: Path, m
         assert response.status_code == 200
         assert response.json()["kind"] == "codex_cli_direct"
         assert response.json()["model"] == "gateway/model-a"
+        assert KIND_TO_ADAPTER[response.json()["kind"]] == "codex_cli_direct"

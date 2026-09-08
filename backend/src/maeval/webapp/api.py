@@ -1251,6 +1251,7 @@ def create_app(
         agent_kinds = {
             "claude_code_agent",
             "openclaw_agent",
+            "codex_cli_agent",
             "codex_agent",
             "custom_cli_agent",
             "custom_http_agent",

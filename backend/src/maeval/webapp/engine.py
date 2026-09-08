@@ -28,6 +28,10 @@ KIND_TO_ADAPTER = {
     "claude_code_agent": "claude_cli_agent",
     "openclaw_direct": "openclaw_direct",
     "openclaw_agent": "openclaw_agent",
+    # Auto-managed providers persist the adapter's canonical kind. Keep the
+    # older short names below for databases created by earlier releases.
+    "codex_cli_direct": "codex_cli_direct",
+    "codex_cli_agent": "codex_cli_agent",
     "codex_direct": "codex_cli_direct",
     "codex_agent": "codex_cli_agent",
     "custom_cli_agent": "custom_cli_agent",
