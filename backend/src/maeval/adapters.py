@@ -340,6 +340,36 @@ class CodexCliAdapter(Adapter):
             cwd = workdir or Path(temporary)
             output_file = Path(temporary) / "last-message.txt"
             prompt = _agent_prompt(task, cwd) if self.agent_mode else task.prompt
+            effective_extra_args = list(candidate.extra_args)
+            resilience_proxy = None
+            if candidate.base_url:
+                # Codex speaks the Responses protocol, while a number of
+                # OpenAI-compatible LiteLLM upstreams (including GLM) only
+                # expose Chat Completions. Reuse the same per-run translator
+                # as the Skill evaluation path instead of requiring a
+                # provider-specific server-side /responses implementation.
+                from agent_eval.codebuddy_proxy import CodeBuddyCompatibilityProxy
+
+                resilience_proxy = CodeBuddyCompatibilityProxy(
+                    candidate.base_url,
+                    timeout=candidate.timeout_seconds,
+                    forced_model=candidate.model,
+                    strip_tools_after_result=False,
+                    translate_protocols=True,
+                )
+                try:
+                    resilience_proxy.start()
+                except OSError as exc:
+                    return AdapterResult(
+                        ok=False,
+                        error=f"Codex protocol compatibility proxy failed to start: {exc}",
+                    )
+                effective_extra_args.extend(
+                    [
+                        "-c",
+                        f'model_providers.litellm.base_url="{resilience_proxy.openai_base_url}"',
+                    ]
+                )
             command = [
                 "codex",
                 "exec",
@@ -354,7 +384,7 @@ class CodexCliAdapter(Adapter):
                 "--json",
                 "--output-last-message",
                 str(output_file),
-                *candidate.extra_args,
+                *effective_extra_args,
                 prompt,
             ]
             env = os.environ.copy()
@@ -368,23 +398,34 @@ class CodexCliAdapter(Adapter):
             if candidate.base_url:
                 env["OPENAI_BASE_URL"] = candidate.base_url.rstrip("/")
             try:
-                code, stdout, stderr, duration_ms = _run_process(
-                    command,
-                    cwd=cwd,
-                    timeout_seconds=candidate.timeout_seconds,
-                    env=env,
-                )
-            except (OSError, TimeoutError) as exc:
-                return AdapterResult(ok=False, error=str(exc))
+                try:
+                    code, stdout, stderr, duration_ms = _run_process(
+                        command,
+                        cwd=cwd,
+                        timeout_seconds=candidate.timeout_seconds,
+                        env=env,
+                    )
+                except (OSError, TimeoutError) as exc:
+                    return AdapterResult(ok=False, error=str(exc))
+            finally:
+                if resilience_proxy is not None:
+                    resilience_proxy.close()
             text = output_file.read_text(encoding="utf-8", errors="replace") if output_file.is_file() else ""
             input_tokens = output_tokens = None
             events: list[dict[str, Any]] = []
+            event_errors: list[str] = []
             for line in stdout.splitlines():
                 try:
                     event = json.loads(line)
                 except json.JSONDecodeError:
                     continue
                 events.append(event)
+                if event.get("type") == "error" and event.get("message"):
+                    event_errors.append(str(event["message"]))
+                if event.get("type") == "turn.failed":
+                    message = (event.get("error") or {}).get("message")
+                    if message:
+                        event_errors.append(str(message))
                 usage = event.get("usage") or event.get("token_usage") or {}
                 if usage:
                     input_tokens = _usage_value(usage, "input_tokens", "input") or input_tokens
@@ -393,7 +434,9 @@ class CodexCliAdapter(Adapter):
                 ok=code == 0 and bool(text.strip()),
                 text=text,
                 raw={"events": events},
-                error=(stderr[-1000:] if code else None) or ("Codex returned no final message" if not text.strip() else None),
+                error=("\n".join(dict.fromkeys(event_errors)) if event_errors else None)
+                or (stderr[-4000:] if code else None)
+                or ("Codex returned no final message" if not text.strip() else None),
                 duration_api_ms=duration_ms,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,

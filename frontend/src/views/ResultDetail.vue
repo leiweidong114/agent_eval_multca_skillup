@@ -42,8 +42,15 @@
         <el-card shadow="never" class="panel"><template #header><div class="section-head"><div><b>逐题评测过程</b><span>查看题目、响应、评分与错误证据</span></div><el-tag effect="plain">{{results.length}} 条</el-tag></div></template>
           <el-collapse class="case-list">
             <el-collapse-item v-for="(row,index) in results" :key="row.id||`${row.item_key}-${index}`" :name="index">
-              <template #title><div class="case-title"><span class="case-index">{{index+1}}</span><b>{{row.item_key||row.benchmark_item_key||`题目 ${index+1}`}}</b><el-tag size="small" :type="row.passed?'success':'danger'">{{row.passed?'通过':'未通过'}}</el-tag><span class="case-meta">{{row.provider_name}} · {{durationText(row.duration_ms||row.latency_ms)}}</span></div></template>
-              <div class="case-body"><article><span>模型响应</span><p>{{readable(row.output||row.response||row.error)}}</p></article><article><span>评分结果</span><p>得分 {{row.score??(row.passed?1:0)}}；{{row.error?`错误：${row.error}`:'评分执行完成'}}</p></article><div class="case-stats"><span>输入 {{number(row.input_tokens)}} tokens</span><span>输出 {{number(row.output_tokens)}} tokens</span><span>重复轮次 {{row.repeat??1}}</span></div></div>
+              <template #title><div class="case-title"><span class="case-index">{{index+1}}</span><b>{{row.item_key||row.benchmark_item_key||`题目 ${index+1}`}}</b><el-tag size="small" :type="row.status==='error'?'danger':row.passed?'success':'warning'">{{row.status==='error'?'执行错误':row.passed?'通过':'未通过'}}</el-tag><span class="case-meta">{{row.provider_name}} · {{durationText(row.wall_duration_ms||row.duration_ms||row.latency_ms)}}</span></div></template>
+              <div class="case-body question-answer-grid">
+                <article><span>题目</span><p>{{row.prompt||'未记录题目内容'}}</p></article>
+                <article class="answer"><span>模型响应</span><p>{{row.response_text||row.output||row.response||'模型未返回内容'}}</p></article>
+                <article><span>正确答案</span><p>{{readable(row.expected)}}</p></article>
+                <article><span>模型得分</span><p>{{questionScore(row)}}；判定：{{row.status==='error'?'执行错误':row.passed?'通过':'未通过'}}</p></article>
+                <article v-if="row.error" class="error-box"><span>执行错误</span><p>{{row.error}}</p></article>
+                <div class="case-stats"><span>输入 {{number(row.input_tokens)}} tokens</span><span>输出 {{number(row.output_tokens)}} tokens</span><span>重复轮次 {{row.repeat??1}}</span></div>
+              </div>
             </el-collapse-item>
           </el-collapse>
         </el-card>
@@ -148,6 +155,7 @@ const caseType=s=>String(s).toUpperCase()==='PASS'?'success':String(s).toUpperCa
 const caseStatus=s=>({PASS:'通过',FAIL:'未通过',ERROR:'执行错误'}[String(s).toUpperCase()]||s||'未知')
 const caseScore=item=>item.grading?.summary?.pass_rate??(String(item.status).toUpperCase()==='PASS'?'100%':'0%')
 const gradingText=g=>g?`判定：${caseStatus(g.status)}；执行 ${g.turns_executed??'—'} / ${g.turns_total??'—'} 轮；通过率 ${percent(g.summary?.pass_rate)}`:'未生成评分证据'
+const questionScore=row=>`${Number(row.score??(row.passed?1:0)).toFixed(2)} / 1.00`
 const readable=value=>value===undefined||value===null||value===''?'—':typeof value==='string'?value:Array.isArray(value)?value.map(readable).join('；'):Object.entries(value).map(([k,v])=>`${k}：${readable(v)}`).join('；')
 const pretty=value=>JSON.stringify(value??{},null,2)
 const failureCategoryLabel=category=>({gateway_quota_exhausted:'模型使用额度已达上限',gateway_rate_limited:'模型服务请求过于频繁',gateway_server_error:'模型网关或上游服务异常',gateway_unavailable:'模型服务连接失败',gateway_authentication:'模型服务鉴权失败',gateway_authorization:'模型服务权限不足',model_incompatible:'指定模型不存在或不兼容',agent_workspace_invalid:'Agent 工作区配置无效',agent_execution_failed:'Agent 执行失败',model_verification_failed:'精确模型核验失败',trace_key_unavailable:'运行级轨迹 Key 创建失败'}[category]||category)
