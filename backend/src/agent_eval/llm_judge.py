@@ -8,7 +8,11 @@ from typing import Any
 
 import httpx
 
-from agent_eval.model_config import resolve_model_profile, resolve_config_secret
+from agent_eval.model_config import (
+    load_runtime_settings,
+    resolve_model_profile,
+    resolve_config_secret,
+)
 from agent_eval.failure import describe_evaluation_failure
 
 
@@ -94,11 +98,17 @@ def run_llm_judge(
     if not config.get("enabled", False):
         return {"status": "disabled"}
     profile_name = str(config.get("profile") or "").strip() or None
+    runtime_settings = load_runtime_settings(project_root)
     try:
         profile = resolve_model_profile(
             project_root,
             profile_name=profile_name,
-            model_override=resolve_config_secret(project_root, "LITELLM_JUDGE_MODEL") or str(config.get("model") or "").strip() or None,
+            model_override=(
+                runtime_settings.get("judge_model")
+                or resolve_config_secret(project_root, "LITELLM_JUDGE_MODEL")
+                or str(config.get("model") or "").strip()
+                or None
+            ),
         )
         if not profile.api_base:
             raise ValueError("LLM judge must use the unified LiteLLM HTTP endpoint")
@@ -161,5 +171,9 @@ def run_llm_judge(
             "error": (failure or {}).get("detail") or str(exc),
             "failure": failure,
             "gateway": profile_name or "litellm",
-            "model": str(config.get("model") or "") or None,
+            "model": (
+                runtime_settings.get("judge_model")
+                or str(config.get("model") or "")
+                or None
+            ),
         }

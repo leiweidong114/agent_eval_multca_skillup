@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import json
+import sys
 import time
 import base64
 import mimetypes
@@ -19,9 +21,13 @@ from agent_eval.model_config import (
     describe_model_config,
     delete_model_profile,
     discover_available_models,
+    load_litellm_model_catalog,
+    load_runtime_settings,
     list_model_profiles,
     resolve_config_secret,
     resolve_model_profile,
+    refresh_litellm_model_catalog,
+    save_runtime_settings,
     save_model_profile,
 )
 from agent_eval.runtime import (
@@ -32,6 +38,7 @@ from agent_eval.runtime import (
 from agent_eval.scoring import load_scoring_config
 from app.config import BACKEND_ROOT, SKILLS_ROOT
 from app.skill_registry import (
+    delete_skill,
     delete_skill_version,
     list_uploaded_skills,
     resolve_skill,
@@ -46,9 +53,23 @@ class CleanupRequest(BaseModel):
     confirm: bool = False
 
 
+class DeleteSkillRequest(BaseModel):
+    confirm: bool = False
+
+
 class ModelTestRequest(BaseModel):
     model: str = Field(min_length=1, max_length=300)
-    profile: str = Field(min_length=1, max_length=200)
+    profile: str = Field(default="litellm", min_length=1, max_length=200)
+
+
+class BatchModelTestRequest(BaseModel):
+    workers: int = Field(default=8, ge=1, le=16)
+    timeout_seconds: float = Field(default=30, ge=3, le=180)
+
+
+class RuntimeSettingsRequest(BaseModel):
+    judge_model: str = Field(min_length=1, max_length=300)
+    agent_test_model: str = Field(min_length=1, max_length=300)
 
 
 class ModelProfileRequest(BaseModel):
@@ -76,6 +97,8 @@ def _scan_skills(root: Path) -> list[dict[str, str]]:
             found.append(
                 {
                     "name": child.name,
+                    "identifier": child.name,
+                    "source": "built_in",
                     "path": str(child),
                     "has_skill_md": True,
                 }
@@ -103,37 +126,57 @@ def list_agents() -> list[dict[str, Any]]:
 
 @router.post("/agents/{agent_name}/test")
 def test_agent(agent_name: str) -> dict[str, object]:
-    """Run a harmless version probe against a discovered local Agent CLI."""
+    """Run the Agent with a minimal prompt through the configured default model."""
     if agent_name not in SUPPORTED_AGENTS:
         raise HTTPException(status_code=404, detail=f"Unsupported Agent: {agent_name}")
     command = default_agent_command(agent_name)
     executable = shutil.which(command)
     if not executable:
         return {"ok": False, "agent": agent_name, "message": "未在 PATH 中发现可执行文件"}
+    settings = load_runtime_settings(BACKEND_ROOT)
+    model_config = describe_model_config(BACKEND_ROOT)
+    model = settings.get("agent_test_model") or str(model_config.get("default_model") or "")
+    if not model:
+        return {"ok": False, "agent": agent_name, "executable": executable, "message": "尚未配置 Agent 测试模型"}
     started = time.perf_counter()
     try:
         process = subprocess.run(
-            [executable, "--version"],
+            [
+                sys.executable, "-m", "agent_eval.cli", "check-agent",
+                "--agent", agent_name, "--model", model,
+                "--prompt", "HI", "--timeout", "120",
+            ],
             capture_output=True,
             text=True,
-            timeout=12,
+            timeout=150,
             check=False,
             encoding="utf-8",
             errors="replace",
         )
-        output = (process.stdout or process.stderr or "").strip().splitlines()
+        raw = (process.stdout or "").strip()
+        try:
+            result = json.loads(raw)
+        except ValueError:
+            result = {}
+        ok = process.returncode == 0 and result.get("status") == "connected"
         return {
-            "ok": process.returncode == 0,
+            "ok": ok,
             "agent": agent_name,
             "executable": executable,
+            "model": model,
             "duration_ms": round((time.perf_counter() - started) * 1000),
-            "message": output[0][:300] if output else f"进程退出码 {process.returncode}",
+            "message": (
+                "Agent 已通过模型完成 HI 请求"
+                if ok else str(result.get("error") or (result.get("failure") or {}).get("detail") or process.stderr or f"进程退出码 {process.returncode}")[:500]
+            ),
+            "result": result,
         }
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {
             "ok": False,
             "agent": agent_name,
             "executable": executable,
+            "model": model,
             "duration_ms": round((time.perf_counter() - started) * 1000),
             "message": "检测超时" if isinstance(exc, subprocess.TimeoutExpired) else str(exc),
         }
@@ -144,7 +187,8 @@ def get_model_config() -> dict[str, object]:
     """Return non-secret model defaults used by the CLI and Web UI."""
     result = describe_model_config(BACKEND_ROOT)
     judge = (load_scoring_config(BACKEND_ROOT).get("llm_judge") or {}).copy()
-    judge["model"] = resolve_config_secret(BACKEND_ROOT, "LITELLM_JUDGE_MODEL") or judge.get("model")
+    settings = load_runtime_settings(BACKEND_ROOT)
+    judge["model"] = settings.get("judge_model") or resolve_config_secret(BACKEND_ROOT, "LITELLM_JUDGE_MODEL") or judge.get("model")
     result["llm_judge"] = {
         key: judge.get(key)
         for key in (
@@ -195,7 +239,60 @@ def remove_model_profile(profile_name: str) -> dict[str, object]:
 def list_models() -> dict[str, object]:
     """Return models discovered from LiteLLM plus configured native fallbacks."""
     result = discover_available_models(BACKEND_ROOT)
+    try:
+        catalog = load_litellm_model_catalog(BACKEND_ROOT)
+    except (OSError, ValueError):
+        catalog = {}
+    tested = {
+        str(item.get("id")): item
+        for item in [*(catalog.get("models") or []), *(catalog.get("unavailable_models") or [])]
+        if isinstance(item, dict) and item.get("id")
+    }
+    for item in result.get("models") or []:
+        probe = tested.get(str(item.get("id")))
+        item["connectivity"] = (
+            {**probe, "tested_at": catalog.get("refreshed_at")} if probe else {"available": None, "tested_at": None}
+        )
+    result["connectivity_summary"] = {
+        "tested_at": catalog.get("refreshed_at"),
+        "available": len(catalog.get("models") or []),
+        "unavailable": len(catalog.get("unavailable_models") or []),
+    }
     return result
+
+
+@router.post("/models/test-batch")
+def test_models_batch(request: BatchModelTestRequest) -> dict[str, object]:
+    """Probe every LiteLLM-visible model with a real HI inference request."""
+    return refresh_litellm_model_catalog(
+        BACKEND_ROOT,
+        probe_timeout=request.timeout_seconds,
+        probe_workers=request.workers,
+    )
+
+
+@router.get("/settings")
+def get_runtime_settings() -> dict[str, str]:
+    configured = load_runtime_settings(BACKEND_ROOT)
+    model_config = describe_model_config(BACKEND_ROOT)
+    scoring = load_scoring_config(BACKEND_ROOT).get("llm_judge") or {}
+    default_model = str(model_config.get("default_model") or "")
+    return {
+        "judge_model": (
+            configured.get("judge_model")
+            or resolve_config_secret(BACKEND_ROOT, "LITELLM_JUDGE_MODEL")
+            or str(scoring.get("model") or default_model)
+        ),
+        "agent_test_model": configured.get("agent_test_model") or default_model,
+    }
+
+
+@router.put("/settings")
+def put_runtime_settings(request: RuntimeSettingsRequest) -> dict[str, str]:
+    try:
+        return save_runtime_settings(BACKEND_ROOT, request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/models/test")
@@ -334,6 +431,20 @@ def remove_skill_version(skill_name: str, version: str) -> dict[str, object]:
         return {"deleted": True, "name": skill_name, "version": version}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.delete("/skills/{skill_identifier}")
+def remove_skill(skill_identifier: str, request: DeleteSkillRequest) -> dict[str, object]:
+    """Permanently remove one exact Skill entry after explicit confirmation."""
+    if not request.confirm:
+        raise HTTPException(status_code=400, detail="Set confirm=true to permanently delete this Skill")
+    try:
+        result = delete_skill(skill_identifier)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return {"deleted": True, **result}
 
 
 @router.get("/skills/{skill_name}/cases")

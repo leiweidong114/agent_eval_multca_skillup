@@ -77,3 +77,22 @@ def test_only_completed_evaluations_receive_a_rank():
     assert batch["best"]["rank"] == 1
     assert "rank" not in batch["results"][0]
     assert batch["status"] == "partial_failed"
+
+
+def test_transcript_messages_expose_model_and_tool_interactions():
+    payload = {
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "I will inspect the file."},
+                {"type": "tool_use", "name": "read_file", "input": {"path": "demo.txt"}},
+            ],
+        },
+    }
+
+    events = EvaluationJobManager._transcript_messages(payload)
+
+    assert events[0][:2] == ("assistant", "I will inspect the file.")
+    assert events[1][0] == "tool_call"
+    assert events[1][2]["tool"] == "read_file"

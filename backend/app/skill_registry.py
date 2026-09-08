@@ -108,7 +108,12 @@ def list_uploaded_skills() -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for directory in sorted(REGISTRY_ROOT.iterdir()):
         if directory.is_dir():
-            result.extend(_load_versions(directory.name))
+            for item in _load_versions(directory.name):
+                result.append({
+                    **item,
+                    "identifier": item["skill_id"],
+                    "source": "uploaded",
+                })
     return result
 
 
@@ -190,3 +195,26 @@ def delete_skill_version(name: str, version: str) -> bool:
     shutil.rmtree(target)
     _save_versions(name, remaining)
     return True
+
+
+def delete_skill(identifier: str) -> dict[str, Any] | None:
+    """Permanently delete one exact built-in Skill or uploaded Skill version."""
+    if "@" in identifier:
+        name, version = identifier.split("@", 1)
+        if not delete_skill_version(name, version):
+            return None
+        return {
+            "identifier": identifier,
+            "source": "uploaded",
+        }
+
+    name = _safe_name(identifier)
+    target = (SKILLS_ROOT / name).resolve()
+    root = SKILLS_ROOT.resolve()
+    if target.parent != root or not (target / "SKILL.md").is_file():
+        return None
+    shutil.rmtree(target)
+    return {
+        "identifier": name,
+        "source": "built_in",
+    }

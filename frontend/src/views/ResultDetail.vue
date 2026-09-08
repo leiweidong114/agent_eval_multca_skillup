@@ -1,10 +1,33 @@
 <template>
   <div class="page-stack">
-    <div class="back-row"><el-button link @click="$router.push('/results')"><el-icon><ArrowLeft/></el-icon> 返回结果中心</el-button><el-button @click="load" :loading="loading"><el-icon><Refresh/></el-icon> 刷新</el-button></div>
+    <div class="back-row"><el-button link @click="$router.push('/results')"><el-icon><ArrowLeft/></el-icon> 返回结果中心</el-button><div class="top-actions"><el-button v-if="!['question','batch'].includes(route.params.type)" @click="openArtifacts" :loading="openingFolder"><el-icon><FolderOpened/></el-icon> {{route.params.type==='schematic'?'打开原理图项目文件夹':'打开评测产物文件夹'}}</el-button><el-button @click="load(false)" :loading="loading"><el-icon><Refresh/></el-icon> 刷新</el-button></div></div>
     <el-skeleton v-if="loading&&!detail" :rows="8" animated/>
     <template v-else-if="detail">
       <section class="hero compact"><div><span class="eyebrow">{{typeLabel}} RESULT</span><h1>{{title}}</h1><p>评测 ID {{route.params.id}} · {{formatTime(detail.created_at)}} · {{statusText(detail.status||'completed')}}</p></div><el-tag size="large" :type="statusType(detail.status)">{{statusText(detail.status||'completed')}}</el-tag></section>
       <el-alert v-if="detail.status==='failed'&&failure" class="failure-alert" type="error" show-icon :closable="false" :title="failureTitle(failure)" :description="`${failureDescription(failure)} 本页分数仅用于故障诊断，不参与排名。`"/>
+
+      <el-card v-if="liveEvents.length||isLive" shadow="never" class="panel live-panel">
+        <template #header><div class="section-head"><div><b><i v-if="isLive" class="live-dot"/>实时运行过程</b><span>按发生顺序显示评测阶段、Agent/模型回复和工具交互</span></div><el-tag :type="isLive?'warning':'success'">{{isLive?'实时更新':'运行已结束'}}</el-tag></div></template>
+        <el-progress v-if="isLive" :percentage="Number(detail.progress||0)" :stroke-width="8"/>
+        <div class="event-stream" ref="eventStream">
+          <article v-for="event in liveEvents" :key="event.sequence" :class="`event-${event.kind}`">
+            <header><b>{{eventKind(event)}}</b><span>{{formatTime(event.timestamp)}}</span><em v-if="event.tool">{{event.tool}}</em></header>
+            <pre>{{event.content}}</pre>
+          </article>
+          <el-empty v-if="!liveEvents.length" description="任务正在准备，等待第一条运行事件"/>
+        </div>
+      </el-card>
+
+      <el-card v-if="!['question','batch'].includes(route.params.type) && (interactions.length || !isLive)" shadow="never" class="panel interactions-panel">
+        <template #header><div class="section-head"><div><b>模型交互记录</b><span>持久化展示本次评测经 LiteLLM 发送的完整请求、思考/回复、工具定义与 Token 信息</span></div><el-tag effect="plain">{{interactions.length}} 次模型调用</el-tag></div></template>
+        <el-collapse v-if="interactions.length">
+          <el-collapse-item v-for="(item,index) in interactions" :key="item.request_id||index" :name="index">
+            <template #title><div class="interaction-title"><b>#{{index+1}} {{item.model_group||item.model||'未知模型'}}</b><el-tag size="small" :type="item.status==='success'?'success':'danger'">{{item.status||'未知'}}</el-tag><span>{{number(item.total_tokens)}} tokens · {{durationText(item.request_duration_ms)}}</span></div></template>
+            <div class="interaction-body"><article><span>请求</span><pre>{{pretty(item.proxy_server_request||item.messages||{})}}</pre></article><article><span>响应</span><pre>{{pretty(item.response||{})}}</pre></article></div>
+          </el-collapse-item>
+        </el-collapse>
+        <el-empty v-else description="本次运行没有可关联的数据库模型交互；请检查数据库轨迹状态"/>
+      </el-card>
 
       <template v-if="route.params.type==='batch'">
         <div class="metric-grid"><div><span>评测组合</span><b>{{detail.total_jobs||0}}</b></div><div><span>已结束</span><b>{{detail.completed_jobs||0}}</b></div><div><span>最高得分</span><b>{{score(detail.best?.overall_score)}}</b></div><div><span>最佳组合</span><b class="compact-value">{{detail.best?`${detail.best.agent} × ${detail.best.model}`:'—'}}</b></div></div>
@@ -83,12 +106,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { fetchBatch, fetchExperiment, fetchExperimentComparison, fetchExperimentResults, fetchRun } from '../api'
+import { fetchBatch, fetchExperiment, fetchExperimentComparison, fetchExperimentResults, fetchJob, fetchRun, fetchRunInteractions, openRunFolder } from '../api'
 
-const route=useRoute(),loading=ref(false),detail=ref(null),results=ref([]),comparison=ref({}),error=ref('')
+const route=useRoute(),loading=ref(false),detail=ref(null),results=ref([]),comparison=ref({}),error=ref(''),eventStream=ref(null),interactions=ref([]),interactionsLoaded=ref(false),openingFolder=ref(false)
+let refreshTimer
 const typeLabel=computed(()=>({question:'QUESTION BANK',schematic:'SCHEMATIC',skill:'SKILL',batch:'BATCH COMPARISON'}[route.params.type]||'EVALUATION'))
 const title=computed(()=>detail.value?.name||detail.value?.task_name||`${({question:'题库',schematic:'原理图',skill:'Skill',batch:'批量对比'}[route.params.type])}评测结果`)
 const batchRows=computed(()=>[...(detail.value?.results||[])].sort((a,b)=>(a.rank||999)-(b.rank||999)))
@@ -104,19 +128,25 @@ const judgeStatus=computed(()=>({completed:{label:'已完成',type:'success'},di
 const skillNames=computed(()=>detail.value?.skills||[String(detail.value?.skill||'').split(/[\\/]/).filter(Boolean).pop()].filter(Boolean))
 const caseRows=computed(()=>{const rows=[];for(const run of detail.value?.results||[])for(const item of run.case_results||[])rows.push(item);return rows})
 const traceStatus=computed(()=>{const trace=detail.value?.database_trace||{};if(trace.status==='ok')return{label:'精确轨迹已关联',type:'success'};if(trace.status==='disabled')return{label:'数据库轨迹未启用',type:'info'};return{label:'基于运行报告分析',type:'warning'}})
+const isLive=computed(()=>['queued','running','cancelling'].includes(detail.value?.status))
+const liveEvents=computed(()=>detail.value?.events||[])
 
-async function load(){loading.value=true;error.value='';try{if(route.params.type==='question'){[detail.value,results.value,comparison.value]=await Promise.all([fetchExperiment(route.params.id),fetchExperimentResults(route.params.id),fetchExperimentComparison(route.params.id)])}else if(route.params.type==='batch')detail.value=await fetchBatch(route.params.id);else detail.value=await fetchRun(route.params.id)}catch(e){detail.value=null;error.value=e.response?.data?.detail||e.message;ElMessage.error(error.value)}finally{loading.value=false}}
+async function load(silent=false){if(!silent)loading.value=true;error.value='';try{if(route.params.type==='question'){[detail.value,results.value,comparison.value]=await Promise.all([fetchExperiment(route.params.id),fetchExperimentResults(route.params.id),fetchExperimentComparison(route.params.id)])}else if(route.params.type==='batch')detail.value=await fetchBatch(route.params.id);else{let job=null;try{job=await fetchJob(route.params.id)}catch{}if(job)detail.value=job.result?{...job.result,status:job.status,progress:job.progress,events:job.events||[],created_at:job.created_at}:job;else detail.value=await fetchRun(route.params.id);if(!['queued','running','cancelling'].includes(detail.value?.status)&&!interactionsLoaded.value)await loadInteractions()}clearTimeout(refreshTimer);if(['queued','running','cancelling'].includes(detail.value?.status))refreshTimer=setTimeout(()=>load(true),800);await nextTick();if(eventStream.value)eventStream.value.scrollTop=eventStream.value.scrollHeight}catch(e){detail.value=null;error.value=e.response?.data?.detail||e.message;if(!silent)ElMessage.error(error.value)}finally{loading.value=false}}
+async function loadInteractions(){try{interactions.value=(await fetchRunInteractions(route.params.id)).items||[]}catch{interactions.value=[]}finally{interactionsLoaded.value=true}}
+async function openArtifacts(){openingFolder.value=true;try{const result=await openRunFolder(route.params.id);ElMessage.success(`已打开：${result.path}`)}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{openingFolder.value=false}}
+const eventKind=event=>({phase:'评测阶段',stdout:'运行输出',stderr:'错误输出',user:'用户输入',assistant:'Agent 回复',model_request:'模型请求',model_response:'模型实时返回',tool_call:'工具调用',tool_result:'工具结果',interaction:'交互事件'}[event.kind]||event.kind)
 const percent=n=>n===undefined||n===null?'-':`${Math.round((Number(n)<=1?Number(n):Number(n)/100)*100)}%`
 const score=n=>n===undefined||n===null?'—':`${Math.round(Number(n)<=1?Number(n)*100:Number(n))}`
 const number=n=>n===undefined||n===null?'—':Number(n).toLocaleString()
 const durationText=n=>n===undefined||n===null?'—':Number(n)>=1000?`${(Number(n)/1000).toFixed(1)} 秒`:`${Math.round(Number(n))} ms`
-const statusText=s=>({completed:'已完成',partial_failed:'部分失败',running:'运行中',queued:'排队中',failed:'失败',cancelled:'已取消'}[s]||s)
+const statusText=s=>({completed:'已完成',partial_failed:'部分失败',running:'运行中',queued:'排队中',cancelling:'正在取消',failed:'失败',cancelled:'已取消',interrupted:'已中断'}[s]||s)
 const statusType=s=>s==='failed'?'danger':s==='completed'||!s?'success':'warning'
 const caseType=s=>String(s).toUpperCase()==='PASS'?'success':String(s).toUpperCase()==='ERROR'?'danger':'warning'
 const caseStatus=s=>({PASS:'通过',FAIL:'未通过',ERROR:'执行错误'}[String(s).toUpperCase()]||s||'未知')
 const caseScore=item=>item.grading?.summary?.pass_rate??(String(item.status).toUpperCase()==='PASS'?'100%':'0%')
 const gradingText=g=>g?`判定：${caseStatus(g.status)}；执行 ${g.turns_executed??'—'} / ${g.turns_total??'—'} 轮；通过率 ${percent(g.summary?.pass_rate)}`:'未生成评分证据'
 const readable=value=>value===undefined||value===null||value===''?'—':typeof value==='string'?value:Array.isArray(value)?value.map(readable).join('；'):Object.entries(value).map(([k,v])=>`${k}：${readable(v)}`).join('；')
+const pretty=value=>JSON.stringify(value??{},null,2)
 const failureCategoryLabel=category=>({gateway_quota_exhausted:'模型使用额度已达上限',gateway_rate_limited:'模型服务请求过于频繁',gateway_server_error:'模型网关或上游服务异常',gateway_unavailable:'模型服务连接失败',gateway_authentication:'模型服务鉴权失败',gateway_authorization:'模型服务权限不足',model_incompatible:'指定模型不存在或不兼容',agent_workspace_invalid:'Agent 工作区配置无效',agent_execution_failed:'Agent 执行失败',model_verification_failed:'精确模型核验失败',trace_key_unavailable:'运行级轨迹 Key 创建失败'}[category]||category)
 const failureTitle=(value,fallback='评测执行失败')=>value?.title||failureCategoryLabel(value?.category)||value?.summary||fallback
 const failureShortDetail=(value,fallback='')=>value?.detail||fallback||'请进入详情页查看技术信息'
@@ -125,12 +155,14 @@ const evidenceLabel=s=>({insufficient:'样本不足',exploratory:'探索性',ade
 const qualityLabel=k=>({skill_md:'SKILL.md 完整性',name:'名称定义',description:'能力描述',workflow:'工作流程',constraints:'约束条件',output_contract:'输出契约',error_handling:'异常处理',verification:'验证方法'}[k]||k)
 const qualityDescription=item=>({skill_md:'Skill 主说明文件存在且非空',name:'元数据中定义了明确名称',description:'元数据中描述了适用场景',workflow:'包含清晰的执行步骤',constraints:'明确说明边界与约束',output_contract:'定义输出或产物格式',error_handling:'说明失败与异常处理方式',verification:'说明如何验证执行结果'}[item.check]||item.description)
 const formatTime=value=>value?new Date(value).toLocaleString():'时间未记录'
-onMounted(load)
+onMounted(()=>load());onBeforeUnmount(()=>clearTimeout(refreshTimer))
 </script>
 
 <style scoped>
+.top-actions{display:flex;gap:8px}.interaction-title{display:flex;align-items:center;gap:12px;width:100%;padding-right:18px}.interaction-title span{margin-left:auto;color:var(--muted);font-size:12px}.interaction-body{display:grid;grid-template-columns:1fr 1fr;gap:12px}.interaction-body article{min-width:0}.interaction-body article>span{display:block;margin-bottom:7px;color:var(--muted);font-size:11px}.interaction-body pre{max-height:520px;margin:0;padding:14px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:8px;background:#10161d;color:#dbe5ed;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}@media(max-width:900px){.interaction-body{grid-template-columns:1fr}}
 .back-row{display:flex;justify-content:space-between}.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric-grid>div{padding:20px;background:var(--surface);border:1px solid var(--line);border-radius:13px;display:flex;flex-direction:column;gap:8px}.metric-grid span,.run-overview span,.trajectory-grid span{color:var(--muted);font-size:12px}.metric-grid b{font-size:25px}.section-head,.timeline-title,.case-title{display:flex;align-items:center;justify-content:space-between;gap:10px}.section-head>div{display:flex;flex-direction:column;gap:4px}.section-head span{color:var(--muted);font-size:12px}.run-overview{display:grid;grid-template-columns:repeat(3,1fr);gap:0}.run-overview>div{padding:10px 18px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;min-width:0}.run-overview>div:nth-child(3n){border-right:0}.run-overview>div:nth-child(n+4){margin-top:18px}.run-overview b{overflow-wrap:anywhere}.trajectory-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:26px}.trajectory-grid>div{display:flex;flex-direction:column;padding:15px;background:var(--brand-soft);border-radius:9px;gap:5px}.trajectory-grid b{font-size:22px}.trajectory-grid small{color:var(--muted)}.run-timeline{padding:4px 8px}.timeline-card{border:1px solid var(--line);border-radius:9px;padding:14px 16px;background:var(--surface)}.timeline-card p{color:var(--muted);white-space:pre-wrap;line-height:1.6}.case-title{width:100%;padding-right:16px;justify-content:flex-start}.case-index{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:var(--brand-soft);color:var(--brand);font-size:12px}.case-meta{margin-left:auto;color:var(--muted);font-size:12px}.case-body{padding:6px 10px 18px}.case-body article{padding:14px 0;border-bottom:1px solid var(--line)}.case-body article>span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.case-body p{white-space:pre-wrap;line-height:1.65;margin:7px 0 0;overflow-wrap:anywhere}.case-body .answer{background:var(--brand-soft);padding:16px;border-radius:9px;border:0}.case-body .error-box{color:var(--danger)}.case-stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;color:var(--muted);font-size:12px}.quality-list{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.quality-list>div{display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:8px;padding:13px;border:1px solid var(--line);border-radius:9px;color:var(--danger)}.quality-list>div.passed{color:var(--accent)}.quality-list span{display:flex;flex-direction:column;color:var(--text)}.quality-list small{color:var(--muted);margin-top:3px}.quality-list em{font-style:normal;font-size:12px;color:var(--muted)}@media(max-width:900px){.metric-grid,.trajectory-grid{grid-template-columns:repeat(2,1fr)}.run-overview,.quality-list{grid-template-columns:1fr}.run-overview>div{border-right:0;border-bottom:1px solid var(--line);margin-top:0!important}.case-meta{display:none}}
 .metric-grid .compact-value{font-size:14px;overflow-wrap:anywhere}.rank{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:var(--surface-2);font-weight:700}.rank.top{background:#e7f5ed;color:#17834f}.comparison-conclusion{display:flex;align-items:flex-start;gap:15px;padding:18px;background:var(--brand-soft);border-radius:10px}.comparison-conclusion>.el-icon{font-size:28px;color:#b78716}.comparison-conclusion p{margin:6px 0 0;color:var(--muted);line-height:1.6}
 .judge-summary{margin:14px 0 0;padding:14px;background:var(--brand-soft);border-radius:9px;line-height:1.65}
 .failure-alert{margin-top:-8px}.failure-cell{display:flex;flex-direction:column;gap:4px;line-height:1.35}.failure-cell b{color:var(--danger);font-size:12px}.failure-cell small{color:var(--muted);white-space:normal}
+.live-panel .section-head b{display:flex;align-items:center;gap:9px}.live-dot{width:9px;height:9px;border-radius:50%;background:#25a66a;animation:live-pulse 1.3s infinite}@keyframes live-pulse{50%{opacity:.35}}.event-stream{margin-top:16px;max-height:560px;overflow:auto;padding:8px;background:#10161d;border-radius:10px}.event-stream article{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.08);color:#dbe5ed}.event-stream article:last-child{border-bottom:0}.event-stream header{display:flex;gap:10px;align-items:center;color:#8da2b3;font-size:12px}.event-stream header b{color:#65d3a2}.event-stream header span{margin-left:auto}.event-stream header em{font-style:normal;color:#dcb568}.event-stream pre{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:inherit}.event-stream .event-assistant,.event-stream .event-model_response{border-left:3px solid #4b8ee8}.event-stream .event-user,.event-stream .event-model_request{border-left:3px solid #8c69d8}.event-stream .event-tool_call,.event-stream .event-tool_result{border-left:3px solid #d59b2b}.event-stream .event-stderr{border-left:3px solid #d84a4a;color:#f0b6b6}
 </style>

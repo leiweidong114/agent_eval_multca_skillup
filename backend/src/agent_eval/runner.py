@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from threading import Event
+from threading import Event, Thread
 from collections.abc import Callable
 
 import psutil
@@ -111,35 +111,64 @@ def _execute_process(
     cwd: Path,
     env: dict[str, str],
     cancel_event: Event | None,
+    event_callback: Callable[[str, str], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     process = subprocess.Popen(
         command,
         cwd=cwd,
         env=env,
         text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    while True:
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+
+    def consume(pipe: Any, target: list[str], stream_name: str) -> None:
         try:
-            stdout, stderr = process.communicate(timeout=0.5)
-            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
-        except subprocess.TimeoutExpired:
-            if cancel_event is None or not cancel_event.is_set():
-                continue
-            try:
-                parent = psutil.Process(process.pid)
-                descendants = parent.children(recursive=True)
-                for child in descendants:
-                    child.terminate()
-                parent.terminate()
-                _, alive = psutil.wait_procs([*descendants, parent], timeout=3)
-                for item in alive:
-                    item.kill()
-            except (psutil.Error, OSError):
-                process.kill()
-            process.communicate()
-            raise EvaluationCancelled("Evaluation was cancelled")
+            for line in iter(pipe.readline, ""):
+                target.append(line)
+                if event_callback is not None and line.strip():
+                    event_callback(stream_name, line.rstrip("\r\n"))
+        finally:
+            pipe.close()
+
+    readers = [
+        Thread(target=consume, args=(process.stdout, stdout_lines, "stdout"), daemon=True),
+        Thread(target=consume, args=(process.stderr, stderr_lines, "stderr"), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+    while process.poll() is None:
+        if cancel_event is None or not cancel_event.is_set():
+            time.sleep(0.2)
+            continue
+        try:
+            parent = psutil.Process(process.pid)
+            descendants = parent.children(recursive=True)
+            for child in descendants:
+                child.terminate()
+            parent.terminate()
+            _, alive = psutil.wait_procs([*descendants, parent], timeout=3)
+            for item in alive:
+                item.kill()
+        except (psutil.Error, OSError):
+            process.kill()
+        process.wait()
+        for reader in readers:
+            reader.join(timeout=1)
+        raise EvaluationCancelled("Evaluation was cancelled")
+    for reader in readers:
+        reader.join(timeout=2)
+    return subprocess.CompletedProcess(
+        command,
+        process.returncode,
+        "".join(stdout_lines),
+        "".join(stderr_lines),
+    )
 
 
 def _generated_case(
@@ -308,7 +337,17 @@ def build_eval_config(
             "defaults": {
                 "timeout_seconds": timeout_seconds,
                 "max_turns": max_turns,
-                "collect_artifacts": ["output/**", "outputs/**", "artifacts/**", "**/*.json"],
+                "collect_artifacts": [
+                    "out/**",
+                    "output/**",
+                    "outputs/**",
+                    "artifacts/**",
+                    "figures/**",
+                    "**/*.json",
+                    "*.md",
+                    "*.txt",
+                    "*.mmd",
+                ],
             },
             "parallelism": parallelism,
         },
@@ -346,6 +385,7 @@ def run_evaluation(
     user_id: str = "local",
     task_name: str | None = None,
     progress_callback: Callable[[str, int, str], None] | None = None,
+    event_callback: Callable[[str, str], None] | None = None,
     cancel_event: Event | None = None,
     task_id: str | None = None,
     client_task_id: str | None = None,
@@ -358,6 +398,8 @@ def run_evaluation(
             raise EvaluationCancelled("Evaluation was cancelled")
         if progress_callback is not None:
             progress_callback(phase, percent, message)
+        if event_callback is not None:
+            event_callback("phase", message)
 
     progress("preparing", 5, "Preparing isolated Skill workspace")
     user_id = _identity(user_id, field="user_id")
@@ -488,6 +530,7 @@ def run_evaluation(
         cwd=project_root,
         env=env,
         cancel_event=cancel_event,
+        event_callback=event_callback,
     )
     (result_root / "validate.stdout.log").write_text(validation.stdout, encoding="utf-8")
     (result_root / "validate.stderr.log").write_text(validation.stderr, encoding="utf-8")
@@ -571,6 +614,53 @@ def run_evaluation(
     ]
     evaluation_started_at = datetime.now(timezone.utc).replace(tzinfo=None)
     progress("running", 25, "Agent evaluation is running")
+    interaction_stop = Event()
+    interaction_thread: Thread | None = None
+    if event_callback is not None and collect_database_trace and trace_key is not None:
+        def monitor_model_interactions() -> None:
+            seen: set[tuple[str, str, int]] = set()
+            while True:
+                stopping = interaction_stop.wait(1.0)
+                try:
+                    live_rows = fetch_model_interactions(
+                        project_root,
+                        started_at=evaluation_started_at,
+                        finished_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                        model=provider_model,
+                        key_alias=trace_key.alias,
+                    )
+                    for row in live_rows:
+                        identity = (
+                            str(row.get("request_id") or ""),
+                            str(row.get("status") or ""),
+                            int(row.get("total_tokens") or 0),
+                        )
+                        if identity in seen:
+                            continue
+                        seen.add(identity)
+                        request_content = row.get("messages") or row.get("proxy_server_request")
+                        response_content = row.get("response")
+                        if request_content:
+                            event_callback(
+                                "model_request",
+                                json.dumps(request_content, ensure_ascii=False, default=str),
+                            )
+                        if response_content:
+                            event_callback(
+                                "model_response",
+                                json.dumps(response_content, ensure_ascii=False, default=str),
+                            )
+                except Exception:
+                    # Live display is best effort; final trace collection remains authoritative.
+                    pass
+                if stopping:
+                    return
+
+        interaction_thread = Thread(
+            target=monitor_model_interactions,
+            name=f"agent-eval-model-trace-{operation_id[:8]}",
+            daemon=True,
+        )
     resilience_proxy = None
     gateway_resilience: dict[str, Any] = {"status": "not_used"}
     if resolved_profile.api_base and agent in {"claude", "codex", "codebuddy", "openclaw"}:
@@ -610,12 +700,15 @@ def run_evaluation(
                 workspace=openclaw_workspace,
                 api_base_override=resilience_proxy.openai_base_url,
             )
+    if interaction_thread is not None:
+        interaction_thread.start()
     try:
         completed = _execute_process(
             command,
             cwd=project_root,
             env=env,
             cancel_event=cancel_event,
+            event_callback=event_callback,
         )
     except Exception:
         # Cancellation or a local process-launch failure must not leave the
@@ -626,6 +719,9 @@ def run_evaluation(
             pass
         raise
     finally:
+        interaction_stop.set()
+        if interaction_thread is not None:
+            interaction_thread.join(timeout=6)
         if resilience_proxy is not None:
             gateway_resilience = {"status": "completed", **resilience_proxy.stats()}
             resilience_proxy.close()

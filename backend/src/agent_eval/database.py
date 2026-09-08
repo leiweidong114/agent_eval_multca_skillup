@@ -462,8 +462,18 @@ def verify_requested_model(
             "model_group": row.get("model_group"),
             "model_id": row.get("model_id"),
         }
-        for row in rows
+        for row in successful
         if not matches(row)
+    ]
+    failed_mismatched_attempts = [
+        {
+            "request_id": row.get("request_id"),
+            "model": row.get("model"),
+            "model_group": row.get("model_group"),
+            "status": row.get("status"),
+        }
+        for row in rows
+        if row not in successful and not matches(row)
     ]
     model_matched = bool(
         successful and not mismatches and all(matches(row) for row in successful)
@@ -491,6 +501,7 @@ def verify_requested_model(
         "accepted_model_groups": sorted(groups),
         "successful_matching_calls": sum(matches(row) for row in successful),
         "mismatches": mismatches,
+        "failed_mismatched_attempts": failed_mismatched_attempts,
         "reason": reason,
         "warning": None if exact or not model_matched else (
             "The model matched only by time window; the call cannot be attributed to this run"

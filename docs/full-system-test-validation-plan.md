@@ -91,7 +91,7 @@
 | GAP-001 | P0 | OpenCode 的 GLM Profile 仍指向 `glm-4.7-no-thinking` | 改为保留 reasoning 的路由，并通过 reasoning + tool + final 协议回归 |
 | GAP-002 | P0 | 历史最新六 Agent 批次不是稳定 6/6；JustDo 存在随机性 | 同一版本下完成稳定性门槛，不拼接不同批次的单项成功记录冒充 6/6 |
 | GAP-003 | P0 | 当前运行中的 `/api/agents`、`/api/models` 实测返回 HTTP 502 | 清理端口/进程状态后，真实后端和前端代理均返回正确结果 |
-| GAP-004 | P1 | README/安装脚本约定 `backend/.runtime`，当前机器主要存在根目录 `.runtime` | 统一运行时位置，`doctor`、README、脚本、服务进程和 CI 使用同一路径 |
+| GAP-004 | P1 | **已关闭（2026-09-08）**：旧版曾同时使用根目录和 `backend/` 下的运行时 | 已统一到 `backend/.runtime` 与 `backend/.tools`，并取消运行时发现的根目录回退；后续按 `project-structure.md` 检查 |
 | GAP-005 | P1 | 隔离 Python 曾缺少 `httpx`，说明环境可能依赖系统 Python 兜底 | 新机器只执行 setup 后即可运行 CLI、后端和测试，不依赖 Anaconda 隐式兜底 |
 | GAP-006 | P1 | CLI 没有 `models`、六 Agent `batch` 和真正的一键 `quickstart` | 增加命令、帮助、退出码、JSON 输出和自动化测试 |
 | GAP-007 | P1 | 前端 `package.json` 只有 build/dev/preview，没有单元或 E2E 测试脚本 | 增加 Vitest（组件）与 Playwright（真实浏览器）测试和 CI 命令 |
@@ -141,7 +141,8 @@ Set-Location backend
 .\.runtime\windows\python\Scripts\agent-eval.exe doctor
 ```
 
-如果最终决定运行时位于项目根目录，应同时修改脚本与文档，不能继续保留两套路径。
+运行时位置已确定为 `backend/.runtime` 和 `backend/.tools`。仓库根目录不得再创建兼容副本；完整约定见
+[`project-structure.md`](project-structure.md)。
 
 ### 阶段 B：离线单元测试与静态契约
 

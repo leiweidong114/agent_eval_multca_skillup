@@ -87,7 +87,7 @@ def test_runtime_managed_models_require_explicit_opt_out(agent):
     validate_evaluation_capabilities(agent, require_model_selection=False)
 
 
-def test_runtime_discovery_supports_backend_layout_and_legacy_parent(tmp_path):
+def test_runtime_discovery_uses_backend_layout(tmp_path):
     backend = tmp_path / "backend"
     tool_relative = (
         ("windows", "skill-up.exe") if os.name == "nt" else ("linux", "skill-up")
@@ -106,14 +106,3 @@ def test_runtime_discovery_supports_backend_layout_and_legacy_parent(tmp_path):
     backend_runtime.touch()
     assert find_skill_up(backend) == backend_tool.resolve()
     assert find_multica_runtime(backend) == backend_runtime.resolve()
-
-    backend_tool.unlink()
-    backend_runtime.unlink()
-    legacy_tool = tmp_path / ".tools" / tool_relative[0] / tool_relative[1]
-    legacy_runtime = tmp_path / ".runtime" / runtime_relative[0] / "bin" / runtime_relative[1]
-    legacy_tool.parent.mkdir(parents=True)
-    legacy_runtime.parent.mkdir(parents=True)
-    legacy_tool.touch()
-    legacy_runtime.touch()
-    assert find_skill_up(backend) == legacy_tool.resolve()
-    assert find_multica_runtime(backend) == legacy_runtime.resolve()

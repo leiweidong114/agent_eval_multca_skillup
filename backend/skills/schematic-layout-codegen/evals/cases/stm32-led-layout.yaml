@@ -1,0 +1,52 @@
+id: stm32-led-layout
+title: Generate subagent slices and a valid schematic layout
+description: Verifies the mandatory subagent execution pattern and automatic-layout quality gates.
+input:
+  prompt: |
+    Use the installed schematic-layout-codegen Skill with input/sheets.json.
+    For sheet S1 run codegen_base.py, then have subagents write every generated slice Python file. Run exactly two subagents concurrently per batch and never write slice connect code in the main Agent.
+    Parse-check all fragments, run layout_sheet.py, and repair any HTTP 422 response in a fresh responsible subagent.
+    Produce out/frags/S1/base.txt, out/frags/S1/slices.json, all slice .py files, and out/layout/S1.json. Do not finish until component_overlap_count=0 and unrouted_net_count=0.
+context:
+  files:
+    input/sheets.json: |
+      {
+        "schema_version": "1",
+        "project": "stm32_led_layout_eval",
+        "description": "Small MCU and indicator layout",
+        "sheets": [{
+          "sheet_id": "S1",
+          "title": "STM32 LED",
+          "main_chip": {"instance": "U1", "library_id": "MCU_ST_STM32F1:STM32F103C8Tx"},
+          "components": [
+            {"instance": "U1", "library_id": "MCU_ST_STM32F1:STM32F103C8Tx", "value": "STM32F103C8Tx", "pins": ["10", "23"], "group": "", "is_main": true},
+            {"instance": "R1", "library_id": "Device:R", "value": "470R", "pins": ["1", "2"], "group": "LED_0", "is_main": false},
+            {"instance": "LED1", "library_id": "Device:LED", "value": "LED_RED", "pins": ["1", "2"], "group": "LED_0", "is_main": false}
+          ],
+          "nets": [
+            {"name": "LED0_DRIVE", "type": "signal", "priority": 3, "pins": [{"instance": "U1", "pin": "10"}, {"instance": "R1", "pin": "1"}]},
+            {"name": "LED0_ANODE", "type": "signal", "priority": 3, "pins": [{"instance": "R1", "pin": "2"}, {"instance": "LED1", "pin": "2"}]},
+            {"name": "GND", "type": "ground", "priority": 5, "pins": [{"instance": "U1", "pin": "23"}, {"instance": "LED1", "pin": "1"}]}
+          ]
+        }]
+      }
+constraints:
+  timeout_seconds: 1800
+  max_turns: 24
+expect:
+  exit_code: 0
+  files_exist:
+    - out/frags/S1/base.txt
+    - out/frags/S1/slices.json
+    - out/layout/S1.json
+  file_contains:
+    - path: out/layout/S1.json
+      content: component_overlap_count
+    - path: out/layout/S1.json
+      content: unrouted_net_count
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0
+    - files_exist:
+        - out/layout/S1.json

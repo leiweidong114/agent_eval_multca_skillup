@@ -45,6 +45,9 @@ def test_eval_config_uses_local_multica_without_auth_or_database(tmp_path):
     assert "database" not in encoded
     assert "litellm" not in encoded
     assert "system_prompt" not in encoded
+    artifacts = config["cases"]["defaults"]["collect_artifacts"]
+    assert "out/**" in artifacts
+    assert "figures/**" in artifacts
 
 
 def test_specified_model_and_skill_config_matrix_covers_every_capable_agent(tmp_path):
@@ -188,6 +191,21 @@ def test_background_process_can_be_cancelled(tmp_path):
             env=dict(os.environ),
             cancel_event=cancelled,
         )
+
+
+def test_process_output_is_forwarded_as_live_events(tmp_path):
+    events = []
+    result = _execute_process(
+        [sys.executable, "-c", "import sys; print('model says hi'); print('tool warning', file=sys.stderr)"],
+        cwd=tmp_path,
+        env=dict(os.environ),
+        cancel_event=None,
+        event_callback=lambda kind, content: events.append((kind, content)),
+    )
+
+    assert result.returncode == 0
+    assert ("stdout", "model says hi") in events
+    assert ("stderr", "tool warning") in events
 
 
 @pytest.mark.parametrize(

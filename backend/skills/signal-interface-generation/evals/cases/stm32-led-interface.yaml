@@ -1,0 +1,28 @@
+id: stm32-led-interface
+title: Generate and validate an STM32 LED interface plan
+description: Checks catalog grounding, global naming, grouping, machine-readable sheets, and Markdown output.
+input:
+  prompt: |
+    Use the installed signal-interface-generation Skill to define the signal/interface plan for an STM32F103C8T6 minimum system with SWD, reset, 8 MHz crystal, 5 V to 3.3 V power, a power LED, and a GPIO-driven red LED through 470 ohms.
+    Fetch the live component catalog first. Use no component or pin absent from that catalog.
+    Write out/catalog.json, out/sheets.json, and one Markdown table per sheet under out/sheets_markdown/. Run validate_sheets.py and fix all errors before finishing.
+    Ensure references are globally unique, non-main parts have groups, net names satisfy the Skill contract, and every used pin is represented exactly once in the intended network.
+constraints:
+  timeout_seconds: 900
+  max_turns: 16
+expect:
+  exit_code: 0
+  files_exist:
+    - out/catalog.json
+    - out/sheets.json
+  file_contains:
+    - path: out/sheets.json
+      content: '"schema_version"'
+    - path: out/sheets.json
+      content: '"sheets"'
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0
+    - files_exist:
+        - out/sheets.json

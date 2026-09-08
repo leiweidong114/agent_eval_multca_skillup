@@ -1,0 +1,32 @@
+id: stm32-minimum-system-e2e
+title: STM32 minimum system four-Skill end-to-end evaluation
+description: Verifies interface planning, two-at-a-time subagent code generation, automatic layout, and web application.
+input:
+  prompt: |
+    Use the installed schematic-pipeline Skill and every required child Skill to design a small STM32F103C8T6 minimum-system board.
+    Include 5 V input and 3.3 V regulation, power LED, SWD header, 8 MHz crystal with load capacitors, reset button, and one GPIO-driven red LED with a 470 ohm resistor.
+    Check http://127.0.0.1:8631/api/health first and use only components present in the fetched catalog.
+    Create the exact out/ artifact tree required by the Skill. Generate and validate sheets.json in the main Agent; perform every layout code slice in subagents with exactly two concurrent subagents per batch; then apply all layout JSON files to the web service.
+    Do not claim success unless every sheet has component_overlap_count=0 and unrouted_net_count=0, the page count matches the sheet count, and apply_result.json contains an accessible URL.
+    Finish with a table of sheet metrics plus the URL and paths to sheets.json, fragment code, layout JSON, and apply_result.json.
+constraints:
+  timeout_seconds: 3600
+  max_turns: 30
+expect:
+  exit_code: 0
+  files_exist:
+    - out/catalog.json
+    - out/sheets.json
+    - out/apply_result.json
+  file_contains:
+    - path: out/sheets.json
+      content: schema_version
+    - path: out/apply_result.json
+      content: url
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0
+    - files_exist:
+        - out/sheets.json
+        - out/apply_result.json

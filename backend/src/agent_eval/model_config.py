@@ -111,6 +111,41 @@ def _write_yaml(path: Path, value: dict[str, Any]) -> None:
     _atomic_write(path, yaml.safe_dump(value, allow_unicode=True, sort_keys=False))
 
 
+def load_runtime_settings(project_root: Path) -> dict[str, str]:
+    """Load non-secret Web/CLI model preferences from an ignored local file."""
+    path = project_root / "config" / "runtime-settings.json"
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(value, dict):
+        return {}
+    return {
+        name: str(value.get(name) or "").strip()
+        for name in ("judge_model", "agent_test_model")
+        if str(value.get(name) or "").strip()
+    }
+
+
+def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> dict[str, str]:
+    """Persist model choices without changing credentials or provider routing."""
+    settings: dict[str, str] = {}
+    for name in ("judge_model", "agent_test_model"):
+        value = str(values.get(name) or "").strip()
+        if not value:
+            raise ValueError(f"{name} is required")
+        if len(value) > 300 or any(char in value for char in "\r\n\0"):
+            raise ValueError(f"Invalid {name}")
+        settings[name] = value
+    _atomic_write(
+        project_root / "config" / "runtime-settings.json",
+        json.dumps(settings, ensure_ascii=False, indent=2) + "\n",
+    )
+    return settings
+
+
 def _validate_profile_name(name: str) -> str:
     normalized = name.strip()
     if not PROFILE_NAME_RE.fullmatch(normalized):

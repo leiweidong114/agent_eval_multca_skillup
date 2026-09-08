@@ -1,4 +1,4 @@
-# 运行时产物（后端 backend/ 及根目录均忽略）
+# 运行时产物（规范位置在 backend/；根目录规则仅阻止旧版工具误提交）
 .runtime/
 .tools/
 runs/
@@ -7,6 +7,7 @@ backend/evaluation_results/
 backend/config/local.yaml
 backend/config/secrets.env
 backend/config/litellm.env
+backend/config/runtime-settings.json
 backend/schematic_projects/
 backend/skills/.registry/
 backend/model_eval_data/

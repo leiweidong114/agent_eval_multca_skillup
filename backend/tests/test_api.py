@@ -9,6 +9,7 @@ client = TestClient(app)
 
 def test_health_and_discovery_endpoints(monkeypatch):
     monkeypatch.setenv("LITELLM_JUDGE_MODEL", "test-judge-model")
+    monkeypatch.setattr("app.api.routes_skill.load_runtime_settings", lambda root: {})
     assert client.get("/api/health").json()["status"] == "ok"
     agents = client.get("/api/agents")
     assert agents.status_code == 200
@@ -33,6 +34,46 @@ def test_database_health_never_exposes_credentials_or_crashes():
     assert payload["status"] in {"ok", "error", "disabled"}
     assert "password" not in payload
     assert "database_url" not in payload
+
+
+def test_runtime_settings_save_non_secret_default_models(tmp_path, monkeypatch):
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "models.yaml").write_text(
+        "litellm:\n  model: fallback-model\n  api_base: https://gateway.example/v1\n  api_key_env: LITELLM_API_KEY\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.api.routes_skill.BACKEND_ROOT", tmp_path)
+    response = client.put(
+        "/api/settings",
+        json={"judge_model": "judge-model", "agent_test_model": "agent-model"},
+    )
+
+    assert response.status_code == 200
+    assert client.get("/api/settings").json()["judge_model"] == "judge-model"
+    saved = (config / "runtime-settings.json").read_text(encoding="utf-8")
+    assert "judge-model" in saved
+    assert "api_key" not in saved.lower()
+
+
+def test_batch_model_probe_endpoint_returns_real_probe_summary(monkeypatch):
+    monkeypatch.setattr(
+        "app.api.routes_skill.refresh_litellm_model_catalog",
+        lambda root, **kwargs: {
+            "connectivity_tested": True,
+            "available_model_count": 2,
+            "unavailable_model_count": 1,
+            "models": [{"id": "a", "available": True}, {"id": "b", "available": True}],
+            "unavailable_models": [{"id": "c", "available": False}],
+        },
+    )
+    response = client.post(
+        "/api/models/test-batch",
+        json={"workers": 4, "timeout_seconds": 12},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["available_model_count"] == 2
 
 
 def test_run_rejects_an_unsupported_model_or_skill_contract_before_queueing():
@@ -71,6 +112,48 @@ def test_skill_files_can_be_read_without_escaping_the_skill_root():
 
     escaped = client.get("/api/skills/example-marker/files/../config/models.yaml")
     assert escaped.status_code in {400, 404}
+
+
+def test_skill_delete_requires_confirmation_and_removes_folder(tmp_path, monkeypatch):
+    skills_root = tmp_path / "skills"
+    target = skills_root / "temporary-skill"
+    target.mkdir(parents=True)
+    (target / "SKILL.md").write_text("---\nname: temporary-skill\ndescription: test\n---\n", encoding="utf-8")
+    monkeypatch.setattr("app.skill_registry.SKILLS_ROOT", skills_root)
+
+    rejected = client.request(
+        "DELETE", "/api/skills/temporary-skill", json={"confirm": False}
+    )
+    assert rejected.status_code == 400
+    assert target.is_dir()
+
+    response = client.request(
+        "DELETE", "/api/skills/temporary-skill", json={"confirm": True}
+    )
+    assert response.status_code == 200
+    assert response.json()["deleted"] is True
+    assert not target.exists()
+
+
+def test_run_interactions_and_open_folder_are_scoped_to_result_dir(tmp_path, monkeypatch):
+    run_dir = tmp_path / "local" / "schematic" / "20260908-120000__run-safe"
+    run_dir.mkdir(parents=True)
+    trace = run_dir / "model-interactions.json"
+    trace.write_text('[{"request_id":"req-1","status":"success"}]', encoding="utf-8")
+    (run_dir / "evaluation-report.json").write_text(
+        '{"run_id":"run-safe","database_trace_file":"' + str(trace).replace("\\", "\\\\") + '"}',
+        encoding="utf-8",
+    )
+    opened = []
+    monkeypatch.setattr("app.api.routes_runs.RUNS_ROOT", tmp_path)
+    monkeypatch.setattr("app.api.routes_runs.os.startfile", lambda path: opened.append(path))
+
+    response = client.get("/api/runs/run-safe/interactions")
+    assert response.status_code == 200
+    assert response.json()["items"][0]["request_id"] == "req-1"
+    response = client.post("/api/runs/run-safe/open-folder")
+    assert response.status_code == 200
+    assert opened == [str(run_dir.resolve())]
 
 
 def test_batch_rejects_duplicate_combinations_before_queueing():

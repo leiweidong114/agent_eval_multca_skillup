@@ -9,36 +9,80 @@
 - PostgreSQL 作为指定模型硬校验的数据源；默认要求数据库精确确认当前任务实际调用了指定模型。
 - 内嵌 Prism Eval 模型与题库评测子系统，支持标准/私有题库、模型与 Agent 接入、实验对比、逐题证据和导出。
 
-## 项目结构（dev 分支，前后端分离）
-
-本分支在原有 CLI 工具基础上新增了前后端分离的 Web 界面：
+## 项目结构（前后端分离 + 本地评测运行时）
 
 ```text
 agent_eval_multca_skillup/
-├── backend/                 # 后端（Python + FastAPI）
-│   ├── app/
-│   │   ├── main.py          # FastAPI 入口（含 CORS、路由装配）
-│   │   ├── config.py        # 后端路径配置
-│   │   └── api/             # REST 接口
-│   │       ├── routes_eval.py    # 评测运行 /api/run、/api/validate
-│   │       ├── routes_skill.py   # Skill/Agent 发现 /api/skills、/api/agents
-│   │       ├── routes_schematic.py # 原理图生成、工程读取与 JSON 专项 Judge
-│   │       └── routes_runs.py    # 历史记录 /api/runs、/api/runs/{id}
-│   ├── src/                 # 原有 agent_eval 评测核心逻辑
-│   ├── tests/               # 原有单元测试
-│   ├── skills/              # 评测用 Skill（example-marker）
-│   ├── run_server.py        # 后端启动脚本
-│   └── requirements.txt     # Web 后端依赖（fastapi/uvicorn）
-├── frontend/                # 前端（Vue 3 + Vite + Element Plus）
-│   ├── src/
-│   │   ├── views/           # 首页、新建评测、题库/Skill/结果/运行环境六类页面
-│   │   ├── components/      # 评分卡片等组件
-│   │   └── api/             # axios 封装
-│   ├── vite.config.js       # dev 代理 /api -> http://127.0.0.1:8000
-│   └── package.json
-├── tests_reports/           # 各步骤测试报告
-└── README.md
+├── backend/                  # 后端：FastAPI Web 服务 + 评测核心 + 运行时
+│   ├── app/                  # Web 层（路由装配、Skill 注册、任务管理、评测 API）
+│   │   ├── main.py           # FastAPI 入口（含 CORS、路由装配）
+│   │   ├── config.py         # 后端路径配置
+│   │   ├── skill_registry.py # Skill 上传/ZIP 校验/版本与组合
+│   │   ├── job_manager.py / retention.py / model_eval.py
+│   │   └── api/              # REST 路由（routes_eval/routes_skill/routes_runs/routes_schematic）
+│   ├── src/                  # 原有 agent_eval 评测核心逻辑（CLI 引擎、评分、报告）
+│   ├── tests/                # 后端/评测核心 Python 单元测试
+│   ├── skills/               # 评测用 Skill 仓库（SKILL.md + scripts/references/evals）
+│   │   ├── api-test-suite-builder/  webapp-testing/   # Web/API 自动化测试类技能
+│   │   ├── docx/  xlsx/  example-marker/              # 文档/表格/标记样例技能
+│   │   ├── signal-interface-generation/                # 自然语言 → 多 sheet 信号接口表
+│   │   ├── schematic-layout-codegen/                   # sheets → Python DSL → auto_layout 布局
+│   │   ├── schematic-web-apply/                        # 布局 JSON → 网页 URL
+│   │   └── schematic-pipeline/                         # 上述三步的总编排（subagent 并行）
+│   ├── config/               # 模型/数据库/环境配置（models.yaml、database.yaml、local.yaml）
+│   ├── scripts/              # 运维脚本（setup_windows.ps1、setup_linux.sh、install_skillup_windows.ps1 等）
+│   ├── patches/              # 对第三方运行时的 Windows 补丁（skill-up custom-engine patch）
+│   ├── runtime/              # Windows/Linux 本地运行时（Go、Multica、Skill-Up、venv）
+│   ├── fixtures/             # 评测/测试夹具
+│   ├── model_eval_data/      # Prism 题库引擎独立数据（maeval.db、密钥、结果）
+│   ├── evaluation_results/   # Skill 评测结果归档（用户/任务/时间__run_id/…）
+│   ├── runs/                 # 运行历史（job/日志/报告）
+│   ├── schematic_projects/   # 原理图生成工程产物（每工程 JSON）
+│   ├── schematic_demo/       # 原理图示例工程
+│   ├── run_server.py         # 后端启动脚本
+│   ├── pyproject.toml / requirements.txt
+├── frontend/                 # 前端（Vue 3 + Vite + Element Plus）
+│   ├── src/views/            # 首页、新建评测、题库/Skill/结果/运行环境等页面
+│   ├── src/components/ api/ router/ styles
+│   ├── vite.config.js        # dev 代理 /api -> http://127.0.0.1:8000
+│   └── dist/                 # 构建产物
+├── docs/                     # 设计/契约/验证文档
+│   ├── full-system-test-validation-plan.md / evaluation-scoring-and-agent-contract.md
+│   ├── cli-complete-guide.md / cli-model-probe.md / 20260907-system-verification-report.md
+├── figures/                  # 架构图/流程图与图源（png/mmd/md）
+├── runs/                     # 评测运行归档（汇总报告/产物）
+├── skills/                   # 顶层示例技能（example-marker），便于外部直接引用
+├── test/                     # 系统级验证脚本（verify_system.py 等）
+├── tests_reports/            # 各阶段测试报告（每子目录一次测试/一轮矩阵/一次 demo）
+├── README.md                 # 项目说明（本文档）
+└── VERSION.md                # 版本记录
 ```
+
+### 各文件夹作用速查
+
+| 文件夹 | 作用 |
+|---|---|
+| `backend/` | Python 后端：评测 API、Skill 平台、Prism 题库、本地运行时管理、评测核心逻辑与归档。 |
+| `backend/app/` | FastAPI Web 应用层：路由、Skill 注册/组合、任务队列、保留策略、模型评测装配。 |
+| `backend/app/api/` | REST 路由：`routes_eval`(评测)、`routes_skill`(技能/代理)、`routes_runs`(历史)、`routes_schematic`(原理图工程/Judge)。 |
+| `backend/src/` | 评测核心引擎（agent-eval CLI 逻辑），被 Web 层复用。 |
+| `backend/skills/` | 评测用技能库；每个目录是一个可被评测隔离复制的 Skill（`SKILL.md` 描述流程与产物）。新增技能即放这里。 |
+| `backend/config/` | 模型 profile、数据库等配置；`local.yaml/secrets.env` 属被 Git 忽略的本地敏感配置。 |
+| `backend/scripts/` | 安装/维护脚本：`setup_windows.ps1`、`setup_linux.sh`、`install_skillup_windows.ps1` 等。 |
+| `backend/patches/` | Windows 平台对第三方组件（如 Skill-Up）的补丁。 |
+| `backend/runtime/` | 项目专属运行时：独立 Go、Multica 源码与编译产物、Skill-Up、Python venv（Windows/Linux 分离）。 |
+| `backend/tests/`、`backend/fixtures/` | 单元测试与测试夹具。 |
+| `backend/evaluation_results/`、`backend/runs/` | 评测产物/历史归档（隔离副本、报告、交互记录）。 |
+| `backend/schematic_projects/`、`backend/schematic_demo/` | 原理图工程与示例产物（供网页打开）。 |
+| `backend/model_eval_data/` | Prism 题库子系统独立数据（题库、加密密钥、结果证据）。 |
+| `frontend/` | Vue3+Vite 前端：评测/题库/Skill/结果等页面，`/api` 代理到 8000。 |
+| `docs/` | 架构、评分契约、CLI 指南与系统验证文档。 |
+| `figures/` | 架构/流程配图（mmd 源与 PNG）。 |
+| `runs/`（根） | 运行历史/汇总产物归档。 |
+| `skills/`（根） | 顶层示例技能 `example-marker`，供外部用户直接引用。 |
+| `test/` | 系统级验证脚本（`verify_system.py`、`browser_smoke.cjs` 等）。 |
+| `tests_reports/` | 各阶段测试报告，每子目录一次测试/评测矩阵/端到端 demo（含原理图 4-Skill demo、TX 射频 demo）。 |
+| `README.md` / `VERSION.md` | 项目说明与版本记录。 |
 
 ### 后端接口
 
@@ -265,22 +309,13 @@ $env:LITELLM_MASTER_KEY = "你的 LiteLLM Master Key"
 PostgreSQL 暂态连接错误会自动重试 4 次。任务报告中的 `gateway_resilience`、`failure`
 和 `trace_key_cleanup` 分别记录网关重试、失败分类/可重试性和虚拟 Key 清理结果。
 
-## 原理图完整 Skill 与专项 Judge
+## 原理图能力现状
 
-内置 Skill 位于 `backend/skills/schematic-generation`，包含 147 示例、格式契约、流水线脚本和专项 Judge。可脱离 Agent 单独验证：
+Web 后端仍保留 `/api/schematic/*` 与 `/schematic` 前端页面（工程读取、专项 Judge），接口实现见 `backend/app/api/routes_schematic.py`。注意：旧的 `backend/skills/schematic-generation` 技能目录当前已不在仓库，凡引用该路径的 CLI/脚本需先恢复对应技能目录才能运行。
 
-```powershell
-python backend/skills/schematic-generation/scripts/schematic_pipeline.py `
-  --input backend/skills/schematic-generation/assets/example_block_diagram.json `
-  --output backend/schematic_projects/demo/generated
-python backend/skills/schematic-generation/scripts/schematic_judge.py `
-  --input backend/skills/schematic-generation/assets/example_block_diagram.json `
-  --output backend/schematic_projects/demo/generated
-```
+当前仓库内置的原理图相关技能为下方"原理图整版生成"流水线的 4 个 Skill（`signal-interface-generation` → `schematic-layout-codegen` → `schematic-web-apply`，由 `schematic-pipeline` 编排），它们对接外部 `auto_layout_service` 双服务。
 
-网页 `/schematic` 可编辑/展示框图，执行信号接口提取、公共/私有 CBB 分流、器件并行生成、整版 JSON 打包和专项评分，并返回 `/schematic?project=<id>` 工程 URL。Judge 总分 100：器件 25、引脚 15、连线拓扑 40、网络名 15、Schema/过程产物 5。
-
-## 原理图整版生成（auto_layout 服务 + 4 Skills，开发中）
+## 原理图整版生成（auto_layout 服务 + 4 Skills）
 
 外部服务与自动布局算法位于 `D:\AI_FOR_WORLD\14_AI_workspace\common_tools\自动布局算法\auto_layout_service`（FastAPI，端口 8631）：
 
@@ -296,7 +331,9 @@ schematic-web-apply/           布局 JSON → apply_schematic → URL
 schematic-pipeline/            以上三步的总编排 SKILL
 ```
 
-端到端 demo（STM32F103C8Tx + 8×LED）见 `tests_reports/20260903_schematic_pipeline_demo/report.md`。
+端到端 demo：
+- `tests_reports/20260903_schematic_pipeline_demo/report.md` —— STM32F103C8Tx + 8×LED（流水线全链路）。
+- `tests_reports/20260903_tx_simple_demo/report.md` —— 简化 TX 射频（控制/电源/功放/滤波四块；器件库已由 17 扩至 20，新增 RFM95W-868S2、Filter_EMI_CLC、Antenna）。
 
 ## Windows 安装
 

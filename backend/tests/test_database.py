@@ -127,6 +127,21 @@ def test_requested_model_verification_reports_mismatch():
     assert result["mismatches"][0]["request_id"] == "req-2"
 
 
+def test_failed_request_to_another_model_is_diagnostic_not_a_successful_model_mismatch():
+    result = verify_requested_model(
+        [
+            {"request_id": "ok", "status": "success", "model": "glm-4.5-air", "model_group": "glm-4.5-air"},
+            {"request_id": "failed", "status": "failure", "model": "gpt-5.5", "model_group": ""},
+        ],
+        expected_model="glm-4.5-air",
+        exact=True,
+    )
+
+    assert result["verified"] is True
+    assert result["mismatches"] == []
+    assert result["failed_mismatched_attempts"][0]["request_id"] == "failed"
+
+
 def test_database_retry_recovers_from_transient_connection_failure(monkeypatch):
     attempts = 0
 

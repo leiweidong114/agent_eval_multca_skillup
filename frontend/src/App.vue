@@ -9,6 +9,7 @@
       <el-menu-item index="/skills"><el-icon><MagicStick /></el-icon><span>Skill 管理</span></el-menu-item>
       <el-menu-item index="/results"><el-icon><Clock /></el-icon><span>评测结果</span></el-menu-item>
       <el-menu-item index="/runtimes"><el-icon><Cpu /></el-icon><span>模型与 Agent</span></el-menu-item>
+      <el-menu-item index="/settings"><el-icon><Setting /></el-icon><span>设置</span></el-menu-item>
     </el-menu>
     <div class="side-foot"><span class="dot ok"></span><div>服务运行状态<small>本地评测服务已连接</small></div></div>
   </aside>

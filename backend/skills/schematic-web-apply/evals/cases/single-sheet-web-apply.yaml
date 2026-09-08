@@ -1,0 +1,40 @@
+id: single-sheet-web-apply
+title: Apply one layout as a web schematic project
+description: Checks Service 2 integration, persisted response metadata, and final URL delivery.
+input:
+  prompt: |
+    Use the installed schematic-web-apply Skill. Check http://127.0.0.1:8631/api/health, then apply every JSON file under input/layout/ as a project titled "Skill evaluation schematic".
+    Write the complete service response to out/apply_result.json. Verify that it contains project_id, url, and sheet_count=1, and open or request the URL to verify that the page is reachable before reporting success.
+    Return the exact URL and output path.
+context:
+  files:
+    input/layout/S1.json: |
+      {
+        "title": "LED indicator",
+        "components": [],
+        "wires": [],
+        "metrics": {
+          "component_overlap_count": 0,
+          "wire_crossing_count": 0,
+          "unrouted_net_count": 0,
+          "wire_length": 0
+        }
+      }
+constraints:
+  timeout_seconds: 600
+  max_turns: 12
+expect:
+  exit_code: 0
+  files_exist:
+    - out/apply_result.json
+  file_contains:
+    - path: out/apply_result.json
+      content: project_id
+    - path: out/apply_result.json
+      content: url
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0
+    - files_exist:
+        - out/apply_result.json

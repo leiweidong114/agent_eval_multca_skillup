@@ -41,6 +41,8 @@ class EvaluationJobManager:
                 job = json.loads(path.read_text(encoding="utf-8"))
                 if job.get("status") in {"queued", "running", "cancelling"}:
                     job.update(status="interrupted", message="Service restarted during evaluation")
+                job.setdefault("events", [])
+                job.setdefault("event_seq", len(job["events"]))
                 self._jobs[job["job_id"]] = job
             except (OSError, ValueError, KeyError):
                 continue
@@ -75,13 +77,14 @@ class EvaluationJobManager:
             "user_id": request.get("user_id", "local"),
             "task_name": request.get("task_name") or skill_dir.name,
             "model": request.get("model"), "profile": request.get("profile"),
-            "result": None, "error": None,
+            "result": None, "error": None, "events": [], "event_seq": 0,
         }
         cancel = threading.Event()
         with self._lock:
             self._jobs[job_id] = job
             self._cancel[job_id] = cancel
             self._save(job)
+        self._append_event(job_id, "phase", "任务已进入评测队列", phase="queued")
         self._executor.submit(self._run, job_id, request, skill_dir, cancel)
         return dict(job)
 
@@ -116,11 +119,96 @@ class EvaluationJobManager:
             job.update(values, updated_at=datetime.now().isoformat())
             self._save(job)
 
+    def _append_event(self, job_id: str, kind: str, content: str, **metadata: Any) -> None:
+        text = str(content or "").strip()
+        if not text:
+            return
+        with self._lock:
+            job = self._jobs[job_id]
+            sequence = int(job.get("event_seq") or 0) + 1
+            job["event_seq"] = sequence
+            event = {
+                "sequence": sequence,
+                "timestamp": datetime.now().isoformat(),
+                "kind": kind,
+                "content": text[:12000],
+                **metadata,
+            }
+            events = list(job.get("events") or [])
+            events.append(event)
+            job["events"] = events[-1000:]
+            job["updated_at"] = event["timestamp"]
+            self._save(job)
+
+    @staticmethod
+    def _transcript_messages(payload: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
+        message = payload.get("message") if isinstance(payload.get("message"), dict) else payload
+        role = str(message.get("role") or payload.get("type") or "interaction").lower()
+        content = message.get("content")
+        blocks = content if isinstance(content, list) else [content]
+        result: list[tuple[str, str, dict[str, Any]]] = []
+        for block in blocks:
+            if isinstance(block, str) and block.strip():
+                result.append((role if role in {"user", "assistant"} else "interaction", block, {}))
+            elif isinstance(block, dict):
+                block_type = str(block.get("type") or "")
+                text = block.get("text") or block.get("content")
+                if text:
+                    result.append((role if role in {"user", "assistant"} else "interaction", str(text), {}))
+                elif block_type in {"tool_use", "tool_call"}:
+                    result.append(("tool_call", json.dumps(block.get("input") or block.get("arguments") or {}, ensure_ascii=False), {"tool": block.get("name") or block.get("tool")}))
+                elif block_type in {"tool_result", "function_call_output"}:
+                    result.append(("tool_result", str(block.get("output") or block.get("content") or ""), {"tool_call_id": block.get("tool_use_id") or block.get("call_id")}))
+        return result
+
+    def _monitor_transcripts(self, job_id: str, stop: threading.Event) -> None:
+        offsets: dict[Path, int] = {}
+        run_dir: Path | None = None
+        while True:
+            stopping = stop.wait(0.4)
+            if run_dir is None:
+                run_dir = next(RUNS_ROOT.glob(f"*/*/*__{job_id}"), None)
+                if run_dir is None:
+                    if stopping:
+                        return
+                    continue
+            for path in run_dir.rglob("*.jsonl"):
+                try:
+                    with path.open("r", encoding="utf-8", errors="replace") as stream:
+                        stream.seek(offsets.get(path, 0))
+                        for line in stream:
+                            try:
+                                payload = json.loads(line)
+                            except ValueError:
+                                continue
+                            if not isinstance(payload, dict):
+                                continue
+                            for kind, content, metadata in self._transcript_messages(payload):
+                                self._append_event(job_id, kind, content, source=path.name, **metadata)
+                        offsets[path] = stream.tell()
+                except OSError:
+                    continue
+            if stopping:
+                return
+
     def _run(self, job_id: str, request: dict[str, Any], skill_dir: Path, cancel: threading.Event) -> None:
         self._update(job_id, status="running", phase="preparing", progress=1)
+        self._append_event(job_id, "phase", "评测 Worker 已启动", phase="preparing")
 
         def on_progress(phase: str, percent: int, message: str) -> None:
             self._update(job_id, phase=phase, progress=percent, message=message)
+
+        def on_event(kind: str, content: str) -> None:
+            self._append_event(job_id, kind, content)
+
+        monitor_stop = threading.Event()
+        monitor = threading.Thread(
+            target=self._monitor_transcripts,
+            args=(job_id, monitor_stop),
+            name=f"agent-eval-trace-{job_id[:8]}",
+            daemon=True,
+        )
+        monitor.start()
 
         try:
             result = run_evaluation(
@@ -138,6 +226,7 @@ class EvaluationJobManager:
                 require_model_verification=request.get("require_model_verification", True),
                 run_id=job_id, task_id=job_id,
                 progress_callback=on_progress, cancel_event=cancel,
+                event_callback=on_event,
                 user_id=request.get("user_id", "local"),
                 task_name=request.get("task_name") or skill_dir.name,
                 client_task_id=request.get("client_task_id"),
@@ -178,10 +267,16 @@ class EvaluationJobManager:
                 message=(failure or {}).get("detail") or "Evaluation failed",
                 error=(failure or {}).get("detail") or str(exc), failure=failure,
             )
+        finally:
+            monitor_stop.set()
+            monitor.join(timeout=2)
 
     def list(self, user_id: str | None = None) -> list[dict[str, Any]]:
         with self._lock:
-            items = (dict(item) for item in self._jobs.values())
+            items = (
+                {**item, "event_count": len(item.get("events") or []), "events": None}
+                for item in self._jobs.values()
+            )
             if user_id is not None:
                 items = (item for item in items if item.get("user_id") == user_id)
             return sorted(items, key=lambda x: x["created_at"], reverse=True)

@@ -162,17 +162,11 @@ def validate_evaluation_capabilities(
 
 
 def find_skill_up(project_root: Path) -> Path:
-    roots = [project_root]
-    if project_root.name == "backend":
-        # Keep existing developer installations working during the backend/
-        # directory migration. Fresh setup scripts install under backend/.
-        roots.append(project_root.parent)
     candidates = [
-        root
+        project_root
         / ".tools"
         / ("windows" if os.name == "nt" else "linux")
         / ("skill-up.exe" if os.name == "nt" else "skill-up")
-        for root in roots
     ]
     discovered = shutil.which("skill-up")
     if discovered:
@@ -184,16 +178,12 @@ def find_skill_up(project_root: Path) -> Path:
 
 
 def find_multica_runtime(project_root: Path) -> Path:
-    roots = [project_root]
-    if project_root.name == "backend":
-        roots.append(project_root.parent)
     paths = [
-        root
+        project_root
         / ".runtime"
         / ("windows" if os.name == "nt" else "linux")
         / "bin"
         / ("multica-eval-runtime.exe" if os.name == "nt" else "multica-eval-runtime")
-        for root in roots
     ]
     for path in paths:
         if path.is_file():

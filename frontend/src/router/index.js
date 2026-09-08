@@ -10,6 +10,7 @@ const routes = [
   { path: '/results', name: 'results', component: () => import('../views/ResultsView.vue'), meta: { title: '评测结果', description: '按评测类型查看历史任务与结果' } },
   { path: '/results/:type/:id', name: 'result-detail', component: () => import('../views/ResultDetail.vue'), meta: { title: '结果详情', description: '查看评分、证据和运行配置' } },
   { path: '/runtimes', name: 'runtimes', component: () => import('../views/RuntimeCatalog.vue'), meta: { title: '模型与 Agent', description: '查看本地 Agent 和 LiteLLM 可用模型' } },
+  { path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue'), meta: { title: '设置', description: '配置 Judge 和 Agent 可用性测试使用的默认模型' } },
   { path: '/model-eval', redirect: { path: '/evaluations/new', query: { type: 'question' } } },
   { path: '/eval', redirect: { path: '/evaluations/new', query: { type: 'skill' } } },
   { path: '/schematic', redirect: { path: '/evaluations/new', query: { type: 'schematic' } } },
