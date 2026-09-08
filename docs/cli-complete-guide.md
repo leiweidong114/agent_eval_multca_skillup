@@ -609,3 +609,533 @@ JustDo 迁移：复制源码后，在目标 Windows 上准备 Node 24、npm 依�
 OpenClaw runtime，再运行 `npm run multica:build-agent` 重新生成 launcher。
 不要只复制 `%APPDATA%\JustDo\multica\development\JustDo-agent.exe`。
 详细说明见相邻 JustDo 项目的 `docs/features/multica-headless-cli.md`。
+
+## 18. 启动前端和后端服务
+
+以下命令均在 PowerShell 中执行。前端和后端需要分别占用一个终端窗口。
+
+### 18.1 首次安装
+
+进入项目根目录并安装后端运行时。该脚本会创建项目内独立 Python 环境、安装 Web/数据库依赖，
+并构建固定版本的 Multica 和 Skill-Up 运行时：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup"
+.\backend\scripts\setup_windows.ps1
+```
+
+安装前端依赖：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup\frontend"
+npm ci
+```
+
+如果已经完成安装，不需要每次启动都重复以上步骤。LiteLLM 和 PostgreSQL 参数放在项目根目录
+`.env`；后端会按第 16 节所述优先级加载，不需要在启动命令中写出密钥。
+
+### 18.2 启动后端
+
+推荐使用项目安装脚本创建的 Python。新开一个 PowerShell 窗口：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup"
+.\backend\.runtime\windows\python\Scripts\python.exe .\backend\run_server.py --host 127.0.0.1 --port 8000
+```
+
+如果当前 Python 已执行过 `python -m pip install -r backend/requirements.txt`，也可以使用：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup"
+python .\backend\run_server.py --host 127.0.0.1 --port 8000
+```
+
+开发时自动重载：
+
+```powershell
+python .\backend\run_server.py --host 127.0.0.1 --port 8000 --reload
+```
+
+验证后端和查看自动生成的接口文档：
+
+```powershell
+curl.exe http://127.0.0.1:8000/api/health
+Start-Process http://127.0.0.1:8000/docs
+Start-Process http://127.0.0.1:8000/prism/docs
+```
+
+- 主 API OpenAPI JSON：`http://127.0.0.1:8000/openapi.json`
+- Prism API OpenAPI JSON：`http://127.0.0.1:8000/prism/openapi.json`
+- 停止服务：在后端终端按 `Ctrl+C`。
+
+当前核心 API 和内嵌 Prism 都按“受信任本机”边界运行。不要在没有反向代理、认证和访问控制的
+情况下把 `--host` 改成 `0.0.0.0` 暴露到局域网或公网。
+
+### 18.3 启动前端
+
+后端保持运行，再新开一个 PowerShell 窗口：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup\frontend"
+npm run dev
+```
+
+浏览器打开 `http://127.0.0.1:5173`。Vite 会把 `/api` 和 `/prism` 请求代理到
+`http://127.0.0.1:8000`。如果后端使用其他地址，在启动前端前设置：
+
+```powershell
+$env:VITE_API_TARGET = "http://127.0.0.1:9000"
+npm run dev
+```
+
+停止前端同样按 `Ctrl+C`。修改前端后可运行生产构建检查：
+
+```powershell
+npm run build
+```
+
+## 19. 后端主评测 API 与 curl 命令
+
+以下示例使用 Windows 自带的 `curl.exe`，避免 PowerShell 5 中 `curl` 别名指向
+`Invoke-WebRequest`。先定义地址；文中的 `$JOB_ID`、`$RUN_ID`、`$BATCH_ID`、
+`$PROJECT_ID`、`$PROFILE_NAME` 等变量需要替换为上一步响应里的真实值。
+
+```powershell
+$API = "http://127.0.0.1:8000/api"
+$MODEL = "glm-4.5-air"
+$PROFILE_NAME = "litellm_glm_4_7"
+```
+
+### 19.1 健康、Agent、模型和数据库
+
+| 方法与路径 | 作用 |
+|---|---|
+| `GET /api/health` | 后端进程健康检查 |
+| `GET /api/agents` | 全部支持的 Agent、可执行文件探测和适配能力 |
+| `POST /api/agents/{agent_name}/test` | 对本机 Agent 执行 `--version` 探针，不调用模型 |
+| `GET /api/model-config` | 返回脱敏后的默认模型和 Judge 配置 |
+| `GET /api/model-profiles` | 返回所有模型 Profile，不回显 API Key |
+| `PUT /api/model-profiles/{profile_name}` | 创建或更新本地 Profile，可选择写入 API Key |
+| `DELETE /api/model-profiles/{profile_name}` | 删除本地 Profile 覆盖配置 |
+| `GET /api/models` | 读取 LiteLLM 模型发现/连通性缓存 |
+| `POST /api/models/test` | 使用指定 Profile 对模型发送最小推理请求 |
+| `GET /api/database/health` | 检查 PostgreSQL 和 SpendLogs 读取能力 |
+
+```powershell
+curl.exe "$API/health"
+curl.exe "$API/agents"
+curl.exe -X POST "$API/agents/codex/test"
+curl.exe "$API/model-config"
+curl.exe "$API/model-profiles"
+curl.exe "$API/models"
+curl.exe "$API/database/health"
+curl.exe --json "{`"model`":`"$MODEL`",`"profile`":`"$PROFILE_NAME`"}" "$API/models/test"
+```
+
+创建或更新 Profile 会写入本机且被 Git 忽略的配置文件。下面的 `api_key` 只是占位符；
+也可以省略该字段，改为在 `.env` 中配置 `LITELLM_API_KEY`：
+
+```powershell
+curl.exe -X PUT --json '{"model":"glm-4.5-air","api_base":"http://your-litellm/v1","api_key_env":"LITELLM_API_KEY","api_key":"REPLACE_ME","protocol":"openai_compatible","context_window":200000,"max_output_tokens":32000,"agent_models":{},"gateway_models":{},"make_default":false}' "$API/model-profiles/my-litellm"
+```
+
+删除 Profile 是配置变更，请确认名称后执行：
+
+```powershell
+curl.exe -X DELETE "$API/model-profiles/my-litellm"
+```
+
+### 19.2 Skill 和本地保留策略
+
+| 方法与路径 | 作用 |
+|---|---|
+| `GET /api/skills` | 列出内置和已上传 Skill |
+| `GET /api/skills/{skill_name}` | 读取 Skill 内容、文件清单和用例数 |
+| `GET /api/skills/{skill_name}/cases` | 列出 Skill 的 YAML 用例 |
+| `GET /api/skills/{skill_name}/files/{file_path}` | 预览 Skill 内一个文件，最大 2 MB |
+| `POST /api/skills/upload` | 上传不超过 20 MB 的 ZIP Skill |
+| `GET /api/skills/versions` | 查看上传 Skill 的版本 |
+| `DELETE /api/skills/{skill_name}/versions/{version}` | 删除一个上传版本 |
+| `GET /api/privacy/retention` | 只预览过期运行，不删除 |
+| `POST /api/privacy/retention/cleanup` | 显式删除已过期运行目录 |
+
+```powershell
+curl.exe "$API/skills"
+curl.exe "$API/skills/example-marker"
+curl.exe "$API/skills/example-marker/cases"
+curl.exe "$API/skills/example-marker/files/SKILL.md"
+curl.exe -F "name=my-skill" -F "archive=@D:\path\my-skill.zip;type=application/zip" "$API/skills/upload"
+curl.exe "$API/skills/versions"
+curl.exe -X DELETE "$API/skills/my-skill/versions/REPLACE_VERSION"
+curl.exe "$API/privacy/retention"
+curl.exe --json '{"confirm":true}' "$API/privacy/retention/cleanup"
+```
+
+最后两条 `DELETE`/`cleanup` 命令会删除本地数据，执行前先使用版本列表或 retention 预览确认目标。
+
+### 19.3 单 Agent 评测、任务状态和结果
+
+`POST /api/run` 把任务加入后台队列并立即返回 `job_id`；它不代表评测已经完成。
+以下请求启用真实模型推理、数据库模型硬核验和 LLM Judge：
+
+```powershell
+$runBody = @{
+  user_id = "local"
+  task_name = "curl-smoke"
+  evaluation_type = "skill"
+  skills = @("example-marker")
+  agent = "codex"
+  model = $MODEL
+  profile = $PROFILE_NAME
+  prompt = "Return the evaluation marker using the installed Skill."
+  must_contain = @("SKILL_EVAL_MARKER_OK")
+  must_not_contain = @()
+  parallelism = 1
+  iterations = 1
+  timeout_seconds = 300
+  max_turns = 12
+  benchmark = $true
+  collect_database_trace = $true
+  require_model_verification = $true
+  llm_judge = $true
+} | ConvertTo-Json -Depth 10
+
+curl.exe --json $runBody "$API/run"
+```
+
+全部任务与结果接口：
+
+| 方法与路径 | 作用 |
+|---|---|
+| `POST /api/run` | 提交一个后台 Skill/原理图评测任务 |
+| `POST /api/validate` | 校验同一请求，不执行完整评测 |
+| `GET /api/capacity` | 查看任务池和 case 并发容量 |
+| `GET /api/jobs?user_id=...` | 查看任务，可选按用户过滤 |
+| `GET /api/jobs/{job_id}` | 查询一个任务状态、进度和结果 |
+| `POST /api/jobs/{job_id}/cancel` | 请求取消任务 |
+| `GET /api/runs?user_id=...` | 列出已经生成报告的运行 |
+| `GET /api/runs/{run_id}` | 读取完整 `evaluation-report.json` |
+
+```powershell
+curl.exe --json $runBody "$API/validate"
+curl.exe "$API/capacity"
+curl.exe "$API/jobs"
+curl.exe --get --data-urlencode "user_id=local" "$API/jobs"
+$JOB_ID = "REPLACE_JOB_ID"
+curl.exe "$API/jobs/$JOB_ID"
+curl.exe -X POST "$API/jobs/$JOB_ID/cancel"
+curl.exe "$API/runs"
+curl.exe --get --data-urlencode "user_id=local" "$API/runs"
+$RUN_ID = "REPLACE_RUN_ID"
+curl.exe "$API/runs/$RUN_ID"
+```
+
+轮询任务时，直到响应中的 `status` 变为 `completed`、`failed`、`cancelled` 或
+`interrupted` 再读取运行报告。`cancel` 是协作式取消，正在退出的 Agent 进程可能需要短暂时间。
+
+### 19.4 多 Agent/模型批量评测
+
+`POST /api/batches` 接收 2–32 个目标，重复的 `(agent, model, profile)` 会去重。
+批次内部的实际并发由 `/api/capacity` 和后端任务池控制。
+
+| 方法与路径 | 作用 |
+|---|---|
+| `POST /api/batches` | 创建多 Agent/模型比较批次 |
+| `GET /api/batches?user_id=...` | 列出批次，可选按用户过滤 |
+| `GET /api/batches/{batch_id}` | 查询批次及其子任务状态 |
+
+```powershell
+$batchBody = @{
+  name = "curl-two-agent"
+  targets = @(
+    @{ agent = "codex"; model = $MODEL; profile = $PROFILE_NAME },
+    @{ agent = "opencode"; model = $MODEL; profile = $PROFILE_NAME }
+  )
+  base_request = @{
+    user_id = "local"
+    task_name = "curl-batch"
+    evaluation_type = "skill"
+    skills = @("example-marker")
+    prompt = "Return the evaluation marker using the installed Skill."
+    must_contain = @("SKILL_EVAL_MARKER_OK")
+    parallelism = 1
+    iterations = 1
+    timeout_seconds = 300
+    max_turns = 12
+    benchmark = $true
+    collect_database_trace = $true
+    require_model_verification = $true
+    llm_judge = $true
+  }
+} | ConvertTo-Json -Depth 10
+
+curl.exe --json $batchBody "$API/batches"
+curl.exe "$API/batches"
+curl.exe --get --data-urlencode "user_id=local" "$API/batches"
+$BATCH_ID = "REPLACE_BATCH_ID"
+curl.exe "$API/batches/$BATCH_ID"
+```
+
+### 19.5 原理图演示、工程、Judge 和模型交互记录
+
+这里的 `/api/schematic/generate` 是确定性演示流水线；对四个原理图 Skill 的真实 Agent
+评测仍应使用 `/api/run`、`/api/batches` 或 `agent-eval pipeline-eval`。
+
+| 方法与路径 | 作用 |
+|---|---|
+| `GET /api/schematic/example` | 获取内置框图示例 |
+| `POST /api/schematic/generate` | 生成演示原理图工程并运行专项 Judge |
+| `GET /api/schematic/projects/{project_id}` | 读取已生成工程、输入和评分 |
+| `POST /api/schematic/judge` | 对外部原理图 JSON 做专项评分 |
+| `GET /api/schematic/interactions` | 从 LiteLLM 数据库分页读取完整模型交互 |
+
+```powershell
+curl.exe "$API/schematic/example"
+
+$diagram = @{
+  title = "LED demo"
+  components = @(
+    @{ id = "U1"; type = "MCU"; pins = @("PA0", "GND") },
+    @{ id = "D1"; type = "LED"; pins = @("A", "K") }
+  )
+  connections = @(
+    @{ from = "U1.PA0"; to = "D1.A"; net = "LED_CTRL" }
+  )
+} | ConvertTo-Json -Depth 10
+curl.exe --json $diagram "$API/schematic/generate"
+
+$PROJECT_ID = "REPLACE_PROJECT_ID"
+curl.exe "$API/schematic/projects/$PROJECT_ID"
+
+$judgeBody = @{
+  diagram = ConvertFrom-Json $diagram
+  schematic = @{ components = @(); connections = @(); nets = @() }
+} | ConvertTo-Json -Depth 20
+curl.exe --json $judgeBody "$API/schematic/judge"
+
+curl.exe "$API/schematic/interactions?limit=50&offset=0"
+curl.exe --get --data-urlencode "user_id=local" --data-urlencode "session_id=REPLACE_SESSION" --data-urlencode "limit=50" --data-urlencode "offset=0" "$API/schematic/interactions"
+```
+
+交互接口返回数据库已经记录的 request/response 正文，可能包含用户输入或模型输出。仅在受信任
+环境调用，不要把响应上传到公开日志。数据库未启用正文记录时，接口无法恢复历史正文。
+
+## 20. Prism 题库与模型实验 API
+
+Prism 是挂载在同一个后端进程里的独立子应用，API 前缀不是 `$API`，而是：
+
+```powershell
+$PRISM = "http://127.0.0.1:8000/prism/api"
+```
+
+本项目通过 `create_app(..., trusted_local=True)` 启动 Prism，所有请求使用本地 bootstrap
+管理员身份，不需要 Cookie。认证接口是为 Prism 独立部署保留的兼容接口；如果未来关闭
+`trusted_local`，可用 `curl.exe -c prism-cookie.txt` 登录，再为后续命令添加
+`-b prism-cookie.txt`。
+
+### 20.1 健康、认证、用户和设置
+
+| 方法与路径 | 作用 |
+|---|---|
+| `GET /prism/api/health` | Prism、Codex、Claude、OpenClaw 探测状态 |
+| `GET /prism/api/auth/bootstrap-status` | bootstrap 管理员状态 |
+| `POST /prism/api/auth/login` | 独立认证模式登录并设置 Cookie |
+| `POST /prism/api/auth/logout` | 注销并撤销 Cookie |
+| `GET /prism/api/auth/me` | 当前用户 |
+| `GET /prism/api/users` | 管理员查看用户列表 |
+| `POST /prism/api/users` | 创建用户 |
+| `PUT /prism/api/users/{user_id}` | 更新用户、角色、启用状态或密码 |
+| `GET /prism/api/settings` | 当前用户设置 |
+| `PUT /prism/api/settings` | 更新健康检查、主题和语言 |
+| `GET /prism/api/admin/usage` | 管理员查看用户、实验、Token 和成本统计 |
+
+```powershell
+curl.exe "$PRISM/health"
+curl.exe "$PRISM/auth/bootstrap-status"
+curl.exe "$PRISM/auth/me"
+curl.exe -c prism-cookie.txt --json '{"username":"admin","password":"REPLACE_PASSWORD"}' "$PRISM/auth/login"
+curl.exe -b prism-cookie.txt -X POST "$PRISM/auth/logout"
+curl.exe "$PRISM/users"
+curl.exe --json '{"username":"evaluator1","display_name":"Evaluator 1","password":"REPLACE_WITH_10_OR_MORE_CHARS","role":"evaluator"}' "$PRISM/users"
+curl.exe -X PUT --json '{"display_name":"Evaluator 1","role":"evaluator","active":true,"password":null}' "$PRISM/users/REPLACE_USER_ID"
+curl.exe "$PRISM/settings"
+curl.exe -X PUT --json '{"health_check_enabled":true,"health_check_interval_minutes":60,"theme":"forest","language":"zh-CN"}' "$PRISM/settings"
+curl.exe "$PRISM/admin/usage"
+```
+
+创建/更新用户会修改 Prism 的本地 SQLite 数据；生产密码不要写进 shell 历史或文档。
+
+### 20.2 Provider 和健康检查
+
+| 方法与路径 | 作用 |
+|---|---|
+| `GET /prism/api/providers` | 查看可访问的模型/Agent Provider |
+| `POST /prism/api/providers` | 手动创建 Provider，API Key 加密保存 |
+| `POST /prism/api/providers/auto` | 从评测系统的模型 Profile 创建或复用 Provider |
+| `PUT /prism/api/providers/{provider_id}` | 更新 Provider |
+| `DELETE /prism/api/providers/{provider_id}` | 删除没有历史结果引用的 Provider |
+| `POST /prism/api/providers/{provider_id}/test` | 发真实请求测试 Provider 并写入健康记录 |
+| `GET /prism/api/provider-health?limit=N` | 查看最近的 Provider 健康历史 |
+| `GET /prism/api/protocols` | 查看评测 track、采样策略和默认预算 |
+
+```powershell
+curl.exe "$PRISM/providers"
+curl.exe --json '{"name":"LiteLLM GLM","kind":"openai","model":"glm-4.5-air","base_url":"http://your-litellm/v1","api_key":"REPLACE_ME","settings":{},"shared":false}' "$PRISM/providers"
+curl.exe --json '{"agent":"direct","model":"glm-4.5-air","profile":"litellm_glm_4_7","task_kind":"direct"}' "$PRISM/providers/auto"
+curl.exe --json '{"agent":"codex","model":"glm-4.5-air","profile":"litellm_glm_4_7","task_kind":"repo"}' "$PRISM/providers/auto"
+curl.exe -X PUT --json '{"name":"LiteLLM GLM Updated","kind":"openai","model":"glm-4.5-air","base_url":"http://your-litellm/v1","api_key":null,"settings":{},"shared":false}' "$PRISM/providers/REPLACE_PROVIDER_ID"
+curl.exe -X POST "$PRISM/providers/REPLACE_PROVIDER_ID/test"
+curl.exe "$PRISM/provider-health?limit=100"
+curl.exe "$PRISM/protocols"
+curl.exe -X DELETE "$PRISM/providers/REPLACE_PROVIDER_ID"
+```
+
+`providers/{id}/test` 会消耗模型额度。删除 Provider 不可恢复，而且存在历史结果时后端会拒绝删除。
+
+### 20.3 题库、题目和套件
+
+| 方法与路径 | 作用 |
+|---|---|
+| `GET /prism/api/benchmarks` | 列出可见题库 |
+| `GET /prism/api/benchmarks/{benchmark_id}` | 题库详情 |
+| `POST /prism/api/benchmarks/{benchmark_id}/install?limit=N` | 安装内置/远程题库，可限制题数 |
+| `POST /prism/api/benchmarks/import` | 从 JSON 导入自定义题库 |
+| `POST /prism/api/benchmarks/import-jsonl` | 从原始 JSONL 请求体导入题库 |
+| `GET /prism/api/benchmarks/{benchmark_id}/items?limit=N` | 查看题目 |
+| `GET /prism/api/benchmarks/{benchmark_id}/export?format=json|jsonl` | 导出题库 |
+| `GET /prism/api/benchmarks/{benchmark_id}/items/{item_id}/export` | 导出单题 |
+| `POST /prism/api/benchmarks/{benchmark_id}/items/{item_id}/try` | 用可用 Provider 试跑单题 |
+| `PUT /prism/api/benchmarks/{benchmark_id}/items/{item_id}/access` | 设置自定义题目 private/shared |
+| `GET /prism/api/suites` | 查看预设套件及缺失题库 |
+
+```powershell
+curl.exe "$PRISM/benchmarks"
+curl.exe "$PRISM/benchmarks/REPLACE_BENCHMARK_ID"
+curl.exe -X POST "$PRISM/benchmarks/REPLACE_BENCHMARK_ID/install?limit=20"
+
+$benchmarkBody = @{
+  id = "curl_demo"
+  name = "Curl Demo"
+  description = "One-item local benchmark"
+  license = "Internal"
+  version = "1"
+  task_type = "custom_qa"
+  language = "zh-CN"
+  visibility = "private"
+  replace = $false
+  items = @(
+    @{ key = "q1"; category = "smoke"; prompt = "1+1=?"; expected = "2"; scorer = "exact"; metadata = @{}; access_level = "private" }
+  )
+} | ConvertTo-Json -Depth 10
+curl.exe --json $benchmarkBody "$PRISM/benchmarks/import"
+
+curl.exe -H "Content-Type: application/x-ndjson" --data-binary "@D:\path\benchmark.jsonl" "$PRISM/benchmarks/import-jsonl"
+curl.exe "$PRISM/benchmarks/curl_demo/items?limit=100"
+curl.exe "$PRISM/benchmarks/curl_demo/export?format=json" -o curl_demo.json
+curl.exe "$PRISM/benchmarks/curl_demo/export?format=jsonl" -o curl_demo.jsonl
+curl.exe "$PRISM/benchmarks/curl_demo/items/REPLACE_ITEM_ID/export" -o curl_demo_item.json
+curl.exe --json '{"provider_id":1,"allow_unsafe_code":false}' "$PRISM/benchmarks/curl_demo/items/REPLACE_ITEM_ID/try"
+curl.exe -X PUT --json '{"access_level":"shared"}' "$PRISM/benchmarks/curl_demo/items/REPLACE_ITEM_ID/access"
+curl.exe "$PRISM/suites"
+```
+
+安装题库可能访问外部数据源；`try` 会真实调用模型。只有最近健康检查为可用的 Provider
+才能试跑题目。`replace=true` 会替换同 ID 的自定义题库，使用前先确认目标。
+
+### 20.4 实验、结果、比较、导出、审计和仪表盘
+
+| 方法与路径 | 作用 |
+|---|---|
+| `POST /prism/api/experiments` | 创建并异步启动题库实验 |
+| `GET /prism/api/experiments` | 实验列表 |
+| `GET /prism/api/experiments/{experiment_id}` | 实验配置、状态和汇总 |
+| `GET /prism/api/experiments/{experiment_id}/results?limit=N` | 逐题结果和证据 |
+| `GET /prism/api/experiments/{experiment_id}/comparison` | 汇总和成对比较 |
+| `GET /prism/api/experiments/{experiment_id}/export?format=json|csv` | 导出实验 |
+| `POST /prism/api/experiments/{experiment_id}/cancel` | 请求取消实验 |
+| `GET /prism/api/audit?limit=N` | 查看审计事件 |
+| `GET /prism/api/dashboard` | Provider、题库、实验、结果和通过率汇总 |
+
+```powershell
+$experimentBody = @{
+  name = "curl-prism-smoke"
+  provider_ids = @(1)
+  benchmark_ids = @("curl_demo")
+  repeats = 1
+  sample_limit = 1
+  concurrency = 1
+  allow_unsafe_code = $false
+  track = "model_direct"
+  random_seed = 42
+  sampling_strategy = "ordered"
+  budget = @{
+    timeout_seconds_per_task = 300
+    max_output_tokens = 4096
+    max_context_chars = 60000
+    max_files_changed = 8
+  }
+} | ConvertTo-Json -Depth 10
+
+curl.exe --json $experimentBody "$PRISM/experiments"
+curl.exe "$PRISM/experiments"
+$EXPERIMENT_ID = "REPLACE_EXPERIMENT_ID"
+curl.exe "$PRISM/experiments/$EXPERIMENT_ID"
+curl.exe "$PRISM/experiments/$EXPERIMENT_ID/results?limit=1000"
+curl.exe "$PRISM/experiments/$EXPERIMENT_ID/comparison"
+curl.exe "$PRISM/experiments/$EXPERIMENT_ID/export?format=json" -o "experiment-$EXPERIMENT_ID.json"
+curl.exe "$PRISM/experiments/$EXPERIMENT_ID/export?format=csv" -o "experiment-$EXPERIMENT_ID.csv"
+curl.exe -X POST "$PRISM/experiments/$EXPERIMENT_ID/cancel"
+curl.exe "$PRISM/audit?limit=100"
+curl.exe "$PRISM/dashboard"
+```
+
+`track` 必须与 Provider 类型匹配：`model_direct` 使用直接模型 Provider，`native_agent`
+使用 Agent Provider，`reference_agent` 使用 OpenAI/Anthropic HTTP Provider。创建实验会立即开始
+真实推理并消耗额度；先调用 Provider test，并用小 `sample_limit` 完成冒烟测试。
+
+## 21. HTTP 状态与排错
+
+| HTTP 状态 | 常见含义 |
+|---|---|
+| `200` | 请求成功；仍需查看 JSON 中的 `ok`、`status`、`failure` |
+| `400` | 参数、Profile、Skill、能力组合或确认字段不合法 |
+| `401/403` | 独立 Prism 鉴权失败，或角色/网关权限不足 |
+| `404` | Job、Run、Skill、Provider、题库、题目或实验不存在 |
+| `409` | 资源状态冲突，例如 Provider 不可用或仍被历史结果引用 |
+| `413` | Skill 文件预览超过 2 MB |
+| `422` | FastAPI 字段校验失败，或原理图生成/Judge 输入不可处理 |
+| `429` | LiteLLM 或上游模型额度/频率达到限制 |
+| `500/503` | 后端内部错误、数据库或上游服务不可用 |
+
+接口返回失败时优先执行：
+
+```powershell
+agent-eval doctor
+agent-eval check-litellm --model glm-4.5-air
+agent-eval check-database
+curl.exe "$API/model-config"
+curl.exe "$API/database/health"
+curl.exe "$API/jobs"
+```
+
+API 调用中不要使用 `--no-require-model-verification` 对应的弱化配置来掩盖数据库或模型问题。
+需要调试请求时可给 curl 添加 `-v`，但其输出可能包含请求头；配置真实密钥后不要把完整
+`-v` 日志发布到 issue、聊天或公开测试报告。
+
+JustDo 报错 `openclaw --version failed: exit status 70` 时，先直接运行 launcher 查看其 stderr：
+
+```powershell
+& "$env:APPDATA\JustDo\multica\development\JustDo-agent.exe" --version
+```
+
+如果提示 `NODE_MODULE_VERSION` 不匹配，说明 `better-sqlite3` 被编译成了 Node.js ABI，
+而 launcher 需要 Electron ABI。进入 JustDo 源码目录恢复并重建 launcher：
+
+```powershell
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\JustDo"
+npm run multica:build-agent
+```
+
+修复后的 JustDo 测试脚本会在 Vitest 结束后自动恢复 Electron ABI。不要在运行 launcher 前
+单独执行 `npm rebuild better-sqlite3`；如果执行过，至少再运行
+`npm run rebuild:electron-native`。
