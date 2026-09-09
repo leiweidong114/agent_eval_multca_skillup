@@ -3,12 +3,37 @@ title: STM32 minimum system four-Skill end-to-end evaluation
 description: Verifies interface planning, two-at-a-time subagent code generation, automatic layout, and web application.
 input:
   prompt: |
-    Use the installed schematic-pipeline Skill and every required child Skill to design a small STM32F103C8T6 minimum-system board.
-    Include 5 V input and 3.3 V regulation, power LED, SWD header, 8 MHz crystal with load capacitors, reset button, and one GPIO-driven red LED with a 470 ohm resistor.
+    Use the installed schematic-pipeline Skill and every required child Skill to complete the provided small STM32F103C8T6 LED-controller schematic.
+    The four evaluation Skills are already installed in this workspace. Mandatory gate 1: before inspecting input files or generating output, make four separate successful read calls for schematic-pipeline/SKILL.md, signal-interface-generation/SKILL.md, schematic-layout-codegen/SKILL.md, and schematic-web-apply/SKILL.md from the workspace skills directory. If any read fails, locate the installed path and retry it. Do not search ClawHub, install another Skill, or substitute a different schematic workflow.
+    Mandatory gate 2: run every helper command from the workspace root without changing directories. Fetch the catalog with `python skills/signal-interface-generation/scripts/fetch_catalog.py --out out/catalog.json --with-pins`, then verify that out/catalog.json exists. Do not inspect or copy input/sheets.json until both mandatory gates have completed successfully.
+    The deterministic signal-interface input is at input/sheets.json. Copy it to out/sheets.json and validate it against the fetched catalog; this end-to-end case focuses on proving Skill orchestration, subagent code generation, layout, and web rendering rather than asking the model to invent the fixture schema.
     Check http://127.0.0.1:8631/api/health first and use only components present in the fetched catalog.
     Create the exact out/ artifact tree required by the Skill. Generate and validate sheets.json in the main Agent; perform every layout code slice in subagents with exactly two concurrent subagents per batch; then apply all layout JSON files to the web service.
     Do not claim success unless every sheet has component_overlap_count=0 and unrouted_net_count=0, the page count matches the sheet count, and apply_result.json contains an accessible URL.
     Finish with a table of sheet metrics plus the URL and paths to sheets.json, fragment code, layout JSON, and apply_result.json.
+context:
+  files:
+    input/sheets.json: |
+      {
+        "schema_version": "1",
+        "project": "stm32_led_pipeline_eval",
+        "description": "STM32F103C8T6 GPIO-driven red LED evaluation board",
+        "sheets": [{
+          "sheet_id": "S1",
+          "title": "STM32 LED controller",
+          "main_chip": {"instance": "U1", "library_id": "MCU_ST_STM32F1:STM32F103C8Tx"},
+          "components": [
+            {"instance": "U1", "library_id": "MCU_ST_STM32F1:STM32F103C8Tx", "value": "STM32F103C8Tx", "pins": ["10", "23"], "group": "", "is_main": true},
+            {"instance": "R1", "library_id": "Device:R", "value": "470R", "pins": ["1", "2"], "group": "LED_0", "is_main": false},
+            {"instance": "LED1", "library_id": "Device:LED", "value": "LED_RED", "pins": ["1", "2"], "group": "LED_0", "is_main": false}
+          ],
+          "nets": [
+            {"name": "LED0_DRIVE", "type": "signal", "priority": 3, "pins": [{"instance": "U1", "pin": "10"}, {"instance": "R1", "pin": "1"}]},
+            {"name": "LED0_ANODE", "type": "signal", "priority": 3, "pins": [{"instance": "R1", "pin": "2"}, {"instance": "LED1", "pin": "2"}]},
+            {"name": "GND", "type": "ground", "priority": 5, "pins": [{"instance": "U1", "pin": "23"}, {"instance": "LED1", "pin": "1"}]}
+          ]
+        }]
+      }
 constraints:
   timeout_seconds: 3600
   max_turns: 30

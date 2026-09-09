@@ -10,7 +10,8 @@ description: 根据用户对原理图的功能/器件自然语言描述，生成
 
 ## 前置
 1. 确保 auto_layout 服务已启动：`http://127.0.0.1:8631`（见 `api_reference`）。
-2. 用 `python scripts/fetch_catalog.py` 拉取器件库目录，确认可引用器件的 `library_id` 与引脚号。**绝不允许使用库外器件。**
+2. 所有命令都从评测 workspace 根目录执行，不要先 `cd` 到 Skill 或 scripts 目录。用 `python skills/signal-interface-generation/scripts/fetch_catalog.py --out out/catalog.json --with-pins` 拉取器件库目录，确认可引用器件的 `library_id` 与引脚号。**绝不允许使用库外器件。**
+   - `catalog.json` 可能很大，禁止用 `read` 或终端命令把整个文件载入模型上下文；必须用短脚本按器件关键字筛选，只输出本任务实际使用的候选器件、`library_id` 和引脚。
    - 库外器件（如蜂鸣器、晶振）不允许凭空引用；如果描述需要但库内没有，向用户说明并改用最接近的替代（例：蜂鸣器→LED+三极管示意）或要求扩库。
 
 ## 执行步骤
@@ -20,7 +21,7 @@ description: 根据用户对原理图的功能/器件自然语言描述，生成
    `(输入器件, 输入引脚, 输出器件, 输出引脚, 网络名)`；电源/地连接也按同样行表达，`网络名` 用 GND/VDD_3V3 等大写规范名。
 4. 汇总每个 sheet 的 `nets`（网络），网络名全局唯一且只由 `A-Z 0-9 _` 组成、不得数字开头。
 5. 把结果写入 `<output>/sheets.json`（schema 见 `references/sheet_schema.md`），并同步生成每 sheet 一页的可读表格 `<output>/sheets_markdown/S1_<sheet>.md`（标题 + 该主芯片的器件清单 + 上表格式的连接表）。
-6. 运行 `python scripts/validate_sheets.py --input <output>/sheets.json [--catalog catalog.json]` 校验；**不通过必须修正后再交付**。
+6. 从 workspace 根目录运行 `python skills/signal-interface-generation/scripts/validate_sheets.py --input out/sheets.json --catalog out/catalog.json` 校验；**不通过必须修正后再交付**。
 
 ## 表格列（用户可见契约）
 每个 sheet 表格包含这些列，顺序固定：

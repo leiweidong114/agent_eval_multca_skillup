@@ -54,6 +54,11 @@ from agent_eval.failure import describe_evaluation_failure
 
 # backend/src/agent_eval/cli.py -> parents[2] = backend
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONNECTIVITY_PROMPT = "Reply with exactly CONNECTIVITY_OK."
+DEFAULT_SUBAGENT_PROMPT = (
+    "必须启动一个真实 subagent，让它只回复 SUBAGENT_OK；等待它完成后，"
+    "你只回复 PARENT_OK:SUBAGENT_OK。不得由主 Agent 模拟子代理结果。"
+)
 
 
 def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool = False) -> None:
@@ -61,7 +66,11 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
         parser.add_argument("--skill", required=True)
     parser.add_argument("--agent", action="append", required=True)
     parser.add_argument("--profile", help=argparse.SUPPRESS)
-    parser.add_argument("--model", required=True)
+    parser.add_argument(
+        "--model",
+        required=True,
+        help="Provider model id; JustDo applies it as a session-only model override",
+    )
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--case", action="append", default=[])
     parser.add_argument("--must-contain", action="append", default=[])
@@ -92,7 +101,11 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--task-id", help="Optional caller-provided unique task id")
     run.add_argument("--client-task-id", help="Optional business-side correlation id")
     run.add_argument("--agent", required=True)
-    run.add_argument("--model", required=True, help="LiteLLM model id")
+    run.add_argument(
+        "--model",
+        required=True,
+        help="Provider model id; JustDo applies it as a session-only model override",
+    )
     run.add_argument("--profile", help=argparse.SUPPRESS)
     run.add_argument("--case", action="append", default=[])
     run.add_argument("--prompt")
@@ -180,9 +193,26 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--agent-executable")
     check.add_argument("--timeout", type=int, default=120)
     check.add_argument(
+        "--max-turns",
+        type=int,
+        default=8,
+        help="Maximum Agent turns; subagent probes normally need more than one turn",
+    )
+    check.add_argument(
+        "--extra-arg",
+        action="append",
+        default=[],
+        help="Extra Agent CLI argument; repeatable",
+    )
+    check.add_argument(
         "--prompt",
-        default="Reply with exactly CONNECTIVITY_OK.",
+        default=DEFAULT_CONNECTIVITY_PROMPT,
         help="Minimal prompt sent by the connectivity probe",
+    )
+    check.add_argument(
+        "--verify-subagent",
+        action="store_true",
+        help="Require a real child Agent result and database-confirmed use of the selected model",
     )
     check.add_argument(
         "--database-verify",
@@ -232,6 +262,14 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             "error": "The Agent runtime does not support selecting a model per request",
         }
     runtime_agent = backend_agent(args.agent)
+    verify_subagent = bool(getattr(args, "verify_subagent", False))
+    if verify_subagent and not args.database_verify:
+        return {
+            "status": "failed",
+            "agent": args.agent,
+            "failure": {"category": "subagent_database_verification_required", "retryable": False},
+            "error": "--verify-subagent requires --database-verify",
+        }
     profile = resolve_model_profile(
         PROJECT_ROOT,
         profile_name=args.profile,
@@ -249,6 +287,8 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
     env = os.environ.copy()
     env.update(profile.environment)
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = detected
+    env["AGENT_EVAL_REQUESTED_AGENT"] = args.agent.strip().lower()
+    env["AGENT_EVAL_SUBAGENT_MODEL"] = profile.model
     trace_key = None
     if args.database_verify and profile.api_base:
         health = database_health(PROJECT_ROOT)
@@ -367,9 +407,12 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             env["CODEBUDDY_CONFIG_DIR"] = str(codebuddy_config)
         input_path, output_path = root / "input.json", root / "output.json"
         probe_id = f"connectivity-{uuid.uuid4().hex}"
+        probe_prompt = args.prompt
+        if verify_subagent and probe_prompt == DEFAULT_CONNECTIVITY_PROMPT:
+            probe_prompt = DEFAULT_SUBAGENT_PROMPT
         input_path.write_text(
             json.dumps({
-                "messages": [{"role": "user", "content": args.prompt}],
+                "messages": [{"role": "user", "content": probe_prompt}],
                 "workspace": str(root), "case_id": probe_id, "variant": "no-evaluation", "kwargs": {},
             }),
             encoding="utf-8",
@@ -384,9 +427,10 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         command = [
             str(runtime), "--input", str(input_path), "--output", str(output_path),
             "--agent", runtime_agent, "--model", profile.model_for_agent(runtime_agent),
-            "--executable", detected, "--timeout-seconds", str(args.timeout), "--max-turns", "1",
+            "--executable", detected, "--timeout-seconds", str(args.timeout),
+            "--max-turns", str(getattr(args, "max_turns", 8)),
         ]
-        for value in profile.agent_args:
+        for value in [*profile.agent_args, *getattr(args, "extra_arg", [])]:
             command.extend(["--extra-arg", value])
         resilience_proxy = None
         if profile.api_base and runtime_agent in {"claude", "codex", "codebuddy", "openclaw"}:
@@ -441,13 +485,13 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
     )
     markers = ("invalid api key", "authentication error", "unauthorized", "model not found")
     marker = next((item for item in markers if item in combined.lower()), None)
+    rows: list[dict[str, object]] = []
     database_trace: dict[str, object] = {"status": "not_requested"}
     model_verification: dict[str, object] = {
         "status": "not_requested", "verified": None, "expected_model": profile.model
     }
     if args.database_verify and profile.api_base:
         try:
-            rows: list[dict[str, object]] = []
             rows = wait_for_model_interactions(
                     PROJECT_ROOT,
                     started_at=started_at,
@@ -481,6 +525,9 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 "status": "delete_failed", "alias": trace_key.alias,
                 "error": str(exc),
             }
+    subagent_verification = _verify_subagent_evidence(
+        args.agent, profile.model, result, rows
+    ) if verify_subagent else {"status": "not_requested", "verified": None}
     ok = (
         process.returncode == 0
         and result.get("exit_code") == 0
@@ -488,6 +535,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         and marker is None
         and (not args.database_verify or not profile.api_base or model_verification.get("verified") is True)
         and (trace_key is None or trace_key_cleanup["status"] == "deleted")
+        and (not verify_subagent or subagent_verification["verified"] is True)
     )
     error_text = result.get("stderr") or (f"Detected error marker: {marker}" if marker else None)
     failure = None if ok else describe_evaluation_failure(
@@ -496,7 +544,14 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         component="agent_model_connectivity",
     )
     if not ok and process.returncode == 0 and result.get("exit_code") == 0 and not marker:
-        if args.database_verify and model_verification.get("verified") is not True:
+        if verify_subagent and subagent_verification.get("verified") is not True:
+            failure = {
+                "category": "subagent_verification_failed", "retryable": True,
+                "summary": "Agent 已返回，但未找到真实子 Agent 的成功证据",
+                "detail": subagent_verification.get("reason"),
+                "suggested_action": "检查 Subagent 工具结果和同一 trace key 下的子模型调用后重试。",
+            }
+        elif args.database_verify and model_verification.get("verified") is not True:
             failure = {"category": "model_verification_failed", "retryable": True,
                        "summary": "Agent 已返回，但数据库尚未确认指定模型调用",
                        "detail": model_verification.get("reason"),
@@ -510,10 +565,133 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         "executable": detected, "runtime_exit_code": process.returncode,
         "agent_exit_code": result.get("exit_code"), "response": result.get("final_message"),
         "database_trace": database_trace, "model_verification": model_verification,
+        "subagent_verification": subagent_verification,
         "protocol_probe": protocol_probe,
         "trace_key_alias": trace_key_alias, "trace_key_cleanup": trace_key_cleanup,
         "failure": failure,
         "error": error_text,
+    }
+
+
+def _verify_subagent_evidence(
+    agent: str,
+    model: str,
+    result: dict[str, object],
+    rows: list[dict[str, object]],
+) -> dict[str, object]:
+    """Require tool-result evidence, not a parent-authored marker."""
+    tool_calls: list[tuple[str, str]] = []
+    tool_results: list[str] = []
+    assistant_results: list[str] = []
+
+    def walk(value: object) -> None:
+        if isinstance(value, dict):
+            role = str(value.get("role") or "").lower()
+            if role == "tool" and value.get("content") is not None:
+                tool_results.append(str(value.get("content")))
+            if role == "assistant" and value.get("content") is not None:
+                assistant_results.append(str(value.get("content")))
+            direct = value.get("tool_call")
+            if isinstance(direct, dict):
+                tool_calls.append((
+                    str(direct.get("name") or ""),
+                    json.dumps(direct.get("arguments") or {}, ensure_ascii=False, default=str),
+                ))
+            calls = value.get("tool_calls")
+            if isinstance(calls, list):
+                for call in calls:
+                    if not isinstance(call, dict):
+                        continue
+                    function = call.get("function") or {}
+                    if isinstance(function, dict):
+                        tool_calls.append((
+                            str(function.get("name") or call.get("name") or ""),
+                            str(function.get("arguments") or call.get("arguments") or ""),
+                        ))
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(result.get("transcript") or [])
+    for row in rows:
+        walk(row.get("proxy_server_request") or {})
+        walk(row.get("response") or {})
+
+    normalized_agent = agent.strip().lower()
+    native_names = {
+        "codex": {"spawn_agent", "collaboration__spawn_agent"},
+        "claude": {"agent"},
+        "codebuddy": {"agent"},
+        "opencode": {"task"},
+    }
+    expected = native_names.get(normalized_agent, set())
+    invocation = False
+    for name, arguments in tool_calls:
+        lowered = name.lower()
+        if lowered in expected:
+            invocation = True
+        if normalized_agent == "codex" and lowered.endswith("__spawn_agent"):
+            invocation = True
+        if normalized_agent == "openclaw" and lowered == "exec" and "openclaw agent exec" in arguments:
+            invocation = True
+        if normalized_agent == "justdo" and lowered == "exec" and "agent-eval check-agent --agent justdo" in arguments:
+            invocation = True
+
+    result_text = "\n".join(tool_results)
+    child_model_marker = any(
+        text.strip() == "SUBAGENT_OK" for text in assistant_results
+    )
+    if normalized_agent == "openclaw":
+        child_result = (
+            child_model_marker
+            or (
+                "SUBAGENT_OK" in result_text
+                and ('"ok": true' in result_text or "'ok': True" in result_text)
+                and model in result_text
+            )
+        )
+    elif normalized_agent == "justdo":
+        child_result = (
+            child_model_marker
+            or (
+                "SUBAGENT_OK" in result_text
+                and ('"status": "connected"' in result_text or "'status': 'connected'" in result_text)
+                and model in result_text
+            )
+        )
+    else:
+        child_result = "SUBAGENT_OK" in result_text
+
+    # Some CLIs retain a short progress preface in FinalMessage even though
+    # the terminal answer is the requested marker. Require the exact marker at
+    # the end; tool-result evidence above still prevents parent simulation.
+    final_marker = str(result.get("final_message") or "").strip().endswith(
+        "PARENT_OK:SUBAGENT_OK"
+    )
+    same_model_calls = sum(
+        1 for row in rows
+        if row.get("status") == "success"
+        and model in {str(row.get("model") or ""), str(row.get("model_group") or "")}
+    )
+    verified = invocation and child_result and final_marker and same_model_calls >= 2
+    missing = []
+    if not invocation:
+        missing.append("subagent_invocation")
+    if not child_result:
+        missing.append("successful_child_tool_result")
+    if not final_marker:
+        missing.append("parent_completion_marker")
+    if same_model_calls < 2:
+        missing.append("parent_and_child_model_calls")
+    return {
+        "status": "verified" if verified else "unverified",
+        "verified": verified,
+        "transport": "native" if normalized_agent in native_names else "isolated_child_process",
+        "tool_calls": sorted({name for name, _ in tool_calls if name}),
+        "successful_matching_model_calls": same_model_calls,
+        "reason": None if verified else "missing: " + ", ".join(missing),
     }
 
 
@@ -609,6 +787,16 @@ def _evaluation_batch(
     agents = _unique_agents(args.agent, args.workers)
     rows: list[dict[str, object]] = []
 
+    def evaluation_passed(result: dict[str, object]) -> bool:
+        if result.get("status", "completed") != "completed":
+            return False
+        cases = [
+            case
+            for iteration in (result.get("results") or [])
+            for case in (iteration.get("case_results") or [])
+        ]
+        return all(case.get("status") == "PASS" for case in cases) if cases else True
+
     def run_one(agent: str) -> dict[str, object]:
         task_id = uuid.uuid4().hex
         try:
@@ -638,9 +826,11 @@ def _evaluation_batch(
                 selected_skills=selected_skills,
             )
             scores = result.get("scores") or {}
+            passed = evaluation_passed(result)
             return {
                 "agent": agent,
                 "status": result.get("status", "completed"),
+                "evaluation_passed": passed,
                 "task_id": result.get("task_id") or task_id,
                 "model": result.get("provider_model") or result.get("model"),
                 "overall_score": scores.get("overall_score"),
@@ -664,7 +854,7 @@ def _evaluation_batch(
         for future in as_completed(futures):
             rows.append(future.result())
     rows.sort(key=lambda item: agents.index(str(item.get("agent"))))
-    passed = sum(item.get("status") == "completed" for item in rows)
+    passed = sum(item.get("evaluation_passed") is True for item in rows)
     return {
         "status": "completed" if passed == len(rows) else ("partial_failed" if passed else "failed"),
         "evaluation_type": evaluation_type,

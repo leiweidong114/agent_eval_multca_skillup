@@ -10,6 +10,8 @@ from agent_eval.runtime import (
     UNSUPPORTED_SKILL_INJECTION_AGENTS,
     agent_capabilities,
     default_agent_command,
+    load_agent_paths,
+    save_agent_path,
     find_multica_runtime,
     find_skill_up,
     normalize_agent,
@@ -27,6 +29,30 @@ def test_agent_aliases_and_commands():
     assert default_agent_command("qodercli") == "qodercli"
     with pytest.raises(ValueError, match="Unsupported Agent"):
         normalize_agent("not-a-real-agent")
+
+
+def test_saved_agent_path_is_shared_by_runtime_discovery(tmp_path, monkeypatch):
+    executable = tmp_path / ("custom-agent.cmd" if os.name == "nt" else "custom-agent")
+    executable.write_text("@echo off\n" if os.name == "nt" else "#!/bin/sh\n", encoding="utf-8")
+    if os.name != "nt":
+        executable.chmod(0o755)
+
+    saved = save_agent_path("justdo", str(executable), project_root=tmp_path)
+
+    assert saved["justdo"] == str(executable.resolve())
+    assert load_agent_paths(tmp_path) == saved
+    monkeypatch.delenv("JUSTDO_AGENT_EXECUTABLE", raising=False)
+    assert default_agent_command("justdo", tmp_path) == str(executable.resolve())
+
+
+def test_empty_saved_agent_path_restores_automatic_discovery(tmp_path):
+    executable = tmp_path / ("custom-agent.cmd" if os.name == "nt" else "custom-agent")
+    executable.write_text("@echo off\n" if os.name == "nt" else "#!/bin/sh\n", encoding="utf-8")
+    if os.name != "nt":
+        executable.chmod(0o755)
+    save_agent_path("justdo", str(executable), project_root=tmp_path)
+
+    assert save_agent_path("justdo", "", project_root=tmp_path) == {}
 
 
 def test_skill_target_matches_agent_native_discovery():
@@ -70,6 +96,15 @@ def test_model_adapter_registry_has_exactly_the_21_supported_agents():
         agent_capabilities(agent)["model_adapter"]["evaluation_supported"]
         for agent in AGENT_MODEL_ADAPTERS
     )
+
+
+def test_six_primary_agents_advertise_explicit_subagent_transports():
+    expected = {"claude", "codebuddy", "codex", "justdo", "openclaw", "opencode"}
+
+    for agent in expected:
+        capabilities = agent_capabilities(agent)
+        assert capabilities["subagent_supported"] is True
+        assert capabilities["subagent_transport"]
 
 
 @pytest.mark.parametrize("agent", sorted(UNSUPPORTED_SKILL_INJECTION_AGENTS))

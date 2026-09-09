@@ -7,7 +7,9 @@ import sys
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+
+from agent_eval.database import enrich_interaction_rows, group_interaction_sessions, summarize_interaction_rows
 
 from app.config import RUNS_ROOT
 
@@ -92,7 +94,12 @@ def get_run(run_id: str) -> dict[str, object]:
 
 
 @router.get("/runs/{run_id}/interactions")
-def get_run_interactions(run_id: str) -> dict[str, object]:
+def get_run_interactions(
+    run_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str | None = Query(None, max_length=300),
+) -> dict[str, object]:
     """Return the durable, full LiteLLM request/response records for a run."""
     found = _find_run(run_id)
     if not found:
@@ -103,12 +110,32 @@ def get_run_interactions(run_id: str) -> dict[str, object]:
     if trace != run_dir / "model-interactions.json" and run_dir not in trace.parents:
         raise HTTPException(status_code=400, detail="Unsafe interaction trace path")
     if not trace.is_file():
-        return {"run_id": run_id, "items": [], "trace_file": None}
+        return {"run_id": run_id, "items": [], "trace_file": None, "total": 0, "page": page, "page_size": page_size, "summary": summarize_interaction_rows([]), "sessions": []}
     try:
         items = json.loads(trace.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=500, detail="Model interaction trace is unreadable") from exc
-    return {"run_id": run_id, "items": items if isinstance(items, list) else [], "trace_file": str(trace)}
+    all_items = items if isinstance(items, list) else []
+    all_items = [item for item in all_items if isinstance(item, dict)]
+    enrich_interaction_rows(all_items)
+    summary = summarize_interaction_rows(all_items)
+    term = (search or "").strip().casefold()
+    filtered = [
+        item for item in all_items
+        if not term or term in json.dumps(item, ensure_ascii=False, default=str).casefold()
+    ]
+    start = (page - 1) * page_size
+    return {
+        "run_id": run_id,
+        "items": filtered[start:start + page_size],
+        "trace_file": str(trace),
+        "total": len(filtered),
+        "unfiltered_total": len(all_items),
+        "page": page,
+        "page_size": page_size,
+        "summary": summary,
+        "sessions": group_interaction_sessions(all_items),
+    }
 
 
 @router.post("/runs/{run_id}/open-folder")

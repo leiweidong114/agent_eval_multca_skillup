@@ -297,6 +297,12 @@ agent-eval agents
 agent-eval agents --all
 ```
 
+Web 页面“模型与 Agent”中的 Agent 路径可以直接编辑并保存。保存值写入本机忽略文件
+`backend/config/agent-paths.json`，后端任务、`agent-eval agents`、`check-agent`、`run` 和
+`pipeline-eval` 会共同使用该路径；清空后保存可恢复自动发现。单次运行显式传入的
+`--agent-executable` 仍具有最高优先级，Agent 专用环境变量（例如
+`JUSTDO_AGENT_EXECUTABLE`）次之。
+
 当前重点验证的六个 Agent 名称为：
 
 ```text
@@ -320,6 +326,38 @@ agent-eval check-agent `
 ```
 
 成功结果应同时满足：Agent 正常退出、返回内容、数据库 Trace Key 精确命中、数据库模型匹配指定模型以及 Trace Key 成功清理。
+
+需要验证 Agent 是否真的启动了子 Agent，并确认父、子调用都使用指定模型时，使用：
+
+```powershell
+agent-eval check-agent `
+  --agent codex `
+  --model glm-4.5-air `
+  --verify-subagent `
+  --timeout 300 `
+  --max-turns 8 `
+  --database-verify
+```
+
+省略 `--prompt` 时会自动发送严格的 Subagent 验证提示词。成功结果必须同时满足：
+
+- 父 Agent 调用了真实 Subagent 通道；
+- 子 Agent 的工具结果或独立模型响应包含 `SUBAGENT_OK`，主 Agent 不能用脚本或文本伪造；
+- 父 Agent 最终返回 `PARENT_OK:SUBAGENT_OK`；
+- 同一运行级 Trace Key 下至少有两次指定模型的成功调用。
+
+六个重点 Agent 的 Subagent 通道如下：
+
+| Agent | 通道 |
+| --- | --- |
+| `codex` | 原生 `spawn_agent`；Responses `additional_tools` 由本地协议适配器转换 |
+| `claude` | 原生 `Agent` 工具 |
+| `codebuddy` | 原生 `Agent` 工具 |
+| `opencode` | 原生 `task` 工具 |
+| `openclaw` | 嵌入式模式下使用同配置的 `openclaw agent exec` 隔离子进程 |
+| `justdo` | 通过 `agent-eval check-agent` 启动同模型的隔离 JustDo 子进程 |
+
+OpenClaw/JustDo 不使用 `sessions_spawn`，因为该工具需要另外运行 Gateway 回传服务；当前本地评测运行时没有修改或放宽 Gateway 鉴权。命令行高级排障还可重复传入 `--extra-arg`，但普通验证不需要。
 
 ## 7. 向多个 Agent 同时发送相同 Prompt
 
@@ -1493,6 +1531,11 @@ agent-eval check-agent `
   --database-verify
 ```
 
+`--model` 首先选择 JustDo 中已启用的同名模型。如果 JustDo 未配置该模型，新版桥接会从
+评测器当前 LiteLLM profile 读取 OpenAI-compatible 地址和本次运行凭据，创建临时 provider，
+仅覆盖本次可见 Cowork 会话，并在运行结束后清理；不再要求用户在 JustDo 中重复配置该模型，
+也不会修改 main Agent 的永久默认模型。
+
 ### 25.2 Linux x64 单文件包（推荐在 Linux 或 WSL2 中构建）
 
 AppImage/DEB 的最后封装依赖 Linux 工具链。即使使用同一台 Windows 电脑，也应在 WSL2
@@ -1557,3 +1600,50 @@ export JUSTDO_AGENT_EXECUTABLE=/opt/JustDo/JustDo
 或题目评分失败。`2026-09-08` 的问题由自动 Provider 保存 `codex_cli_direct`、执行引擎仅登记
 旧别名 `codex_direct` 导致；当前版本已同时兼容规范名称和旧名称。升级后重新创建评测即可，
 旧的失败记录不会自动重跑。
+
+
+27.Win打包 justdo
+Set-Location "D:\AI_FOR_WORLD\14_AI_workspace\common_tools\JustDo"
+
+$node24Dir = "C:\Users\leiwe\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin"
+$npmCli = "D:\AI_FOR_WORLD\04_NodeJs\node_modules\npm\bin\npm-cli.js"
+
+$env:Path = "$node24Dir;$env:Path"
+
+node -v
+& node $npmCli ci
+& node $npmCli run dist:win
+
+## 28. 配置原理图评测使用的 Skill
+
+先在前端“Skill 管理”页面导入 Skill，再打开“设置”，在“原理图生成评测 Skill”中按执行顺序选择并保存。默认顺序是：
+
+1. `schematic-pipeline`
+2. `signal-interface-generation`
+3. `schematic-layout-codegen`
+4. `schematic-web-apply`
+
+启动原理图评测时，后端会按该顺序生成组合 Skill，并把组合包复制到本次任务目录的
+`staging/skill/`；OpenClaw 还会获得独立副本 `runtime/openclaw-workspace/skills/`。因此修改
+Skill 后要重新发起评测，已经开始或已经完成的任务继续使用各自目录内的快照，不会被后续修改覆盖。
+
+设置接口示例：
+
+```powershell
+curl.exe -X PUT "http://127.0.0.1:8000/api/settings" `
+  -H "Content-Type: application/json" `
+  -d '{"judge_model":"glm-4.5-air","agent_test_model":"glm-4.5-air","schematic_skills":["schematic-pipeline","signal-interface-generation","schematic-layout-codegen","schematic-web-apply"]}'
+```
+
+原理图总览的 LiteLLM 筛选值：
+
+```powershell
+curl.exe "http://127.0.0.1:8000/api/schematic/interaction-filters"
+curl.exe "http://127.0.0.1:8000/api/schematic/interactions?end_user=local&session_id=SESSION_ID&model=glm-4.5-air&limit=50&offset=0"
+```
+
+完成态评测的模型交互分页与内容搜索：
+
+```powershell
+curl.exe "http://127.0.0.1:8000/api/runs/RUN_ID/interactions?page=1&page_size=20&search=sessions_spawn"
+```

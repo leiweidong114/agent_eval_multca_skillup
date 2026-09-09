@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -83,6 +84,75 @@ SKILL_ROOTS = {
 RUNTIME_MANAGED_MODEL_AGENTS = frozenset({"mcode", "qwenpaw", "zeroclaw"})
 UNSUPPORTED_SKILL_INJECTION_AGENTS = frozenset({"dim", "hermes", "zeroclaw"})
 
+# Live-certified on glm-4.5-air. Other installed adapters keep their existing
+# model/Skill contract but are not advertised as Subagent-certified until the
+# strict probe has been run for them.
+SUBAGENT_TRANSPORTS = {
+    "claude": "native_agent_tool",
+    "codebuddy": "native_agent_tool",
+    "codex": "native_spawn_agent",
+    "opencode": "native_task_tool",
+    "openclaw": "isolated_openclaw_agent_exec",
+    "justdo": "isolated_justdo_child_process",
+}
+
+AGENT_PATHS_FILE = "agent-paths.json"
+
+
+def _default_project_root() -> Path:
+    # backend/src/agent_eval/runtime.py -> parents[2] = backend
+    return Path(__file__).resolve().parents[2]
+
+
+def load_agent_paths(project_root: Path | None = None) -> dict[str, str]:
+    """Load user-selected Agent executables shared by the Web UI and CLI."""
+    path = (project_root or _default_project_root()) / "config" / AGENT_PATHS_FILE
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(name): str(executable).strip()
+        for name, executable in value.items()
+        if str(name) in SUPPORTED_AGENTS and str(executable).strip()
+    }
+
+
+def save_agent_path(
+    agent: str,
+    executable: str | None,
+    *,
+    project_root: Path | None = None,
+) -> dict[str, str]:
+    """Persist one executable override, or remove it when the value is empty."""
+    normalized = normalize_agent(agent)
+    root = project_root or _default_project_root()
+    paths = load_agent_paths(root)
+    value = str(executable or "").strip().strip('"')
+    if value:
+        if len(value) > 4096 or any(char in value for char in "\r\n\0"):
+            raise ValueError("Invalid Agent executable path")
+        detected = shutil.which(value)
+        if detected is None:
+            raise ValueError(f"Agent executable was not found or is not executable: {value}")
+        paths[normalized] = str(Path(detected).resolve())
+    else:
+        paths.pop(normalized, None)
+
+    target = root / "config" / AGENT_PATHS_FILE
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(f"{target.suffix}.tmp")
+    temporary.write_text(
+        json.dumps(paths, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, target)
+    return paths
+
 
 def normalize_agent(value: str) -> str:
     normalized = AGENT_ALIASES.get(value.strip().lower(), value.strip().lower())
@@ -95,12 +165,16 @@ def normalize_agent(value: str) -> str:
     return normalized
 
 
-def default_agent_command(agent: str) -> str:
+def default_agent_command(agent: str, project_root: Path | None = None) -> str:
     normalized = normalize_agent(agent)
     if normalized == "justdo":
         configured = os.environ.get("JUSTDO_AGENT_EXECUTABLE", "").strip()
         if configured:
             return configured
+    configured_paths = load_agent_paths(project_root)
+    if normalized in configured_paths:
+        return configured_paths[normalized]
+    if normalized == "justdo":
         if os.name == "nt":
             appdata = os.environ.get("APPDATA", "").strip()
             if appdata:
@@ -140,6 +214,8 @@ def agent_capabilities(agent: str) -> dict[str, object]:
         "skill_injection": skill_injection,
         "skill_root": SKILL_ROOTS.get(normalized) if skill_injection else None,
         "specified_model_and_skill_evaluation": model_selection and skill_injection,
+        "subagent_supported": normalized in SUBAGENT_TRANSPORTS,
+        "subagent_transport": SUBAGENT_TRANSPORTS.get(normalized),
         "model_adapter": adapter.public_dict(),
     }
 

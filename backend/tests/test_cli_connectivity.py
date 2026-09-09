@@ -18,6 +18,18 @@ def test_models_command_parses_refresh_and_prefix():
     assert args.show_unavailable is False
 
 
+def test_check_agent_subagent_probe_defaults():
+    from agent_eval import cli
+
+    args = cli._parser().parse_args(
+        ["check-agent", "--agent", "codex", "--model", "glm-4.5-air", "--verify-subagent"]
+    )
+
+    assert args.verify_subagent is True
+    assert args.max_turns == 8
+    assert args.extra_arg == []
+
+
 def test_agents_command_defaults_to_available_executables_only(monkeypatch, capsys):
     from agent_eval import cli
 
@@ -90,3 +102,61 @@ def test_connectivity_probe_accepts_exact_custom_prompt(tmp_path, monkeypatch):
 
     assert captured["messages"] == [{"role": "user", "content": "HI"}]
     assert result["status"] == "connected"
+
+
+def test_subagent_verification_rejects_a_parent_simulation():
+    from agent_eval.cli import _verify_subagent_evidence
+
+    result = _verify_subagent_evidence(
+        "justdo",
+        "glm-4.5-air",
+        {"final_message": "PARENT_OK:SUBAGENT_OK"},
+        [
+            {
+                "status": "success",
+                "model": "glm-4.5-air",
+                "proxy_server_request": {"messages": [
+                    {"role": "assistant", "tool_calls": [{
+                        "function": {"name": "exec", "arguments": '{"command":"python fake.py"}'},
+                    }]},
+                    {"role": "tool", "content": "SUBAGENT_OK"},
+                ]},
+            }
+        ],
+    )
+
+    assert result["verified"] is False
+    assert "subagent_invocation" in result["reason"]
+
+
+def test_subagent_verification_accepts_justdo_child_cli_evidence():
+    from agent_eval.cli import _verify_subagent_evidence
+
+    rows = [
+        {
+            "status": "success",
+            "model": "glm-4.5-air",
+            "proxy_server_request": {"messages": [{
+                "role": "assistant",
+                "tool_calls": [{"function": {
+                    "name": "exec",
+                    "arguments": '{"command":"agent-eval check-agent --agent justdo --model glm-4.5-air"}',
+                }}],
+            }]},
+        },
+        {
+            "status": "success",
+            "model": "glm-4.5-air",
+            "proxy_server_request": {"messages": [{
+                "role": "tool",
+                "content": '{"status": "connected", "model": "glm-4.5-air", "response": "SUBAGENT_OK"}',
+            }]},
+        },
+    ]
+
+    result = _verify_subagent_evidence(
+        "justdo", "glm-4.5-air", {"final_message": "PARENT_OK:SUBAGENT_OK"}, rows
+    )
+
+    assert result["verified"] is True
+    assert result["transport"] == "isolated_child_process"

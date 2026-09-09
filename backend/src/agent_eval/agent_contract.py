@@ -35,7 +35,7 @@ def describe_agent_contract(agent: str) -> dict[str, Any]:
             "actual_model": "conditional_on_agent_or_litellm_trace",
             "tool_calls": "conditional_on_agent_protocol_and_task",
             "tool_results": "conditional_on_agent_protocol_and_task",
-            "subagent_calls": "best_effort_only",
+            "subagent_calls": "required_when_verify_subagent_is_requested",
             "context_tokens": "litellm_trace_only",
             "cache_tokens": "conditional_on_agent_protocol",
             "session_id": "conditional_on_agent_protocol",
@@ -48,6 +48,10 @@ def describe_agent_contract(agent: str) -> dict[str, Any]:
                 else "Unsupported: model is managed by the Agent runtime"
             ),
             "telemetry": "A dedicated probe must force at least one tool call and verify required evidence",
+            "subagents": (
+                "Use check-agent --verify-subagent; success requires a child tool result and "
+                "at least two successful calls of the requested model under one trace key"
+            ),
         },
     }
 

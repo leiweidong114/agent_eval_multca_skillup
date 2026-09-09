@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from agent_eval.runner import run_evaluation
 from agent_eval.runtime import validate_evaluation_capabilities
+from agent_eval.model_config import load_runtime_settings
+from agent_eval.cli_catalog import SCHEMATIC_PIPELINE_SKILLS
 from app.config import BACKEND_ROOT, RUNS_ROOT
 from app.job_manager import job_manager
 from app.skill_registry import compose_skills, resolve_skill
@@ -45,6 +47,8 @@ class RunRequest(BaseModel):
     @model_validator(mode="after")
     def normalize_skills(self) -> "RunRequest":
         selected = list(dict.fromkeys(self.skills or ([self.skill] if self.skill else [])))
+        if self.evaluation_type == "schematic" and not selected:
+            return self
         if not selected:
             raise ValueError("Select at least one Skill")
         if len(selected) > 8:
@@ -52,6 +56,17 @@ class RunRequest(BaseModel):
         self.skills = selected
         self.skill = selected[0]
         return self
+
+
+def _apply_schematic_skill_settings(request: RunRequest) -> RunRequest:
+    """Resolve a schematic run's Skill pipeline from local settings when omitted."""
+    if request.evaluation_type != "schematic" or request.skills:
+        return request
+    configured = load_runtime_settings(BACKEND_ROOT).get("schematic_skills")
+    selected = list(configured) if isinstance(configured, list) else list(SCHEMATIC_PIPELINE_SKILLS)
+    request.skills = selected
+    request.skill = selected[0]
+    return request
 
 
 class BatchTarget(BaseModel):
@@ -83,6 +98,7 @@ def _resolve_request_skill(request: RunRequest) -> Path:
 
 
 def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
+    request = _apply_schematic_skill_settings(request)
     skill_dir = _resolve_request_skill(request)
     result = run_evaluation(
         project_root=BACKEND_ROOT,
@@ -119,6 +135,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
 def create_run(request: RunRequest) -> dict[str, object]:
     """Queue an evaluation and return immediately with a job id."""
     try:
+        request = _apply_schematic_skill_settings(request)
         skill_dir = _resolve_request_skill(request)
         validate_evaluation_capabilities(
             request.agent,
@@ -164,6 +181,7 @@ def create_batch(request: BatchRunRequest) -> dict[str, object]:
                 continue
             seen.add(key)
             run = RunRequest(**request.base_request, **target.model_dump())
+            run = _apply_schematic_skill_settings(run)
             validate_evaluation_capabilities(
                 run.agent,
                 require_model_selection=run.require_model_verification,
@@ -206,6 +224,7 @@ def cancel_job(job_id: str) -> dict[str, object]:
 def validate_run(request: RunRequest) -> dict[str, object]:
     """Validate a Skill/eval config without executing the full run."""
     try:
+        request = _apply_schematic_skill_settings(request)
         return _run(request=request, validate_only=True)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

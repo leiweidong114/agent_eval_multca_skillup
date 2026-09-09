@@ -82,7 +82,8 @@
             <el-input v-model="form.prompt" type="textarea" :rows="6" placeholder="例如：设计一套 24V 转 5V/3A 的降压电源，包含输入保护、状态指示和测试点……" />
             <div class="prompt-example"><span>可直接使用内置 STM32 示例，验证四个 Skill、subagent、布局服务和网页应用全链路。</span><el-button link type="primary" @click="form.prompt=schematicExamplePrompt">填入示例 Prompt</el-button></div>
           </el-form-item>
-          <el-alert type="info" :closable="false" show-icon title="使用原理图 pipeline 的四个 Skill，调用指定 Agent 和模型执行生成与评测。" />
+          <el-alert type="info" :closable="false" show-icon title="使用设置页选定的 Skill pipeline，调用指定 Agent 和模型执行生成与评测。" />
+          <div class="pipeline-skills"><span>本次 Skill 顺序</span><el-tag v-for="(skill,index) in schematicSkills" :key="skill" effect="plain">{{index+1}}. {{skill}}</el-tag><el-button link type="primary" @click="router.push('/settings')">修改设置</el-button></div>
         </template>
 
         <template v-else>
@@ -142,7 +143,7 @@ import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } f
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Cpu, DataAnalysis, MagicStick } from '@element-plus/icons-vue'
-import { fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModelConfig, fetchModels, fetchSkillCases, fetchSkills, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun } from '../api'
+import { fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModelConfig, fetchModels, fetchSettings, fetchSkillCases, fetchSkills, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -158,7 +159,9 @@ const models = ref([])
 const skills = ref([])
 const benchmarks = ref([])
 const modelConfig = ref({})
+const runtimeSettings = ref({})
 const cases = ref([])
+const schematicSkills = computed(() => runtimeSettings.value.schematic_skills || ['schematic-pipeline','signal-interface-generation','schematic-layout-codegen','schematic-web-apply'])
 const schematicExamplePrompt = `设计一块基于 STM32F103C8T6 的最小控制板原理图。要求包含：5V 输入与 3.3V 稳压、电源指示灯、SWD 下载接口、8MHz 晶振与负载电容、复位按键，以及由 GPIO 驱动的红色 LED（串联 470Ω 电阻）。请严格执行已安装的四阶段原理图 pipeline，使用器件目录中的器件；生成并校验 out/sheets.json，按每批 2 个 subagent 完成切片代码和自动布局，确保 overlap=0、unrouted=0，最后生成多图页网页并在结论中列出 URL、全部中间产物路径和每页指标。`
 const running = ref(false)
 const job = ref(null)
@@ -243,7 +246,7 @@ async function submit() {
   }
 }
 async function submitAgentRun() {
-  const selectedSkills = form.type === 'schematic' ? ['schematic-pipeline','signal-interface-generation','schematic-layout-codegen','schematic-web-apply'] : form.skills
+  const selectedSkills = form.type === 'schematic' ? schematicSkills.value : form.skills
   const base = { evaluation_type: form.type, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: 12, benchmark: form.baseline, collect_database_trace: true, require_model_verification: true, llm_judge: true }
   if (form.batchMode) {
     const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })
@@ -270,12 +273,13 @@ function openResult() { router.push(`/results/${resultRouteType.value||form.type
 function resetRun() { job.value = null; resultId.value = null; running.value = false }
 
 onMounted(async () => {
-  const results = await Promise.allSettled([fetchAgents(), fetchModels(), fetchSkills(), fetchBenchmarks(), fetchModelConfig()])
+  const results = await Promise.allSettled([fetchAgents(), fetchModels(), fetchSkills(), fetchBenchmarks(), fetchModelConfig(), fetchSettings()])
   agents.value = results[0].status === 'fulfilled' ? results[0].value : []
   models.value = results[1].status === 'fulfilled' ? results[1].value.models || [] : []
   skills.value = results[2].status === 'fulfilled' ? results[2].value.skills || [] : []
   benchmarks.value = results[3].status === 'fulfilled' ? results[3].value : []
   modelConfig.value = results[4].status === 'fulfilled' ? results[4].value : {}
+  runtimeSettings.value = results[5].status === 'fulfilled' ? results[5].value : {}
   form.benchmarkId = installedBenchmarks.value[0]?.id || ''
   setDefaults()
 })
@@ -285,6 +289,6 @@ onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <style scoped>
-.prompt-example{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;margin-top:7px;color:var(--muted);font-size:11px}
+.prompt-example{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;margin-top:7px;color:var(--muted);font-size:11px}.pipeline-skills{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}.pipeline-skills>span{font-size:12px;color:var(--muted);margin-right:4px}
 .steps{width:440px;background:transparent}.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.type-card{position:relative;display:grid;grid-template-columns:42px 1fr;grid-template-rows:auto auto;text-align:left;gap:3px 12px;padding:16px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);cursor:pointer}.type-card strong{font-size:15px}.type-card small{color:var(--muted);line-height:1.5}.type-icon{grid-row:1/3;width:40px;height:40px;display:grid;place-items:center;border-radius:8px;background:var(--brand-soft);color:var(--brand);font-size:19px}.check{position:absolute;right:10px;top:10px;color:var(--accent);opacity:0}.active .check{opacity:1}.panel-title,.progress-head,.submit-row{display:flex;justify-content:space-between;align-items:center}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 13px}.common-fields>:first-child{grid-column:1/-1}.prism-form :deep(.el-form-item){margin-bottom:17px}.prism-form :deep(.el-form-item__label){padding-bottom:6px;color:var(--muted);font-size:11px}.field-help{font-size:11px;color:var(--muted);margin-top:6px}.option-meta{float:right;color:var(--muted);margin-left:20px;font-size:11px}.status-option{display:flex;align-items:center;gap:8px;width:100%}.status-option small{margin-left:auto;color:var(--muted)}.availability-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.availability-dot.available{background:#22a06b;box-shadow:0 0 0 3px rgba(34,160,107,.13)}.availability-dot.unavailable{background:#dc4c4c;box-shadow:0 0 0 3px rgba(220,76,76,.12)}.combination-note{grid-column:1/-1;margin-bottom:16px}.runtime-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.submit-row{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}.selection-summary{display:flex;gap:10px;align-items:center}.selection-summary span{font-size:12px;color:var(--muted);padding-left:10px;border-left:1px solid var(--line)}.progress-head h3{margin:4px 0}.progress-head p{margin:0 0 18px;color:var(--muted)}.result-actions{margin-top:18px}@media(max-width:900px){.steps{display:none}.type-grid,.form-grid,.runtime-grid{grid-template-columns:1fr}.common-fields>:first-child{grid-column:auto}.submit-row{align-items:flex-end}.selection-summary{flex-direction:column;align-items:flex-start}.type-grid{gap:8px}}
 </style>

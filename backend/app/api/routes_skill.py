@@ -34,8 +34,11 @@ from agent_eval.runtime import (
     SUPPORTED_AGENTS,
     agent_capabilities,
     default_agent_command,
+    load_agent_paths,
+    save_agent_path,
 )
 from agent_eval.scoring import load_scoring_config
+from agent_eval.cli_catalog import SCHEMATIC_PIPELINE_SKILLS
 from app.config import BACKEND_ROOT, SKILLS_ROOT
 from app.skill_registry import (
     delete_skill,
@@ -67,9 +70,16 @@ class BatchModelTestRequest(BaseModel):
     timeout_seconds: float = Field(default=30, ge=3, le=180)
 
 
+class AgentPathRequest(BaseModel):
+    path: str = Field(default="", max_length=4096)
+
+
 class RuntimeSettingsRequest(BaseModel):
     judge_model: str = Field(min_length=1, max_length=300)
     agent_test_model: str = Field(min_length=1, max_length=300)
+    schematic_skills: list[str] = Field(
+        default_factory=lambda: list(SCHEMATIC_PIPELINE_SKILLS), min_length=1, max_length=8
+    )
 
 
 class ModelProfileRequest(BaseModel):
@@ -110,13 +120,15 @@ def _scan_skills(root: Path) -> list[dict[str, str]]:
 def list_agents() -> list[dict[str, Any]]:
     """List supported Multica Agent backends and local CLI discovery."""
     result: list[dict[str, str | bool | None]] = []
+    configured_paths = load_agent_paths(BACKEND_ROOT)
     for agent in SUPPORTED_AGENTS:
-        command = default_agent_command(agent)
+        command = default_agent_command(agent, BACKEND_ROOT)
         result.append(
             {
                 "agent": agent,
                 "default_command": command,
                 "detected_executable": shutil.which(command),
+                "configured_path": configured_paths.get(agent),
                 "capabilities": agent_capabilities(agent),
                 "evaluation_contract": describe_agent_contract(agent),
             }
@@ -124,12 +136,34 @@ def list_agents() -> list[dict[str, Any]]:
     return result
 
 
+@router.put("/agents/{agent_name}/path")
+def put_agent_path(agent_name: str, request: AgentPathRequest) -> dict[str, object]:
+    """Persist an Agent executable override used by both Web and CLI runs."""
+    if agent_name not in SUPPORTED_AGENTS:
+        raise HTTPException(status_code=404, detail=f"Unsupported Agent: {agent_name}")
+    try:
+        configured = save_agent_path(
+            agent_name,
+            request.path,
+            project_root=BACKEND_ROOT,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    command = default_agent_command(agent_name, BACKEND_ROOT)
+    return {
+        "agent": agent_name,
+        "configured_path": configured.get(agent_name),
+        "default_command": command,
+        "detected_executable": shutil.which(command),
+    }
+
+
 @router.post("/agents/{agent_name}/test")
 def test_agent(agent_name: str) -> dict[str, object]:
     """Run the Agent with a minimal prompt through the configured default model."""
     if agent_name not in SUPPORTED_AGENTS:
         raise HTTPException(status_code=404, detail=f"Unsupported Agent: {agent_name}")
-    command = default_agent_command(agent_name)
+    command = default_agent_command(agent_name, BACKEND_ROOT)
     executable = shutil.which(command)
     if not executable:
         return {"ok": False, "agent": agent_name, "message": "未在 PATH 中发现可执行文件"}
@@ -272,7 +306,7 @@ def test_models_batch(request: BatchModelTestRequest) -> dict[str, object]:
 
 
 @router.get("/settings")
-def get_runtime_settings() -> dict[str, str]:
+def get_runtime_settings() -> dict[str, object]:
     configured = load_runtime_settings(BACKEND_ROOT)
     model_config = describe_model_config(BACKEND_ROOT)
     scoring = load_scoring_config(BACKEND_ROOT).get("llm_judge") or {}
@@ -284,12 +318,16 @@ def get_runtime_settings() -> dict[str, str]:
             or str(scoring.get("model") or default_model)
         ),
         "agent_test_model": configured.get("agent_test_model") or default_model,
+        "schematic_skills": configured.get("schematic_skills") or list(SCHEMATIC_PIPELINE_SKILLS),
     }
 
 
 @router.put("/settings")
-def put_runtime_settings(request: RuntimeSettingsRequest) -> dict[str, str]:
+def put_runtime_settings(request: RuntimeSettingsRequest) -> dict[str, object]:
     try:
+        missing = [name for name in request.schematic_skills if resolve_skill(name) is None]
+        if missing:
+            raise ValueError(f"Skill not found: {', '.join(missing)}")
         return save_runtime_settings(BACKEND_ROOT, request.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

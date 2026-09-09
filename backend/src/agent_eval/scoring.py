@@ -58,7 +58,10 @@ def _event_from_message(message: dict[str, Any]) -> dict[str, Any] | None:
     role = str(message.get("role") or "")
     if role == "tool_call":
         call = message.get("tool_call") or {}
-        return {"type": "tool-use", "tool": call.get("name"), "call_id": call.get("id")}
+        return {
+            "type": "tool-use", "tool": call.get("name"), "call_id": call.get("id"),
+            "arguments": call.get("arguments"),
+        }
     if role == "tool_result":
         result = message.get("tool_result") or {}
         return {
@@ -85,11 +88,32 @@ def _event_from_message(message: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _is_subagent_spawn_tool(value: Any, arguments: Any = None) -> bool:
+    name = str(value or "").lower().replace("-", "_")
+    base_name = name.rsplit("__", 1)[-1]
+    if base_name in {
+        "sessions_spawn", "spawn_agent", "subagent_spawn", "start_subagent", "agent", "task",
+    }:
+        return True
+    if base_name != "exec":
+        return False
+    serialized = (
+        arguments if isinstance(arguments, str)
+        else json.dumps(arguments, ensure_ascii=False, default=str)
+    )
+    return (
+        "openclaw agent exec" in serialized
+        or "agent-eval check-agent --agent justdo" in serialized
+    )
+
+
 def collect_process_metrics(
     results: list[dict[str, Any]], database_trace: dict[str, Any]
 ) -> dict[str, Any]:
     tool_calls = tool_results = tool_failures = errors = 0
-    assistant_messages = thinking_events = subagent_calls = 0
+    assistant_messages = thinking_events = 0
+    subagent_call_ids: set[str] = set()
+    successful_tool_result_ids: set[str] = set()
     final_output_present = False
     input_tokens = output_tokens = cache_read_tokens = cache_write_tokens = 0
     observed_models: set[str] = set()
@@ -120,12 +144,15 @@ def collect_process_metrics(
                 if event_type in {"tool-use", "tool_call"}:
                     tool_calls += 1
                     tool = str(event.get("tool") or "").lower()
-                    if "subagent" in tool or "spawn_agent" in tool:
-                        subagent_calls += 1
+                    if _is_subagent_spawn_tool(tool, event.get("arguments")):
+                        subagent_call_ids.add(str(event.get("call_id") or f"anonymous-{tool_calls}"))
                 elif event_type in {"tool-result", "tool_result"}:
                     tool_results += 1
-                    if str(event.get("status") or "").lower() in {"failed", "error"}:
+                    result_status = str(event.get("status") or "").lower()
+                    if result_status in {"failed", "error", "forbidden"}:
                         tool_failures += 1
+                    else:
+                        successful_tool_result_ids.add(str(event.get("call_id") or ""))
                 elif event_type == "error":
                     errors += 1
                 elif event_type == "thinking":
@@ -154,8 +181,10 @@ def collect_process_metrics(
         "tool_results": tool_results,
         "tool_failures": tool_failures,
         "tool_completion_rate": round(100 * completed_tools / tool_calls, 2) if tool_calls else None,
-        "subagent_calls": subagent_calls,
-        "subagent_detection": "best_effort_tool_name_heuristic",
+        "subagent_calls": len(subagent_call_ids & successful_tool_result_ids),
+        "subagent_attempts": len(subagent_call_ids),
+        "subagent_failures": len(subagent_call_ids - successful_tool_result_ids),
+        "subagent_detection": "successful_tool_result_correlation",
         "assistant_message_count": assistant_messages,
         "final_output_present": final_output_present,
         "thinking_event_count": thinking_events,
@@ -199,6 +228,26 @@ def supplement_database_tool_metrics(process: dict[str, Any], interactions: list
             except ValueError: return {}
         return value or {}
     calls, results, response_calls = {}, {}, {}
+
+    def result_failed(message: dict[str, Any]) -> bool:
+        content = message.get('content')
+        blocks = content if isinstance(content, list) else [content]
+        for block in blocks:
+            text = block.get('text') if isinstance(block, dict) else block
+            if not isinstance(text, str):
+                continue
+            try:
+                payload = json.loads(text)
+            except ValueError:
+                payload = None
+            if isinstance(payload, dict):
+                status = str(payload.get('status') or '').lower()
+                if payload.get('isError') is True or status in {'error', 'failed', 'forbidden'}:
+                    return True
+            lowered = text.lower()
+            if '"status": "error"' in lowered or '"status": "forbidden"' in lowered:
+                return True
+        return False
     for row in interactions:
         request = obj(row.get('proxy_server_request'))
         request = request if isinstance(request, dict) else {}
@@ -209,26 +258,97 @@ def supplement_database_tool_metrics(process: dict[str, Any], interactions: list
         messages = messages if isinstance(messages, list) else []
         for choice in response.get('choices') or []:
             for call in (choice.get('message') or {}).get('tool_calls') or []:
-                if call.get('id'): response_calls[call['id']] = (call.get('function') or {}).get('name', '')
+                function = call.get('function') or {}
+                if call.get('id'):
+                    response_calls[call['id']] = (function.get('name', ''), function.get('arguments'))
         for message in messages:
             for call in message.get('tool_calls') or []:
-                if call.get('id'): calls[call['id']] = (call.get('function') or {}).get('name', '')
+                function = call.get('function') or {}
+                if call.get('id'):
+                    calls[call['id']] = (function.get('name', ''), function.get('arguments'))
             if message.get('role') == 'tool' and message.get('tool_call_id'):
                 results[message['tool_call_id']] = message
-    for cid, name in response_calls.items():
+    for cid, call_info in response_calls.items():
+        name, _ = call_info
         # OpenClaw sanitizes upstream call IDs (e.g. call_abc -> callabc).
         # Join only a unique same-name match, preserving ambiguous IDs.
-        matches = [key for key, tool in calls.items() if tool == name and re.sub(r'[^a-zA-Z0-9]', '', key) == re.sub(r'[^a-zA-Z0-9]', '', cid)]
+        matches = [
+            key for key, tool_info in calls.items()
+            if tool_info[0] == name
+            and re.sub(r'[^a-zA-Z0-9]', '', key) == re.sub(r'[^a-zA-Z0-9]', '', cid)
+        ]
         if cid not in calls and len(matches) != 1:
-            calls[cid] = name
+            calls[cid] = call_info
     process['tool_event_source'] = 'litellm_conversation_fallback' if calls else 'not_observed'
     if calls:
-        completed = len(set(results) & set(calls))
+        matched = set(results) & set(calls)
+        failed = {cid for cid in matched if result_failed(results[cid])}
+        completed = len(matched - failed)
+        subagent_ids = {
+            cid for cid, (name, arguments) in calls.items()
+            if _is_subagent_spawn_tool(name, arguments)
+        }
         process.update(tool_calls=len(calls), tool_results=completed,
                        tool_completion_rate=round(100*completed/len(calls), 2),
-                       tool_failures=None,
-                       subagent_calls=sum('subagent' in str(n).lower() or 'spawn_agent' in str(n).lower() for n in calls.values()),
-                       tool_failure_measurement='unknown_in_gateway_fallback')
+                       tool_failures=len(failed),
+                       subagent_calls=len((subagent_ids & matched) - failed),
+                       subagent_attempts=len(subagent_ids),
+                       subagent_failures=len(subagent_ids - ((subagent_ids & matched) - failed)),
+                       subagent_detection='successful_tool_result_correlation',
+                       tool_failure_measurement='tool_result_content')
+
+
+def collect_skill_read_evidence(
+    interactions: list[dict[str, Any]], selected_skills: list[str]
+) -> dict[str, Any]:
+    """Prove explicit SKILL.md reads from model-emitted read-like tool calls."""
+    observed: dict[str, list[dict[str, str]]] = {name: [] for name in selected_skills}
+
+    def obj(value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except ValueError:
+                return value
+        return value
+
+    def visit(node: Any, request_id: str) -> None:
+        node = obj(node)
+        if isinstance(node, list):
+            for item in node:
+                visit(item, request_id)
+            return
+        if not isinstance(node, dict):
+            return
+        for call in node.get("tool_calls") or []:
+            if not isinstance(call, dict):
+                continue
+            function = call.get("function") if isinstance(call.get("function"), dict) else call
+            tool = str(function.get("name") or call.get("name") or "").lower()
+            arguments = obj(function.get("arguments") or call.get("arguments") or {})
+            argument_text = json.dumps(arguments, ensure_ascii=False, default=str).lower()
+            if any(marker in tool for marker in ("read", "open", "view")) and "skill.md" in argument_text:
+                for skill in selected_skills:
+                    if skill.lower() in argument_text:
+                        observed[skill].append({"request_id": request_id, "tool": tool})
+        for key, child in node.items():
+            if key != "tool_calls":
+                visit(child, request_id)
+
+    for row in interactions:
+        request_id = str(row.get("request_id") or "")
+        visit(row.get("proxy_server_request") or row.get("messages"), request_id)
+        visit(row.get("response"), request_id)
+    missing = [skill for skill, evidence in observed.items() if not evidence]
+    return {
+        "status": "verified" if not missing else "partial" if len(missing) < len(selected_skills) else "not_observed",
+        "all_selected_skills_read": not missing,
+        "selected_skills": selected_skills,
+        "observed_skills": [skill for skill, evidence in observed.items() if evidence],
+        "missing_skills": missing,
+        "evidence": observed,
+        "method": "explicit_read_tool_call_with_skill_md_path",
+    }
 
 
 def calculate_rule_dimensions(

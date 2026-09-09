@@ -51,6 +51,52 @@ def test_codex_namespace_custom_tool_roundtrip():
     assert to_chat(request, 'responses')['messages'][0]['tool_calls'][0]['function']['name'] == 'functions__apply_patch'
 
 
+def test_codex_subagent_additional_tools_are_merged_and_roundtrip():
+    request = {
+        'model': 'glm',
+        'input': [
+            {'role': 'user', 'content': [{'type': 'input_text', 'text': 'delegate'}]},
+            {
+                'type': 'additional_tools',
+                'id': 'subagent-tools',
+                'role': 'system',
+                'tools': [
+                    {'type': 'namespace', 'name': 'functions', 'tools': [
+                        {'type': 'custom', 'name': 'apply_patch', 'description': 'patch'},
+                    ]},
+                ],
+            },
+        ],
+        'tools': [{'type': 'function', 'name': 'read_file', 'parameters': {'type': 'object'}}],
+    }
+
+    chat = to_chat(request, 'responses')
+    assert chat['messages'] == [{'role': 'user', 'content': 'delegate'}]
+    assert [item['function']['name'] for item in chat['tools']] == [
+        'read_file', 'functions__apply_patch',
+    ]
+
+    upstream = {'choices': [{'finish_reason': 'tool_calls', 'message': {'tool_calls': [
+        {'id': 'sub-call', 'function': {
+            'name': 'functions__apply_patch', 'arguments': '{"input":"patch data"}',
+        }},
+    ]}}]}
+    body, _ = from_chat(upstream, 'responses', 'glm', False, request)
+    item = json.loads(body)['output'][0]
+    assert item['type'] == 'custom_tool_call'
+    assert item['namespace'] == 'functions'
+    assert item['name'] == 'apply_patch'
+    assert item['input'] == 'patch data'
+
+
+def test_codex_additional_tools_requires_a_list():
+    with pytest.raises(ValueError, match='must be a list'):
+        to_chat({
+            'model': 'glm',
+            'input': [{'type': 'additional_tools', 'tools': {'type': 'function'}}],
+        }, 'responses')
+
+
 def test_gateway_tool_fallback_deduplicates_history_and_does_not_invent_results():
     from agent_eval.scoring import supplement_database_tool_metrics
     row = {'proxy_server_request': {'body': {'messages': [
@@ -61,7 +107,8 @@ def test_gateway_tool_fallback_deduplicates_history_and_does_not_invent_results(
     assert metrics['tool_calls'] == 2
     assert metrics['tool_results'] == 1
     assert metrics['tool_completion_rate'] == 50
-    assert metrics['tool_failures'] is None
+    assert metrics['tool_failures'] == 0
+    assert metrics['tool_failure_measurement'] == 'tool_result_content'
 
 
 def test_gateway_tool_fallback_correlates_openclaw_sanitized_ids():

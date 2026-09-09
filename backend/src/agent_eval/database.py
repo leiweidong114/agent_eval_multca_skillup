@@ -309,14 +309,18 @@ def search_conversation_interactions(
     project_root: Path,
     *,
     user_id: str | None = None,
+    end_user: str | None = None,
     session_id: str | None = None,
+    model: str | None = None,
     limit: int = 500,
     offset: int = 0,
     full_content: bool = False,
 ) -> dict[str, Any]:
     """Search LiteLLM request/response content by user or conversation session."""
     user_id = (user_id or "").strip()
+    end_user = (end_user or "").strip()
     session_id = (session_id or "").strip()
+    model = (model or "").strip()
     if offset < 0:
         raise ValueError("offset must be non-negative")
     config = resolve_database_config(project_root)
@@ -331,6 +335,9 @@ def search_conversation_interactions(
             or metadata->'spend_logs_metadata'->>'user_api_key_user_id' = %s
         )''')
         parameters.extend([user_id, user_id, user_id, user_id])
+    if end_user:
+        clauses.append("end_user = %s")
+        parameters.append(end_user)
     if session_id:
         clauses.append('''(
             session_id = %s
@@ -339,6 +346,9 @@ def search_conversation_interactions(
             or end_user like %s
         )''')
         parameters.extend([session_id, session_id, session_id, f'%"session_id":"{session_id}"%'])
+    if model:
+        clauses.append("(model = %s or model_group = %s)")
+        parameters.extend([model, model])
     query = f'''select request_id, call_type, "user" as user_id, end_user,
         "startTime" as start_time, "endTime" as end_time, model, model_group,
         custom_llm_provider, session_id, status, agent_id, request_duration_ms,
@@ -346,48 +356,79 @@ def search_conversation_interactions(
         messages, response, proxy_server_request, metadata
         from "LiteLLM_SpendLogs"
         where {' and '.join(clauses) or 'true'}
-        order by "startTime" {'asc' if user_id or session_id else 'desc'}, request_id
+        order by "startTime" {'asc' if user_id or end_user or session_id or model else 'desc'}, request_id
         limit %s offset %s'''
+    session_query = f'''select request_id, "user" as user_id, end_user,
+        "startTime" as start_time, "endTime" as end_time, model, model_group,
+        session_id, agent_id, total_tokens, response
+        from "LiteLLM_SpendLogs"
+        where {' and '.join(clauses) or 'true'}
+        order by "startTime" desc, request_id
+        limit %s'''
     safe_limit = max(1, min(int(limit), config.limit, 1000))
     psycopg, dict_row = _driver()
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
             cursor.execute(query, (*parameters, safe_limit + 1, offset))
             rows = cursor.fetchall()
+            cursor.execute(session_query, (*parameters, min(config.limit, 5000)))
+            session_rows = cursor.fetchall()
     has_more = len(rows) > safe_limit
     rows = rows[:safe_limit]
     interactions = [
         _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=None if full_content else config.max_content_chars)
         for row in rows
     ]
+    for index, row in enumerate(interactions, start=offset + 1):
+        tool_calls = _response_tool_calls(row.get("response"))
+        row["turn_index"] = index
+        row["tool_call_count"] = len(tool_calls)
+        row["subagent_start_count"] = sum(
+            _is_subagent_tool(name, arguments) for name, arguments in tool_calls
+        )
+    session_interactions = [
+        _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=None)
+        for row in session_rows
+    ]
+    enrich_interaction_rows(session_interactions)
     session_map: dict[str, dict[str, Any]] = {}
-    for row in interactions:
+    for row in session_interactions:
         sid = str(row.get("session_id") or "未记录会话 ID")
         item = session_map.setdefault(
             sid,
             {
                 "session_id": sid,
                 "user_id": row.get("user_id"),
+                "end_user": row.get("end_user"),
                 "agent_id": row.get("agent_id"),
                 "models": set(),
                 "interaction_count": 0,
                 "total_tokens": 0,
+                "tool_call_count": 0,
+                "subagent_start_count": 0,
                 "started_at": row.get("start_time"),
                 "finished_at": row.get("end_time"),
             },
         )
-        if row.get("model"):
-            item["models"].add(str(row["model"]))
+        effective_model = row.get("model_group") or row.get("model")
+        if effective_model:
+            item["models"].add(str(effective_model))
         item["interaction_count"] += 1
         item["total_tokens"] += int(row.get("total_tokens") or 0)
-        item["finished_at"] = row.get("end_time") or item["finished_at"]
+        item["tool_call_count"] += int(row.get("tool_call_count") or 0)
+        item["subagent_start_count"] += int(row.get("subagent_start_count") or 0)
+        if row.get("start_time") and (not item["started_at"] or str(row["start_time"]) < str(item["started_at"])):
+            item["started_at"] = row["start_time"]
+        if row.get("end_time") and (not item["finished_at"] or str(row["end_time"]) > str(item["finished_at"])):
+            item["finished_at"] = row["end_time"]
     sessions = []
     for item in session_map.values():
         item["models"] = sorted(item["models"])
+        item["duration_ms"] = _elapsed_ms(item.get("started_at"), item.get("finished_at"))
         sessions.append(item)
     return {
         "status": "ok",
-        "query": {"user_id": user_id or None, "session_id": session_id or None},
+        "query": {"user_id": user_id or None, "end_user": end_user or None, "session_id": session_id or None, "model": model or None},
         "count": len(interactions),
         "sessions": sessions,
         "interactions": interactions,
@@ -398,6 +439,149 @@ def search_conversation_interactions(
         "content_truncation_enabled": not full_content,
         "content_source": "LiteLLM_SpendLogs; absent upstream content cannot be reconstructed",
     }
+
+
+def _as_json(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _response_tool_calls(value: Any) -> list[tuple[str, Any]]:
+    """Return only tool calls newly emitted by this model response."""
+    calls_found: list[tuple[str, Any]] = []
+
+    def visit(node: Any) -> None:
+        node = _as_json(node)
+        if isinstance(node, list):
+            for item in node:
+                visit(item)
+            return
+        if not isinstance(node, dict):
+            return
+        calls = node.get("tool_calls")
+        if isinstance(calls, list):
+            for call in calls:
+                if not isinstance(call, dict):
+                    continue
+                function = call.get("function") if isinstance(call.get("function"), dict) else {}
+                name = function.get("name") or call.get("name")
+                if name:
+                    calls_found.append((str(name), function.get("arguments") or call.get("arguments")))
+        if node.get("type") in {"function_call", "tool_use"} and node.get("name"):
+            calls_found.append((str(node["name"]), node.get("arguments") or node.get("input")))
+        for key, child in node.items():
+            if key != "tool_calls":
+                visit(child)
+
+    visit(value)
+    return calls_found
+
+
+def _response_tool_names(value: Any) -> list[str]:
+    return [name for name, _ in _response_tool_calls(value)]
+
+
+def _is_subagent_tool(name: str, arguments: Any = None) -> bool:
+    normalized = name.lower().replace("-", "_")
+    base_name = normalized.rsplit("__", 1)[-1]
+    if base_name in {
+        "sessions_spawn", "spawn_agent", "subagent_spawn", "start_subagent", "agent", "task",
+    }:
+        return True
+    if base_name != "exec":
+        return False
+    serialized = json.dumps(arguments, ensure_ascii=False, default=str) if not isinstance(arguments, str) else arguments
+    return (
+        "openclaw agent exec" in serialized
+        or "agent-eval check-agent --agent justdo" in serialized
+    )
+
+
+def _elapsed_ms(start: Any, end: Any) -> int | None:
+    def parse(value: Any) -> datetime | None:
+        if isinstance(value, datetime):
+            return value
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    started, finished = parse(start), parse(end)
+    if not started or not finished:
+        return None
+    try:
+        return max(0, round((finished - started).total_seconds() * 1000))
+    except TypeError:
+        return None
+
+
+def enrich_interaction_rows(rows: list[dict[str, Any]], *, start_index: int = 1) -> list[dict[str, Any]]:
+    """Add stable per-turn metrics used by database and durable report views."""
+    for index, row in enumerate(rows, start=start_index):
+        tool_calls = _response_tool_calls(row.get("response"))
+        row["turn_index"] = index
+        row["tool_call_count"] = len(tool_calls)
+        row["subagent_start_count"] = sum(
+            _is_subagent_tool(name, arguments) for name, arguments in tool_calls
+        )
+    return rows
+
+
+def summarize_interaction_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    starts = [row.get("start_time") for row in rows if row.get("start_time")]
+    ends = [row.get("end_time") for row in rows if row.get("end_time")]
+    durations = [int(row.get("request_duration_ms") or 0) for row in rows]
+    return {
+        "interaction_count": len(rows),
+        "total_tokens": sum(int(row.get("total_tokens") or 0) for row in rows),
+        "prompt_tokens": sum(int(row.get("prompt_tokens") or 0) for row in rows),
+        "completion_tokens": sum(int(row.get("completion_tokens") or 0) for row in rows),
+        "tool_call_count": sum(int(row.get("tool_call_count") or 0) for row in rows),
+        "subagent_start_count": sum(int(row.get("subagent_start_count") or 0) for row in rows),
+        "started_at": min(starts, key=str) if starts else None,
+        "finished_at": max(ends, key=str) if ends else None,
+        "duration_ms": _elapsed_ms(min(starts, key=str), max(ends, key=str)) if starts and ends else sum(durations),
+    }
+
+
+def group_interaction_sessions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(str(row.get("session_id") or "未记录会话 ID"), []).append(row)
+    sessions: list[dict[str, Any]] = []
+    for session_id, items in grouped.items():
+        summary = summarize_interaction_rows(items)
+        summary.update({
+            "session_id": session_id,
+            "end_user": next((item.get("end_user") for item in items if item.get("end_user")), None),
+            "models": sorted({str(item.get("model_group") or item.get("model")) for item in items if item.get("model_group") or item.get("model")}),
+        })
+        sessions.append(summary)
+    return sorted(sessions, key=lambda item: str(item.get("started_at") or ""))
+
+
+def conversation_filter_options(project_root: Path) -> dict[str, Any]:
+    """Return LiteLLM End User and model values for overview dropdowns."""
+    config = resolve_database_config(project_root)
+    if not config.enabled:
+        return {"status": "disabled", "end_users": [], "models": []}
+    psycopg, dict_row = _driver()
+    with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute('''select distinct end_user from "LiteLLM_SpendLogs"
+                where end_user is not null and end_user <> '' order by end_user limit 500''')
+            end_users = [str(row["end_user"]) for row in cursor.fetchall()]
+            cursor.execute('''select distinct coalesce(nullif(model_group, ''), model) as model
+                from "LiteLLM_SpendLogs" where coalesce(nullif(model_group, ''), model) is not null
+                order by model limit 500''')
+            models = [str(row["model"]) for row in cursor.fetchall()]
+    return {"status": "ok", "end_users": end_users, "models": models}
 
 
 def summarize_model_interactions(

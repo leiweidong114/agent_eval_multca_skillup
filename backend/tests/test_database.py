@@ -7,7 +7,9 @@ from agent_eval.database import (
     DatabaseConfigurationError,
     _database_retry,
     _sanitize,
+    enrich_interaction_rows,
     resolve_database_config,
+    summarize_interaction_rows,
     summarize_model_interactions,
     verify_requested_model,
 )
@@ -167,3 +169,41 @@ def test_interaction_content_redacts_nested_credentials():
     )
     assert result["metadata"]["user_api_key"] == "[REDACTED]"
     assert result["metadata"]["user_api_key_alias"] == "eval-run"
+
+
+def test_interaction_metrics_count_new_tool_and_subagent_calls():
+    rows = [{
+        "start_time": "2026-09-09T10:00:00+08:00",
+        "end_time": "2026-09-09T10:00:03+08:00",
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15,
+        "response": {"choices": [{"message": {"tool_calls": [
+            {"function": {"name": "read"}},
+            {"function": {"name": "sessions_spawn"}},
+        ]}}]},
+    }]
+
+    enrich_interaction_rows(rows)
+    assert rows[0]["tool_call_count"] == 2
+    assert rows[0]["subagent_start_count"] == 1
+    assert rows[0]["turn_index"] == 1
+    summary = summarize_interaction_rows(rows)
+    assert summary["duration_ms"] == 3000
+    assert summary["total_tokens"] == 15
+    assert summary["tool_call_count"] == 2
+
+
+def test_interaction_metrics_recognize_all_certified_subagent_tool_shapes():
+    rows = [{"response": {"choices": [{"message": {"tool_calls": [
+        {"function": {"name": "Agent", "arguments": "{}"}},
+        {"function": {"name": "task", "arguments": "{}"}},
+        {"function": {"name": "multi_agent_v1__spawn_agent", "arguments": "{}"}},
+        {"function": {"name": "exec", "arguments": '{"command":"openclaw agent exec --json hi"}'}},
+        {"function": {"name": "exec", "arguments": '{"command":"python ordinary.py"}'}},
+    ]}}]}}]
+
+    enrich_interaction_rows(rows)
+
+    assert rows[0]["tool_call_count"] == 5
+    assert rows[0]["subagent_start_count"] == 4

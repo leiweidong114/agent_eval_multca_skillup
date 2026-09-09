@@ -1,3 +1,5 @@
+import os
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -25,6 +27,26 @@ def test_health_and_discovery_endpoints(monkeypatch):
     assert model_config.status_code == 200
     assert "profile" not in model_config.json()["llm_judge"]
     assert model_config.json()["llm_judge"]["model"] == "test-judge-model"
+
+
+def test_agent_path_endpoint_persists_shared_executable(tmp_path, monkeypatch):
+    executable = tmp_path / ("JustDo-agent.cmd" if os.name == "nt" else "JustDo-agent")
+    executable.write_text("@echo off\n" if os.name == "nt" else "#!/bin/sh\n", encoding="utf-8")
+    if os.name != "nt":
+        executable.chmod(0o755)
+    monkeypatch.setattr("app.api.routes_skill.BACKEND_ROOT", tmp_path)
+
+    response = client.put("/api/agents/justdo/path", json={"path": str(executable)})
+
+    assert response.status_code == 200
+    assert response.json()["configured_path"] == str(executable.resolve())
+    listed = {item["agent"]: item for item in client.get("/api/agents").json()}
+    assert listed["justdo"]["detected_executable"] == str(executable.resolve())
+    assert "justdo" in (tmp_path / "config" / "agent-paths.json").read_text(encoding="utf-8")
+
+    reset = client.put("/api/agents/justdo/path", json={"path": ""})
+    assert reset.status_code == 200
+    assert reset.json()["configured_path"] is None
 
 
 def test_database_health_never_exposes_credentials_or_crashes():
@@ -151,6 +173,10 @@ def test_run_interactions_and_open_folder_are_scoped_to_result_dir(tmp_path, mon
     response = client.get("/api/runs/run-safe/interactions")
     assert response.status_code == 200
     assert response.json()["items"][0]["request_id"] == "req-1"
+    assert response.json()["total"] == 1
+    assert response.json()["page"] == 1
+    assert response.json()["summary"]["interaction_count"] == 1
+    assert client.get("/api/runs/run-safe/interactions", params={"search": "missing"}).json()["total"] == 0
     response = client.post("/api/runs/run-safe/open-folder")
     assert response.status_code == 200
     assert opened == [str(run_dir.resolve())]

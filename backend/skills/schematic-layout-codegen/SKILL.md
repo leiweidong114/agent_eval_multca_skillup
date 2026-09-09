@@ -10,11 +10,12 @@ description: 将"信号接口列表 sheets.json"翻译为可执行的 Python 电
 
 ## 运行前
 - auto_layout 服务需在 `http://127.0.0.1:8631`（env `AUTOLAYOUT_URL` 可改）。
+- 以下命令一律从评测 workspace 根目录执行，不要先 `cd` 到 Skill 或 scripts 目录。
 - 逐 sheet 处理；以下用 `--sheet <sheet_id>` 指代当前 sheet。
 
 ## 步骤 A：生成基础代码与任务切片（主 agent 执行，机械、快）
 ```bash
-python scripts/codegen_base.py --input sheets.json --sheet <sheet_id> --fragdir out/frags/<sheet_id>/
+python skills/schematic-layout-codegen/scripts/codegen_base.py --input out/sheets.json --sheet <sheet_id> --fragdir out/frags/<sheet_id>/
 ```
 产物：
 - `base.txt`：该 sheet 的基础代码——`circuit = Circuit(...)`、主芯片模板、**所有** sub_circuit 分组与器件模板、**所有** Net 对象定义（不含任何 connect）。
@@ -34,7 +35,7 @@ python scripts/codegen_base.py --input sheets.json --sheet <sheet_id> --fragdir 
 
 ## 步骤 C：合并并调用布局（每 sheet 一次）
 ```bash
-python scripts/layout_sheet.py --input sheets.json --sheet <sheet_id> --fragdir out/frags/<sheet_id>/ --out out/layout/<sheet_id>.json [--iterations 40]
+python skills/schematic-layout-codegen/scripts/layout_sheet.py --input out/sheets.json --sheet <sheet_id> --fragdir out/frags/<sheet_id>/ --out out/layout/<sheet_id>.json [--iterations 40]
 ```
 - 脚本把 `base.txt` + 全部 `<slice_id>.py` 合并为完整 DSL → `POST /api/auto_layout/layout`；
 - 成功后把响应里的 `selected` 布局写入输出 JSON；

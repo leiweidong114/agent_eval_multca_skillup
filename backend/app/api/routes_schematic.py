@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from agent_eval.database import search_conversation_interactions
+from agent_eval.database import conversation_filter_options, search_conversation_interactions
 from app.config import BACKEND_ROOT
 
 
@@ -34,7 +34,9 @@ class JudgeRequest(BaseModel):
 @router.get("/interactions")
 def search_interactions(
     user_id: str | None = None,
+    end_user: str | None = None,
     session_id: str | None = None,
+    model: str | None = None,
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
@@ -42,13 +44,23 @@ def search_interactions(
         return search_conversation_interactions(
             BACKEND_ROOT,
             user_id=user_id,
+            end_user=end_user,
             session_id=session_id,
+            model=model,
             limit=limit,
             offset=offset,
             full_content=True,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="数据库查询失败，请运行 agent-eval check-database 检查连接") from exc
+
+
+@router.get("/interaction-filters")
+def interaction_filters() -> dict[str, Any]:
+    try:
+        return conversation_filter_options(BACKEND_ROOT)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="数据库查询失败，请运行 agent-eval check-database 检查连接") from exc
 

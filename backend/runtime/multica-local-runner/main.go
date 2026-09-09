@@ -137,7 +137,7 @@ func exactPrompt(messages []inputMessage) string {
 
 func collectArtifacts(workspace string) artifactSet {
 	result := artifactSet{}
-	for _, directory := range []string{"output", "outputs", "artifacts"} {
+	for _, directory := range []string{"out", "output", "outputs", "artifacts"} {
 		root := filepath.Join(workspace, directory)
 		_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 			if err != nil || entry == nil || entry.IsDir() {
@@ -185,6 +185,15 @@ func prepareCaseWorkspace(workspace, provider string) error {
 		agents["defaults"] = defaults
 	}
 	defaults["workspace"] = workspace
+	if entries, ok := agents["entries"].(map[string]any); ok {
+		for _, item := range entries {
+			if a, ok := item.(map[string]any); ok {
+				a["workspace"] = workspace
+			}
+		}
+	}
+	// Keep accepting older snapshots while setup upgrades the generated
+	// configuration to the keyed agents.entries schema.
 	if list, ok := agents["list"].([]any); ok {
 		for _, item := range list {
 			if a, ok := item.(map[string]any); ok {
@@ -203,7 +212,58 @@ func prepareCaseWorkspace(workspace, provider string) error {
 	if err := os.WriteFile(path, encoded, 0o600); err != nil {
 		return err
 	}
-	return os.Setenv("OPENCLAW_CONFIG_PATH", path)
+	if err := os.Setenv("OPENCLAW_CONFIG_PATH", path); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Join(workspace, ".agent-eval", "subagent-state"), 0o755); err != nil {
+		return err
+	}
+	return installOpenclawSubagentGuidance(workspace)
+}
+
+const openclawSubagentGuidanceTemplate = `
+
+## Agent Eval subagent transport
+
+This evaluation runs OpenClaw in embedded mode. Do not call sessions_spawn: it
+requires a separate Gateway reply dispatcher that is intentionally absent.
+When a task needs delegation, call the exec tool with:
+
+    %s
+
+The child process inherits OPENCLAW_CONFIG_PATH, OPENCLAW_STATE_DIR, and the
+run-scoped LiteLLM key, so it uses the same configured model and is attributed
+to the same evaluation trace. Read the JSON result, wait for it to complete,
+and incorporate the child result into the parent answer. This is a real
+isolated child Agent process; do not simulate its response in the parent.
+
+When calling exec, set yieldMs to 120000. If it still becomes a background
+process, call process.poll once with timeout 120000 instead of repeatedly
+requesting logs.
+`
+
+func installOpenclawSubagentGuidance(workspace string) error {
+	path := filepath.Join(workspace, "AGENTS.md")
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if strings.Contains(string(data), "## Agent Eval subagent transport") {
+		return nil
+	}
+	command := `openclaw agent exec --state-dir .agent-eval/subagent-state --cwd . --json "<complete subtask prompt>"`
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_EVAL_REQUESTED_AGENT")), "justdo") {
+		model := strings.TrimSpace(os.Getenv("AGENT_EVAL_SUBAGENT_MODEL"))
+		if model == "" {
+			model = "<configured LiteLLM model>"
+		}
+		command = fmt.Sprintf(
+			`agent-eval check-agent --agent justdo --model %q --prompt "<complete subtask prompt>" --timeout 120 --max-turns 4 --no-database-verify`,
+			model,
+		)
+	}
+	guidance := fmt.Sprintf(openclawSubagentGuidanceTemplate, command)
+	return os.WriteFile(path, append(data, []byte(guidance)...), 0o644)
 }
 
 func writeResult(path string, result sessionResult) error {

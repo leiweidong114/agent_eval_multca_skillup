@@ -8,6 +8,7 @@ backend/config/local.yaml
 backend/config/secrets.env
 backend/config/litellm.env
 backend/config/runtime-settings.json
+backend/config/agent-paths.json
 backend/schematic_projects/
 backend/skills/.registry/
 backend/model_eval_data/

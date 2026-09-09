@@ -40,6 +40,7 @@ from agent_eval.llm_judge import run_llm_judge
 from agent_eval.scoring import (
     calculate_rule_dimensions,
     collect_process_metrics,
+    collect_skill_read_evidence,
     supplement_database_tool_metrics,
     combine_dimensions,
     load_scoring_config,
@@ -282,6 +283,7 @@ def build_eval_config(
     max_turns: int,
     benchmark: bool,
     extra_args: list[str],
+    additional_skills: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     args = [
         "--input",
@@ -309,6 +311,14 @@ def build_eval_config(
                 "target": skill_target(agent, skill_name),
                 "exclude": ["evals/**"],
             }
+        ] + [
+            {
+                "source": "local_path",
+                "path": source_path,
+                "target": skill_target(agent, child_name),
+                "exclude": ["evals/**"],
+            }
+            for source_path, child_name in (additional_skills or [])
         ],
         "engine": {
             "name": "multica-local",
@@ -444,7 +454,7 @@ def run_evaluation(
                 category="postgresql_unavailable",
                 retryable=_retryable_infrastructure_message(detail),
             )
-    agent_executable = executable or default_agent_command(requested_agent)
+    agent_executable = executable or default_agent_command(requested_agent, project_root)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     operation_id = _identity(task_id or run_id or uuid.uuid4().hex, field="task_id")
     canonical_task_id = operation_id
@@ -480,6 +490,11 @@ def run_evaluation(
 
     runtime_binary = find_multica_runtime(project_root)
     skill_up = find_skill_up(project_root)
+    additional_skills = []
+    for index, selected_name in enumerate(selected_skills, start=1):
+        relative = Path("skills") / f"{index:02d}-{_slug(selected_name)}"
+        if (staged_skill / relative / "SKILL.md").is_file():
+            additional_skills.append((relative.as_posix(), selected_name))
     eval_config = build_eval_config(
         agent=agent,
         model=model,
@@ -492,6 +507,7 @@ def run_evaluation(
         max_turns=max_turns,
         benchmark=benchmark,
         extra_args=[*resolved_profile.agent_args, *(extra_args or [])],
+        additional_skills=additional_skills,
     )
     eval_path = staged_skill / "evals" / "eval.yaml"
     eval_path.write_text(
@@ -500,6 +516,14 @@ def run_evaluation(
     output = result_root / "skill-up"
     env = os.environ.copy()
     env.update(resolved_profile.environment)
+    if resolved_profile.api_base and agent == "codex":
+        # Do not inherit the operator's global Codex plugins/MCP servers into an
+        # evaluation. They add unrelated tools and can consume most of a model's
+        # context before the task starts. Project-local injected Skills remain
+        # available from the isolated Skill-Up workspace.
+        codex_home = result_root / "runtime" / "codex-home"
+        codex_home.mkdir(parents=True, exist_ok=True)
+        env["CODEX_HOME"] = str(codex_home)
     if resolved_profile.api_base and agent == "claude":
         claude_config = result_root / "runtime" / "claude-config"
         claude_config.mkdir(parents=True, exist_ok=True)
@@ -523,6 +547,8 @@ def run_evaluation(
     env["AGENT_EVAL_TASK_ID"] = canonical_task_id
     env["AGENT_EVAL_USER_ID"] = user_id
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = agent_executable
+    env["AGENT_EVAL_REQUESTED_AGENT"] = requested_agent
+    env["AGENT_EVAL_SUBAGENT_MODEL"] = provider_model
 
     progress("validating", 15, "Validating Skill-Up configuration")
     validation = _execute_process(
@@ -829,6 +855,7 @@ def run_evaluation(
     process_metrics = collect_process_metrics(results, database_trace)
     supplement_database_tool_metrics(process_metrics, interactions)
     process_metrics["total_duration_ms"] = scores.get("total_duration_ms", 0)
+    skill_usage = collect_skill_read_evidence(interactions, selected_skills)
     scoring_config = load_scoring_config(project_root)
     rule_dimensions = calculate_rule_dimensions(
         scores=scores,
@@ -847,6 +874,7 @@ def run_evaluation(
         },
         "deterministic_scores": scores,
         "process_metrics": process_metrics,
+        "skill_usage": skill_usage,
         "skill_quality_rules": skill_quality,
         "skill_md": (source_skill / "SKILL.md").read_text(encoding="utf-8")[:30000],
         "skill_up_results": results,
@@ -907,6 +935,7 @@ def run_evaluation(
         "scores": scores,
         "skill_quality": skill_quality,
         "process_metrics": process_metrics,
+        "skill_usage": skill_usage,
         "scoring": scoring,
         "agent_contract": agent_contract,
         "database_trace": database_trace,

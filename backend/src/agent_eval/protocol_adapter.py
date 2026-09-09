@@ -16,6 +16,26 @@ def flatten_tools(tools, namespace=None):
             yield {**tool, **({'namespace': namespace} if namespace else {})}
 
 
+def response_tools(payload):
+    """Return top-level and turn-scoped Responses tools in wire order.
+
+    Codex uses an ``additional_tools`` input item when a child agent is
+    started.  Those tools are scoped to the child turn, but Chat Completions
+    has only one top-level ``tools`` collection, so the compatibility proxy
+    must merge both locations before forwarding the request.
+    """
+    tools = list(payload.get("tools") or [])
+    source = payload.get("input") or []
+    if isinstance(source, list):
+        for item in source:
+            if isinstance(item, dict) and item.get("type") == "additional_tools":
+                additional = item.get("tools") or []
+                if not isinstance(additional, list):
+                    raise ValueError("Responses additional_tools.tools must be a list")
+                tools.extend(additional)
+    return tools
+
+
 def wire_name(item):
     return (item['namespace'] + '__' if item.get('namespace') else '') + item['name']
 
@@ -43,6 +63,10 @@ def to_chat(payload, protocol):
         raise ValueError("Stateful previous_response_id is unsupported; send the full conversation")
     for item in source:
         kind = item.get("type")
+        if protocol == "responses" and kind == "additional_tools":
+            # Tool definitions are merged below.  This item is not a chat
+            # message and must not be forwarded as user-visible content.
+            continue
         if kind == "reasoning":
             continue  # Server-side reasoning tokens are not user/tool messages.
         if kind in {"function_call", "custom_tool_call"}:
@@ -80,12 +104,17 @@ def to_chat(payload, protocol):
             messages.append({"role": item.get("role", "user"), "content": text_blocks(content)})
     body = {"model": payload["model"], "messages": messages, "stream": False}
     tools = []
-    for tool in flatten_tools(payload.get("tools") or []):
+    tool_source = response_tools(payload) if protocol == "responses" else payload.get("tools") or []
+    seen_tool_names = set()
+    for tool in flatten_tools(tool_source):
         if protocol == "responses":
             if tool.get("type") not in {"function", "custom"}:
                 raise ValueError(f"Unsupported Responses tool: {tool.get('type')}")
             function = {k: tool[k] for k in ("description", "parameters", "strict") if k in tool}
             function['name'] = wire_name(tool)
+            if function['name'] in seen_tool_names:
+                continue
+            seen_tool_names.add(function['name'])
             if tool['type'] == 'custom':
                 function['parameters'] = {'type': 'object', 'properties': {'input': {'type': 'string'}}, 'required': ['input']}
             tools.append({"type": "function", "function": function})
@@ -146,7 +175,8 @@ def from_chat(payload, protocol, model, stream, request=None):
                            "status": "completed", "content": [{"type": "output_text", "text": message["content"], "annotations": []}]})
         for tool in message.get("tool_calls") or []:
             fn = tool['function']
-            spec = next((t for t in flatten_tools((request or {}).get('tools') or []) if wire_name(t) == fn['name']), {})
+            request_tools = response_tools(request or {})
+            spec = next((t for t in flatten_tools(request_tools) if wire_name(t) == fn['name']), {})
             custom = spec.get('type') == 'custom'
             output.append({"id": "fc_" + uuid.uuid4().hex, "type": "custom_tool_call" if custom else "function_call", "status": "completed",
                            "call_id": tool["id"], 'name': spec.get('name', fn['name']),

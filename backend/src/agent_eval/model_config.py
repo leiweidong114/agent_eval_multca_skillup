@@ -111,7 +111,7 @@ def _write_yaml(path: Path, value: dict[str, Any]) -> None:
     _atomic_write(path, yaml.safe_dump(value, allow_unicode=True, sort_keys=False))
 
 
-def load_runtime_settings(project_root: Path) -> dict[str, str]:
+def load_runtime_settings(project_root: Path) -> dict[str, Any]:
     """Load non-secret Web/CLI model preferences from an ignored local file."""
     path = project_root / "config" / "runtime-settings.json"
     if not path.is_file():
@@ -122,14 +122,20 @@ def load_runtime_settings(project_root: Path) -> dict[str, str]:
         return {}
     if not isinstance(value, dict):
         return {}
-    return {
+    settings: dict[str, Any] = {
         name: str(value.get(name) or "").strip()
         for name in ("judge_model", "agent_test_model")
         if str(value.get(name) or "").strip()
     }
+    skills = value.get("schematic_skills")
+    if isinstance(skills, list):
+        settings["schematic_skills"] = [
+            str(item).strip() for item in skills if str(item).strip()
+        ][:8]
+    return settings
 
 
-def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> dict[str, str]:
+def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> dict[str, Any]:
     """Persist model choices without changing credentials or provider routing."""
     settings: dict[str, str] = {}
     for name in ("judge_model", "agent_test_model"):
@@ -139,6 +145,20 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
         if len(value) > 300 or any(char in value for char in "\r\n\0"):
             raise ValueError(f"Invalid {name}")
         settings[name] = value
+    raw_skills = values.get("schematic_skills") or [
+        "schematic-pipeline",
+        "signal-interface-generation",
+        "schematic-layout-codegen",
+        "schematic-web-apply",
+    ]
+    if not isinstance(raw_skills, list) or not raw_skills:
+        raise ValueError("schematic_skills is required")
+    schematic_skills = list(dict.fromkeys(str(item).strip() for item in raw_skills if str(item).strip()))
+    if not schematic_skills or len(schematic_skills) > 8:
+        raise ValueError("schematic_skills must contain 1 to 8 Skill identifiers")
+    if any(len(item) > 300 or any(char in item for char in "\r\n\0") for item in schematic_skills):
+        raise ValueError("Invalid schematic_skills")
+    settings["schematic_skills"] = schematic_skills
     _atomic_write(
         project_root / "config" / "runtime-settings.json",
         json.dumps(settings, ensure_ascii=False, indent=2) + "\n",
@@ -400,7 +420,10 @@ def resolve_model_profile(
         environment["ANTHROPIC_DEFAULT_OPUS_MODEL"] = claude_cli_model
         environment["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = claude_cli_model
         environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
-        agent_args = ("--bare",)
+        # The evaluation already uses an isolated CLAUDE_CONFIG_DIR, so
+        # ``--bare`` is unnecessary and would remove Claude Code's native
+        # Agent tool. Keep all built-ins available for subagent evaluations.
+        agent_args = ("--tools", "default", "--forward-subagent-text")
     elif agent == "codex":
         # Codex with an existing ChatGPT login otherwise keeps using the
         # built-in OpenAI provider even when OPENAI_BASE_URL is set.
@@ -992,15 +1015,29 @@ def write_openclaw_profile_config(
         },
         "agents": {
             "defaults": {"model": {"primary": primary}},
-            "list": [
-                {
-                    "id": "main",
-                    "default": True,
+            "entries": {
+                "main": {
                     "identity": {"name": "main"},
                     "model": {"primary": primary},
+                    # Embedded OpenClaw cannot deliver ``sessions_spawn``
+                    # replies because that primitive requires a running
+                    # Gateway reply dispatcher.  Subagents use the documented
+                    # ``openclaw agent exec`` transport installed into the case
+                    # AGENTS.md by multica-local-runner instead.
+                    "tools": {
+                        "allow": [
+                            "read",
+                            "write",
+                            "edit",
+                            "apply_patch",
+                            "exec",
+                            "process",
+                            "session_status",
+                        ]
+                    },
                     **({"workspace": str(workspace)} if workspace is not None else {}),
                 }
-            ],
+            },
         },
     }
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -10,16 +10,17 @@ description: 将一个或多个布局 JSON 应用到网页：请求 apply_schema
 
 ## 前置
 - apply_schematic 服务运行于 `http://127.0.0.1:8631`（env `AUTOLAYOUT_URL` 可改）。
+- 以下命令一律从评测 workspace 根目录执行，不要先 `cd` 到 Skill 或 scripts 目录。
 
 ## 用法
 ```bash
 # 方式一：显式列出 图页标题=JSON路径
-python scripts/apply.py --title "STM32 LED 原理图" \
+python skills/schematic-web-apply/scripts/apply.py --title "STM32 LED 原理图" \
   --sheet "STM32_LED|out/layout/S1.json" \
   --out out/apply_result.json
 
 # 方式二：扫描布局目录（每文件一图页，按文件名排序）
-python scripts/apply.py --title "板级原理图" --layout-dir out/layout --out out/apply_result.json
+python skills/schematic-web-apply/scripts/apply.py --title "板级原理图" --layout-dir out/layout --out out/apply_result.json
 ```
 成功输出 `apply_result.json`，含 `url`。把 URL 交给用户/主流程。
 

@@ -159,7 +159,7 @@ def test_claude_uses_bare_mode_and_bearer_auth(tmp_path):
         agent="claude",
     )
 
-    assert profile.agent_args == ("--bare",)
+    assert profile.agent_args == ("--tools", "default", "--forward-subagent-text")
     assert profile.model_for_agent("claude") == "claude-sonnet-4-6"
     assert profile.environment["ANTHROPIC_API_KEY"] == "virtual-key"
     assert profile.environment["ANTHROPIC_DEFAULT_SONNET_MODEL"] == "claude-sonnet-4-6"
@@ -297,6 +297,15 @@ def test_openclaw_profile_config_uses_litellm_without_embedding_the_key(tmp_path
     assert '"primary": "litellm/MiniMax-M3"' in content
     assert '"apiKey": "${LITELLM_API_KEY}"' in content
     assert f'"workspace": "{str(workspace).replace(chr(92), chr(92) * 2)}"' in content
+    config = json.loads(content)
+    allowed_tools = config["agents"]["entries"]["main"]["tools"]["allow"]
+    assert "read" in allowed_tools
+    assert "exec" in allowed_tools
+    assert "sessions_spawn" not in allowed_tools
+    assert "subagents" not in allowed_tools
+    assert "skill_workshop" not in allowed_tools
+    assert "browser" not in allowed_tools
+    assert "image_generate" not in allowed_tools
     assert "virtual-key" not in content
 
 

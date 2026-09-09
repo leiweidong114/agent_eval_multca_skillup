@@ -1,0 +1,50 @@
+id: smart-street-light-e2e
+title: Smart street light complete schematic pipeline evaluation
+description: Generates and verifies a small catalog-backed smart street light controller through all four Skills.
+input:
+  prompt: |
+    生成一个智能路灯控制器的简易电气原理图，不要生成流程图、框图、Mermaid 或 Figma/FigJam 图。
+    使用器件库中实际存在的 ESP32-S3-WROOM-1 作为主控，以两个普通电阻组成环境光检测分压等效输入，使用 GPIO、限流/基极电阻、NPN 三极管和 LED 表示路灯负载驱动，并包含输入保险丝、齐纳保护和必要的电源/地网络。只使用 catalog.json 中存在的 library_id 和真实引脚号。
+
+    必须按顺序完成四阶段流程：schematic-pipeline、signal-interface-generation、schematic-layout-codegen、schematic-web-apply。开始生成前分别读取四个已安装 Skill 的 SKILL.md。禁止调用 Figma、Mermaid 或通用画图工具替代电气原理图流水线。
+    从 workspace 根目录执行命令。先检查 http://127.0.0.1:8631/api/health，再生成 out/catalog.json、out/sheets.json 和 sheets_markdown；校验 sheets.json 后生成切片。连接代码切片必须由 subagent 完成，每批最多并行两个，主 Agent 不得代写切片连接代码。随后生成 out/layout/S1.json，要求 overlap=0 且 unrouted=0；最后生成 out/apply_result.json 并验证其中 URL 可访问。
+    最终回复必须列出四个 Skill 的使用情况、Subagent 运行情况、所有关键产物路径、布局指标和网页 URL。任一阶段失败时必须明确返回失败，不得用其他类型的图冒充成功。
+constraints:
+  timeout_seconds: 3600
+  max_turns: 30
+expect:
+  exit_code: 0
+  files_exist:
+    - out/catalog.json
+    - out/sheets.json
+    - out/sheets_markdown
+    - out/frags
+    - out/layout/S1.json
+    - out/apply_result.json
+  file_contains:
+    - path: out/sheets.json
+      content: ESP32-S3-WROOM-1
+    - path: out/layout/S1.json
+      content: component_overlap_count
+    - path: out/layout/S1.json
+      content: unrouted_net_count
+    - path: out/apply_result.json
+      content: url
+  must_contain:
+    - schematic-pipeline
+    - signal-interface-generation
+    - schematic-layout-codegen
+    - schematic-web-apply
+    - out/apply_result.json
+  must_not_contain:
+    - mermaid
+    - figma.com
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0
+    - files_exist:
+        - out/catalog.json
+        - out/sheets.json
+        - out/layout/S1.json
+        - out/apply_result.json

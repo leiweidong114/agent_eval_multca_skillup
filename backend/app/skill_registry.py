@@ -138,6 +138,7 @@ def compose_skills(identifiers: list[str]) -> Path:
         raise ValueError("Combined evaluation requires between 2 and 8 Skills")
     resolved: list[tuple[str, Path]] = []
     hasher = hashlib.sha256()
+    hasher.update(b"ordered-compose-v2\0")
     for identifier in identifiers:
         path = resolve_skill(identifier)
         if path is None:
@@ -161,9 +162,10 @@ def compose_skills(identifiers: list[str]) -> Path:
         "",
         "# Combined Skill Evaluation",
         "",
-        "Use every relevant sub-Skill below to complete the user's task. Read each",
-        "sub-Skill's `SKILL.md` before acting, reconcile overlapping instructions,",
-        "and produce one coherent final result.",
+        "Use every selected sub-Skill below to complete the user's task. Read every",
+        "sub-Skill's `SKILL.md` in the numbered order shown before acting, then execute",
+        "their workflows in that order unless an earlier orchestrator Skill explicitly",
+        "defines a more specific dependency order. Produce one coherent final result.",
         "",
         "## Selected Skills",
         "",

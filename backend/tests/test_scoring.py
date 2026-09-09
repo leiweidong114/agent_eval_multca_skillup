@@ -2,8 +2,24 @@ from agent_eval.llm_judge import _json_object
 from agent_eval.scoring import (
     calculate_rule_dimensions,
     collect_process_metrics,
+    collect_skill_read_evidence,
     combine_dimensions,
 )
+
+
+def test_skill_read_evidence_requires_read_tool_and_skill_md_path():
+    interactions = [{
+        "request_id": "req-1",
+        "response": {"choices": [{"message": {"tool_calls": [
+            {"function": {"name": "read", "arguments": '{"path":"skills/schematic-pipeline/SKILL.md"}'}},
+        ]}}]},
+    }]
+    result = collect_skill_read_evidence(
+        interactions, ["schematic-pipeline", "schematic-web-apply"]
+    )
+    assert result["status"] == "partial"
+    assert result["observed_skills"] == ["schematic-pipeline"]
+    assert result["missing_skills"] == ["schematic-web-apply"]
 
 
 def test_collects_normalized_tool_token_context_and_subagent_metrics():
@@ -30,10 +46,46 @@ def test_collects_normalized_tool_token_context_and_subagent_metrics():
     assert metrics["tool_calls"] == 1
     assert metrics["tool_completion_rate"] == 100
     assert metrics["subagent_calls"] == 1
+    assert metrics["subagent_attempts"] == 1
+    assert metrics["subagent_failures"] == 0
     assert metrics["input_tokens"] == 12
     assert metrics["max_context_tokens"] == 12
     assert metrics["observed_models"] == ["tested-model"]
     assert metrics["final_output_present"] is True
+
+
+def test_failed_subagent_attempt_is_not_counted_as_a_success():
+    results = [{"case_results": [{"transcript": [
+        {"role": "tool_call", "tool_call": {"id": "spawn-1", "name": "sessions_spawn"}},
+        {"role": "tool_result", "tool_result": {"call_id": "spawn-1", "status": "error"}},
+    ]}]}]
+
+    metrics = collect_process_metrics(results, {})
+
+    assert metrics["subagent_calls"] == 0
+    assert metrics["subagent_attempts"] == 1
+    assert metrics["subagent_failures"] == 1
+
+
+def test_openclaw_exec_child_is_counted_but_ordinary_exec_is_not():
+    results = [{"case_results": [{"transcript": [
+        {"role": "tool_call", "tool_call": {
+            "id": "child-1", "name": "exec",
+            "arguments": {"command": "openclaw agent exec --json child"},
+        }},
+        {"role": "tool_result", "tool_result": {"call_id": "child-1", "status": "completed"}},
+        {"role": "tool_call", "tool_call": {
+            "id": "ordinary-1", "name": "exec",
+            "arguments": {"command": "python build.py"},
+        }},
+        {"role": "tool_result", "tool_result": {"call_id": "ordinary-1", "status": "completed"}},
+    ]}]}]
+
+    metrics = collect_process_metrics(results, {})
+
+    assert metrics["tool_calls"] == 2
+    assert metrics["subagent_calls"] == 1
+    assert metrics["subagent_attempts"] == 1
 
 
 def test_three_dimension_scoring_falls_back_to_rules_when_judge_is_unavailable():

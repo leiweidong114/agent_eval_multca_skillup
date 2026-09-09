@@ -13,7 +13,7 @@ import (
 func TestCaseWorkspaceKeepsControlIsolatedAndDoesNotModifySource(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "source.json")
-	original := `{"agents":{"defaults":{},"list":[{"id":"main","workspace":"with-skill"}]}}`
+	original := `{"agents":{"defaults":{},"entries":{"main":{"workspace":"with-skill"}}}}`
 	if err := os.WriteFile(source, []byte(original), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -34,12 +34,63 @@ func TestCaseWorkspaceKeepsControlIsolatedAndDoesNotModifySource(t *testing.T) {
 	if agents["defaults"].(map[string]any)["workspace"] != workspace {
 		t.Fatal("wrong workspace")
 	}
+	entries := agents["entries"].(map[string]any)
+	if entries["main"].(map[string]any)["workspace"] != workspace {
+		t.Fatal("wrong main Agent workspace")
+	}
 	unchanged, _ := os.ReadFile(source)
 	if string(unchanged) != original {
 		t.Fatal("source configuration modified")
 	}
 	if _, err := os.Stat(filepath.Join(workspace, "artifacts")); err != nil {
 		t.Fatal(err)
+	}
+	guidance, err := os.ReadFile(filepath.Join(workspace, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(guidance), "openclaw agent exec --state-dir .agent-eval/subagent-state --cwd . --json") {
+		t.Fatalf("subagent guidance missing: %s", guidance)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, ".agent-eval", "subagent-state")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenclawSubagentGuidanceIsIdempotent(t *testing.T) {
+	workspace := t.TempDir()
+	if err := installOpenclawSubagentGuidance(workspace); err != nil {
+		t.Fatal(err)
+	}
+	if err := installOpenclawSubagentGuidance(workspace); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(workspace, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(data), "## Agent Eval subagent transport") != 1 {
+		t.Fatalf("guidance duplicated: %s", data)
+	}
+}
+
+func TestJustdoSubagentGuidanceUsesEvaluatorChild(t *testing.T) {
+	workspace := t.TempDir()
+	t.Setenv("AGENT_EVAL_REQUESTED_AGENT", "justdo")
+	t.Setenv("AGENT_EVAL_SUBAGENT_MODEL", "glm-4.5-air")
+	if err := installOpenclawSubagentGuidance(workspace); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(workspace, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.Contains(text, `agent-eval check-agent --agent justdo --model "glm-4.5-air"`) {
+		t.Fatalf("JustDo child command missing: %s", text)
+	}
+	if !strings.Contains(text, "--no-database-verify") {
+		t.Fatalf("nested trace-key creation must stay disabled: %s", text)
 	}
 }
 
@@ -85,5 +136,20 @@ func TestFinalOutputRemainsLastAfterTelemetry(t *testing.T) {
 	}
 	if got[1].Content != "MARKER_OK" {
 		t.Fatalf("final output is not terminal: %q", got[1].Content)
+	}
+}
+
+func TestCollectArtifactsIncludesSchematicOutDirectory(t *testing.T) {
+	workspace := t.TempDir()
+	path := filepath.Join(workspace, "out", "layout", "S1.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := collectArtifacts(workspace)
+	if len(got.Files) != 1 || got.Files[0].Path != "out/layout/S1.json" {
+		t.Fatalf("schematic out artifact not collected: %#v", got.Files)
 	}
 }

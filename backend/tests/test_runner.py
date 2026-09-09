@@ -113,6 +113,47 @@ def test_eval_config_matches_justdo_openclaw_bridge_contract(tmp_path):
     assert config["engine"]["model"]["name"] == "main"
 
 
+def test_eval_config_installs_composed_child_skills_as_first_class_skills(tmp_path):
+    config = build_eval_config(
+        agent="openclaw",
+        model="main",
+        executable="openclaw",
+        runtime_binary=tmp_path / "multica-eval-runtime",
+        skill_name="combined-demo",
+        case_paths=[Path("evals/cases/case.yaml")],
+        parallelism=1,
+        timeout_seconds=30,
+        max_turns=12,
+        benchmark=False,
+        extra_args=[],
+        additional_skills=[
+            ("skills/01-schematic-pipeline", "schematic-pipeline"),
+            ("skills/02-signal-interface-generation", "signal-interface-generation"),
+        ],
+    )
+
+    assert config["skills"] == [
+        {
+            "source": "local_path",
+            "path": ".",
+            "target": "skills/combined-demo",
+            "exclude": ["evals/**"],
+        },
+        {
+            "source": "local_path",
+            "path": "skills/01-schematic-pipeline",
+            "target": "skills/schematic-pipeline",
+            "exclude": ["evals/**"],
+        },
+        {
+            "source": "local_path",
+            "path": "skills/02-signal-interface-generation",
+            "target": "skills/signal-interface-generation",
+            "exclude": ["evals/**"],
+        },
+    ]
+
+
 def test_aggregate_scores_reports_task_baseline_gain_and_stability():
     scores = aggregate_scores(
         [

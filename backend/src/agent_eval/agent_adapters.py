@@ -89,7 +89,9 @@ AGENT_MODEL_ADAPTERS: dict[str, AgentModelAdapter] = {
     "kimi": _adapter("kimi", selection="acp_session_model"),
     "kiro": _adapter("kiro", selection="acp_session_model"),
     "justdo": _adapter(
-        "justdo", selection="generated_agent_profile", injection="isolated_config_and_proxy",
+        "justdo",
+        selection="visible_session_model_patch",
+        injection="authenticated_bridge_temporary_provider",
     ),
     "omp": _adapter("omp"),
     "openclaw": _adapter(
