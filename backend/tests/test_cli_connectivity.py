@@ -160,3 +160,34 @@ def test_subagent_verification_accepts_justdo_child_cli_evidence():
 
     assert result["verified"] is True
     assert result["transport"] == "isolated_child_process"
+
+
+def test_subagent_verification_accepts_justdo_native_session_spawn():
+    from agent_eval.cli import _verify_subagent_evidence
+
+    rows = [
+        {
+            "status": "success",
+            "model": "glm-4.5-air",
+            "proxy_server_request": {"messages": [
+                {"role": "assistant", "tool_calls": [{"function": {
+                    "name": "sessions_spawn",
+                    "arguments": '{"task":"Reply with exactly SUBAGENT_OK"}',
+                }}]},
+            ]},
+        },
+        {
+            "status": "success",
+            "model": "glm-4.5-air",
+            "response": {"choices": [{"message": {
+                "role": "assistant", "content": "SUBAGENT_OK",
+            }}]},
+        },
+    ]
+
+    result = _verify_subagent_evidence(
+        "justdo", "glm-4.5-air", {"final_message": "PARENT_OK:SUBAGENT_OK"}, rows
+    )
+
+    assert result["verified"] is True
+    assert result["transport"] == "native"

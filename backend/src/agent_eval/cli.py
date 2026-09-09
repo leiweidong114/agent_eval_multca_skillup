@@ -625,13 +625,16 @@ def _verify_subagent_evidence(
         "claude": {"agent"},
         "codebuddy": {"agent"},
         "opencode": {"task"},
+        "justdo": {"sessions_spawn"},
     }
     expected = native_names.get(normalized_agent, set())
     invocation = False
+    native_invocation = False
     for name, arguments in tool_calls:
         lowered = name.lower()
         if lowered in expected:
             invocation = True
+            native_invocation = True
         if normalized_agent == "codex" and lowered.endswith("__spawn_agent"):
             invocation = True
         if normalized_agent == "openclaw" and lowered == "exec" and "openclaw agent exec" in arguments:
@@ -688,7 +691,7 @@ def _verify_subagent_evidence(
     return {
         "status": "verified" if verified else "unverified",
         "verified": verified,
-        "transport": "native" if normalized_agent in native_names else "isolated_child_process",
+        "transport": "native" if native_invocation else "isolated_child_process",
         "tool_calls": sorted({name for name, _ in tool_calls if name}),
         "successful_matching_model_calls": same_model_calls,
         "reason": None if verified else "missing: " + ", ".join(missing),
