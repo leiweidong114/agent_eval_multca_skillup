@@ -5,6 +5,7 @@ param(
     [switch]$Force,
     [switch]$SkipJustDo,
     [switch]$InteractiveJustDo,
+    [switch]$InstallVCRuntime,
     [switch]$SkipFrontend,
     [switch]$SkipVerify
 )
@@ -63,14 +64,20 @@ $goArchive = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Patterns @(
 $nodeArchive = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Patterns @(
     'toolchains\node*-win-x64.zip', 'toolchains\node\*.zip', 'node*-win-x64.zip'
 )
-$pythonInstaller = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Patterns @(
+$pythonPortable = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Optional -Patterns @(
+    'toolchains\cpython*-install_only*.tar.gz', 'toolchains\python*.tar.gz', 'python*.tar.gz'
+)
+$pythonInstaller = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Optional -Patterns @(
     'toolchains\python*-amd64.exe', 'toolchains\python\*.exe', 'python*-amd64.exe'
 )
+if (-not $pythonPortable -and -not $pythonInstaller) {
+    throw 'A portable CPython .tar.gz or Python amd64 installer was not found in the release input.'
+}
 $vcRedist = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Optional -Patterns @(
     'toolchains\VC_redist.x64.exe', 'VC_redist.x64.exe'
 )
 
-if ($vcRedist) {
+if ($vcRedist -and $InstallVCRuntime) {
     $vcProcess = Start-Process -FilePath $vcRedist -ArgumentList @('/install', '/quiet', '/norestart') -Wait -PassThru
     if ($vcProcess.ExitCode -notin @(0, 1638, 3010)) {
         throw "Visual C++ Runtime installation failed with exit code $($vcProcess.ExitCode)."
@@ -87,14 +94,28 @@ if (-not (Test-Path -LiteralPath $basePython) -or $Force) {
         Assert-AgentEvalChildPath -Parent $runtime -Child $pythonBase | Out-Null
         Remove-Item -LiteralPath $pythonBase -Recurse -Force
     }
-    New-Item -ItemType Directory -Force -Path $pythonBase | Out-Null
-    $pythonArguments = @(
-        '/quiet', 'InstallAllUsers=0', "TargetDir=$pythonBase", 'Include_launcher=0',
-        'PrependPath=0', 'Include_test=0', 'Include_pip=1', 'Include_tcltk=0'
-    )
-    $process = Start-Process -FilePath $pythonInstaller -ArgumentList $pythonArguments -Wait -PassThru
-    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $basePython)) {
-        throw "Python installation failed with exit code $($process.ExitCode)."
+    if ($pythonPortable) {
+        $pythonStaging = Join-Path $runtime '.install-python'
+        Assert-AgentEvalChildPath -Parent $runtime -Child $pythonStaging | Out-Null
+        if (Test-Path -LiteralPath $pythonStaging) { Remove-Item -LiteralPath $pythonStaging -Recurse -Force }
+        New-Item -ItemType Directory -Force -Path $pythonStaging | Out-Null
+        Invoke-AgentEvalCommand -FilePath 'tar.exe' -ArgumentList @('-xzf', $pythonPortable, '-C', $pythonStaging)
+        $pythonContent = if (Test-Path -LiteralPath (Join-Path $pythonStaging 'python\python.exe')) {
+            Join-Path $pythonStaging 'python'
+        } else { $pythonStaging }
+        Copy-AgentEvalDirectoryContents -Source $pythonContent -Destination $pythonBase
+        Remove-Item -LiteralPath $pythonStaging -Recurse -Force
+    } else {
+        New-Item -ItemType Directory -Force -Path $pythonBase | Out-Null
+        $pythonArguments = @(
+            '/quiet', 'InstallAllUsers=0', "TargetDir=$pythonBase", 'Include_launcher=0',
+            'PrependPath=0', 'Include_test=0', 'Include_pip=1', 'Include_tcltk=0'
+        )
+        $process = Start-Process -FilePath $pythonInstaller -ArgumentList $pythonArguments -Wait -PassThru
+        if ($process.ExitCode -ne 0) { throw "Python installation failed with exit code $($process.ExitCode)." }
+    }
+    if (-not (Test-Path -LiteralPath $basePython)) {
+        throw "Python executable was not installed: $basePython"
     }
 }
 

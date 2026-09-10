@@ -11,7 +11,7 @@ release-root/
 ├─ toolchains/
 │  ├─ go1.26.7.windows-amd64.zip
 │  ├─ node-v26.1.0-win-x64.zip
-│  ├─ python-3.12.10-amd64.exe
+│  ├─ cpython-3.12.14-*-install_only_stripped.tar.gz
 │  └─ VC_redist.x64.exe
 ├─ python/wheelhouse/*.whl
 ├─ frontend/npm-cache/
@@ -36,7 +36,7 @@ Set-Location D:\workspace\agent_eval_multca_skillup
 .\install_windows.ps1 -ReleaseRoot D:\Downloads\agent-eval-runtime-windows-x64
 ```
 
-JustDo 默认使用 Electron/NSIS 的静默参数安装；如果目标安装包需要用户交互，可加 `-InteractiveJustDo`。不需要安装 JustDo 时使用 `-SkipJustDo`。
+Python 默认直接从 portable `install_only` 包解压到项目，不调用系统安装器。VC Runtime 安装包会随 Release 提供，但默认不运行；只有确实缺少系统运行库时才加 `-InstallVCRuntime`。JustDo 默认使用 Electron/NSIS 的静默参数安装；如果目标安装包需要用户交互，可加 `-InteractiveJustDo`。不需要安装 JustDo 时使用 `-SkipJustDo`。
 
 安装脚本把后续运行和编译需要的文件复制到项目的：
 
@@ -89,7 +89,7 @@ Multica 评测入口的项目定制代码保存在 `backend/runtime/multica-loca
   -OutputRoot D:\release-work\agent-eval-runtime-windows-x64 `
   -GoArchive D:\packages\go1.26.7.windows-amd64.zip `
   -NodeArchive D:\packages\node-v26.1.0-win-x64.zip `
-  -PythonInstaller D:\packages\python-3.12.10-amd64.exe `
+  -PythonPackage D:\packages\cpython-3.12.14-install_only_stripped.tar.gz `
   -VCRedist D:\packages\VC_redist.x64.exe `
   -Wheelhouse D:\packages\wheelhouse `
   -NpmCache D:\packages\npm-cache `
