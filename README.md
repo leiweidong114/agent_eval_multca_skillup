@@ -29,7 +29,7 @@ agent_eval_multca_skillup/
 │   │   ├── schematic-layout-codegen/                   # sheets → Python DSL → auto_layout 布局
 │   │   ├── schematic-web-apply/                        # 布局 JSON → 网页 URL
 │   │   └── schematic-pipeline/                         # 上述三步的总编排（subagent 并行）
-│   ├── config/               # 模型/数据库/环境配置（models.yaml、database.yaml、local.yaml）
+│   ├── config/               # 内置模型路由、数据库与评分默认值（本机配置统一放根 .env）
 │   ├── scripts/              # 运维脚本（setup_windows.ps1、setup_linux.sh、install_skillup_windows.ps1 等）
 │   ├── patches/              # 对第三方运行时的 Windows 补丁（skill-up custom-engine patch）
 │   ├── runtime/              # Windows/Linux 本地运行时（Go、Multica、Skill-Up、venv）
@@ -67,7 +67,7 @@ agent_eval_multca_skillup/
 | `backend/app/api/` | REST 路由：`routes_eval`(评测)、`routes_skill`(技能/代理)、`routes_runs`(历史)、`routes_schematic`(原理图工程/Judge)。 |
 | `backend/src/` | 评测核心引擎（agent-eval CLI 逻辑），被 Web 层复用。 |
 | `backend/skills/` | 评测用技能库；每个目录是一个可被评测隔离复制的 Skill（`SKILL.md` 描述流程与产物）。新增技能即放这里。 |
-| `backend/config/` | 模型 profile、数据库等配置；`local.yaml/secrets.env` 属被 Git 忽略的本地敏感配置。 |
+| `backend/config/` | 仓库内置的模型路由、数据库和评分默认值；可变部署配置统一读取根目录 `.env`。 |
 | `backend/scripts/` | 安装/维护脚本：`setup_windows.ps1`、`setup_linux.sh`、`install_skillup_windows.ps1` 等。 |
 | `backend/patches/` | Windows 平台对第三方组件（如 Skill-Up）的补丁。 |
 | `backend/runtime/` | 项目专属运行时：独立 Go、Multica 源码与编译产物、Skill-Up、Python venv（Windows/Linux 分离）。 |
@@ -200,12 +200,13 @@ profiles:
     api_key_env: LITELLM_API_KEY
 ```
 
-虚拟 Key 使用环境变量 `LITELLM_API_KEY`，或写入被 Git 忽略的
-`backend/config/local.yaml`：
+所有本机配置统一写在被 Git 忽略的根目录 `.env`：
 
-```yaml
-secrets:
-  LITELLM_API_KEY: sk-your-virtual-key
+```dotenv
+LITELLM_API_BASE=http://127.0.0.1:4000/v1
+LITELLM_API_KEY=sk-your-virtual-key
+LITELLM_MODEL=glm-4.5-air
+LITELLM_JUDGE_MODEL=glm-4.5-air
 ```
 
 运行时会为不同 Agent CLI 同时提供 OpenAI 兼容变量
@@ -217,9 +218,8 @@ Codex 还会自动获得 `model_provider=litellm` 的命令行配置，避免已
 LiteLLM 地址。OpenClaw/JustDo 会继续使用 Agent ID `main`，并由评测端生成临时
 LiteLLM provider 配置；配置只引用 `${LITELLM_API_KEY}`，不会包含真实 Key。
 
-“模型与 Agent”页面也可以创建 CC Switch 风格的自定义 Provider。页面配置写入被 Git
-忽略的 `backend/config/local.yaml`，API Key 写入被忽略的
-`backend/config/secrets.env`，查询接口只返回 `api_key_configured`，不会回显 Key。Profile
+“模型与 Agent”页面也可以创建 CC Switch 风格的自定义 Provider。页面配置与 API Key
+都写入根目录 `.env`，查询接口只返回 `api_key_configured`，不会回显 Key。Profile
 支持 `openai_compatible`、`openai_chat`、`openai_responses` 和
 `anthropic_messages` 协议、上下文窗口、最大输出 Token，以及 `agent_models` /
 `gateway_models` 两级模型别名。要让同一 Provider 覆盖全部 21 个评测 Agent，应使用能
@@ -267,19 +267,15 @@ OpenClaw 同时使用隔离的 `OPENCLAW_CONFIG_PATH`、`OPENCLAW_STATE_DIR` 和
 
 ## PostgreSQL 配置
 
-非敏感连接参数位于 `backend/config/database.yaml`。密码通过环境变量提供：
+复制 `.env.example` 为根目录 `.env`，填写数据库连接：
 
-```powershell
-$env:LITELLM_DATABASE_PASSWORD = "数据库密码"
-```
-
-也可在被 Git 忽略的 `backend/config/local.yaml` 中配置：
-
-```yaml
-secrets:
-  LITELLM_API_KEY: sk-your-virtual-key
-  LITELLM_DATABASE_PASSWORD: your-database-password
-  LITELLM_MASTER_KEY: sk-your-litellm-master-key
+```dotenv
+DATABASE_ENABLED=true
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=5432
+DATABASE_NAME=litellm
+DATABASE_USER=litellm
+DATABASE_PASSWORD=your-database-password
 ```
 
 如果运行环境已经提供完整 `DATABASE_URL`，它优先于分项配置。数据库用户只需对 `LiteLLM_SpendLogs` 具有只读权限。健康检查：
@@ -288,18 +284,10 @@ secrets:
 Invoke-RestMethod http://127.0.0.1:8000/api/database/health
 ```
 
-部署脚本也可以生成被 Git 忽略的 `backend/config/secrets.env`：
-
-```dotenv
-LITELLM_DATABASE_PASSWORD=your-database-password
-LITELLM_MASTER_KEY=sk-your-litellm-master-key
-```
-
-如需把一次运行和数据库记录严格一一对应，额外在后端进程环境设置 LiteLLM Master Key：
-
-```powershell
-$env:LITELLM_MASTER_KEY = "你的 LiteLLM Master Key"
-```
+如需把一次运行和数据库记录严格一一对应，在同一个 `.env` 中设置
+`LITELLM_MASTER_KEY`。旧版本升级可运行
+`python backend/scripts/migrate_config_to_env.py --remove-legacy`，脚本会保留已有 `.env`
+值，并迁移旧的 `local.yaml`、`secrets.env`、运行设置和 Agent 路径。
 
 后端优先为每个任务创建一小时有效的临时虚拟 Key，并按 `key_alias` 精确读取 SpendLogs，运行结束后删除。仅当显式关闭模型硬校验时，网关禁止管理接口才允许退化为任务时间窗口匹配，并在报告中标记较弱的 Agent 归因。默认开启模型硬校验：没有成功调用或实际模型不匹配都会令任务失败。只有显式使用 `--no-require-model-verification` 才允许保留“未确认”的诊断结果。默认不读取 messages/response。
 

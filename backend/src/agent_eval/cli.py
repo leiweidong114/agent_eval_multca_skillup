@@ -50,10 +50,12 @@ from agent_eval.runtime import (
 )
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 from agent_eval.failure import describe_evaluation_failure
+from agent_eval.env_config import apply_root_env
 
 
 # backend/src/agent_eval/cli.py -> parents[2] = backend
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+apply_root_env(PROJECT_ROOT)
 DEFAULT_CONNECTIVITY_PROMPT = "Reply with exactly CONNECTIVITY_OK."
 DEFAULT_SUBAGENT_PROMPT = (
     "必须启动一个真实 subagent，让它只回复 SUBAGENT_OK；等待它完成后，"

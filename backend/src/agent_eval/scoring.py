@@ -7,6 +7,8 @@ from typing import Any, Iterable
 
 import yaml
 
+from agent_eval.env_config import load_root_env
+
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "dimensions": {
@@ -38,10 +40,28 @@ def load_scoring_config(project_root: Path) -> dict[str, Any]:
     path = project_root / "config" / "scoring.yaml"
     configured = yaml.safe_load(path.read_text(encoding="utf-8")) if path.is_file() else {}
     configured = configured if isinstance(configured, dict) else {}
-    local_path = project_root / "config" / "local.yaml"
-    local = yaml.safe_load(local_path.read_text(encoding="utf-8")) if local_path.is_file() else {}
-    local_scoring = (local or {}).get("scoring") if isinstance(local, dict) else {}
-    return _merge(_merge(DEFAULT_CONFIG, configured), local_scoring or {})
+    result = _merge(DEFAULT_CONFIG, configured)
+    environment = load_root_env(project_root)
+    judge = result.setdefault("llm_judge", {})
+    for field_name, variable in (
+        ("enabled", "LLM_JUDGE_ENABLED"),
+        ("required", "LLM_JUDGE_REQUIRED"),
+    ):
+        raw = str(environment.get(variable) or "").strip().lower()
+        if raw:
+            if raw not in {"1", "true", "yes", "on", "0", "false", "no", "off"}:
+                raise ValueError(f"{variable} must be true or false")
+            judge[field_name] = raw in {"1", "true", "yes", "on"}
+    for field_name, variable, convert in (
+        ("model", "LITELLM_JUDGE_MODEL", str),
+        ("timeout_seconds", "LLM_JUDGE_TIMEOUT_SECONDS", int),
+        ("max_evidence_chars", "LLM_JUDGE_MAX_EVIDENCE_CHARS", int),
+        ("temperature", "LLM_JUDGE_TEMPERATURE", float),
+    ):
+        raw = str(environment.get(variable) or "").strip()
+        if raw:
+            judge[field_name] = convert(raw)
+    return result
 
 
 def _walk(value: Any) -> Iterable[Any]:

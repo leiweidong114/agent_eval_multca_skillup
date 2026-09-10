@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -10,7 +9,7 @@ from typing import Any, Mapping
 
 import yaml
 from urllib.parse import unquote, urlsplit
-from agent_eval.model_config import load_env_secrets
+from agent_eval.env_config import effective_environment
 
 
 class DatabaseConfigurationError(ValueError):
@@ -65,16 +64,25 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _env_bool(environment: Mapping[str, str], name: str, default: bool) -> bool:
+    raw = environment.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    normalized = str(raw).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise DatabaseConfigurationError(f"{name} must be true or false")
+
+
 def resolve_database_config(
     project_root: Path,
     *,
     environ: Mapping[str, str] | None = None,
 ) -> DatabaseConfig:
     config_dir = project_root / "config"
-    data = _merge(
-        _read_yaml(config_dir / "database.yaml"),
-        _read_yaml(config_dir / "local.yaml"),
-    )
+    data = _read_yaml(config_dir / "database.yaml")
     database = data.get("database") or {}
     if not isinstance(database, dict):
         raise DatabaseConfigurationError("database configuration must be a mapping")
@@ -84,24 +92,19 @@ def resolve_database_config(
     privacy = database.get("privacy") or {}
     if not isinstance(privacy, dict):
         raise DatabaseConfigurationError("database.privacy must be a mapping")
-    source_environment = environ if environ is not None else os.environ
-    secrets = data.get("secrets") or {}
-    env_secrets = load_env_secrets(project_root)
+    source_environment = effective_environment(project_root, environ)
     url_env = str(database.get("url_env") or "DATABASE_URL")
-    database_url = str(
-        source_environment.get(url_env) or env_secrets.get(url_env) or secrets.get(url_env) or ""
-    ).strip()
+    database_url = str(source_environment.get(url_env) or "").strip()
     password_env = str(database.get("password_env") or "LITELLM_DATABASE_PASSWORD")
     password = str(
-        source_environment.get(password_env)
-        or env_secrets.get(password_env)
-        or secrets.get(password_env)
+        source_environment.get("DATABASE_PASSWORD")
+        or source_environment.get(password_env)
         or ""
     )
-    host = str(database.get("host") or "127.0.0.1")
-    port = int(database.get("port") or 5432)
-    name = str(database.get("name") or "litellm")
-    user = str(database.get("user") or "litellm")
+    host = str(source_environment.get("DATABASE_HOST") or database.get("host") or "127.0.0.1")
+    port = int(source_environment.get("DATABASE_PORT") or database.get("port") or 5432)
+    name = str(source_environment.get("DATABASE_NAME") or database.get("name") or "litellm")
+    user = str(source_environment.get("DATABASE_USER") or database.get("user") or "litellm")
     if database_url:
         parsed = urlsplit(database_url)
         if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname:
@@ -111,11 +114,13 @@ def resolve_database_config(
         name = parsed.path.lstrip("/") or name
         user = unquote(parsed.username or user)
         password = unquote(parsed.password or password)
-    enabled = bool(database.get("enabled", False))
+    enabled = _env_bool(
+        source_environment, "DATABASE_ENABLED", bool(database_url or database.get("enabled", False))
+    )
     if enabled and not password:
         raise DatabaseConfigurationError(
-            f"Database is enabled but {password_env} is missing; set the environment "
-            "variable or add it to ignored config/local.yaml"
+            f"Database is enabled but DATABASE_PASSWORD (or {password_env}) is missing "
+            "from repository-root .env"
         )
     return DatabaseConfig(
         enabled=enabled,
@@ -124,14 +129,14 @@ def resolve_database_config(
         name=name,
         user=user,
         password=password,
-        sslmode=str(database.get("sslmode") or "prefer"),
-        connect_timeout_seconds=int(database.get("connect_timeout_seconds") or 5),
-        trace_enabled=bool(trace.get("enabled", True)),
-        include_content=bool(trace.get("include_content", False)),
-        lookaround_seconds=max(0, int(trace.get("lookaround_seconds") or 0)),
-        limit=max(1, min(5000, int(trace.get("limit") or 500))),
-        retention_days=max(1, int(privacy.get("retention_days") or 30)),
-        max_content_chars=max(100, int(privacy.get("max_content_chars") or 20000)),
+        sslmode=str(source_environment.get("DATABASE_SSLMODE") or database.get("sslmode") or "prefer"),
+        connect_timeout_seconds=int(source_environment.get("DATABASE_CONNECT_TIMEOUT_SECONDS") or database.get("connect_timeout_seconds") or 5),
+        trace_enabled=_env_bool(source_environment, "DATABASE_TRACE_ENABLED", bool(trace.get("enabled", True))),
+        include_content=_env_bool(source_environment, "DATABASE_TRACE_INCLUDE_CONTENT", bool(trace.get("include_content", False))),
+        lookaround_seconds=max(0, int(source_environment.get("DATABASE_TRACE_LOOKAROUND_SECONDS") or trace.get("lookaround_seconds") or 0)),
+        limit=max(1, min(5000, int(source_environment.get("DATABASE_TRACE_LIMIT") or trace.get("limit") or 500))),
+        retention_days=max(1, int(source_environment.get("DATABASE_RETENTION_DAYS") or privacy.get("retention_days") or 30)),
+        max_content_chars=max(100, int(source_environment.get("DATABASE_MAX_CONTENT_CHARS") or privacy.get("max_content_chars") or 20000)),
     )
 
 

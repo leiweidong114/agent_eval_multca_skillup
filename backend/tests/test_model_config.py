@@ -132,14 +132,14 @@ profiles: {}
     assert claude.gateway_model_for_agent("claude") == "glm-4.7"
 
 
-def test_unified_litellm_reads_ignored_env_file_and_rejects_no_thinking(tmp_path):
+def test_unified_litellm_reads_root_env_and_rejects_no_thinking(tmp_path):
     config = tmp_path / "config"
     config.mkdir()
     (config / "models.yaml").write_text(
         "litellm:\n  model: glm-4.7\n  api_base: http://fallback.invalid/v1\n",
         encoding="utf-8",
     )
-    (config / "litellm.env").write_text(
+    (tmp_path / ".env").write_text(
         "LITELLM_API_BASE=http://127.0.0.1:4000/v1\nLITELLM_API_KEY=virtual-key\n",
         encoding="utf-8",
     )
@@ -185,16 +185,11 @@ def test_opencode_uses_agent_specific_gateway_model(tmp_path):
     assert '"MiniMax-M3-no-thinking"' in profile.environment["OPENCODE_CONFIG_CONTENT"]
 
 
-def test_local_config_overrides_model_without_committing_a_key(tmp_path):
+def test_root_env_overrides_model_without_committing_a_key(tmp_path):
     _write_config(tmp_path)
-    (tmp_path / "config" / "local.yaml").write_text(
-        """\
-profiles:
-  minimax:
-    model: MiniMax-M3-test
-secrets:
-  TEST_LITELLM_KEY: local-key
-""",
+    (tmp_path / ".env").write_text(
+        'MODEL_PROFILES_JSON={"minimax":{"model":"MiniMax-M3-test"}}\n'
+        "TEST_LITELLM_KEY=local-key\n",
         encoding="utf-8",
     )
 
@@ -436,7 +431,7 @@ def test_discovered_model_prefers_the_profile_configured_for_its_exact_id(tmp_pa
     assert discovered["profile"] == "exact"
 
 
-def test_custom_profile_crud_is_local_atomic_and_never_exposes_key(tmp_path):
+def test_custom_profile_crud_is_dotenv_atomic_and_never_exposes_key(tmp_path):
     _write_config(tmp_path)
 
     saved = save_model_profile(
@@ -460,10 +455,10 @@ def test_custom_profile_crud_is_local_atomic_and_never_exposes_key(tmp_path):
     assert saved["supports_all_evaluation_agents"] is True
     assert saved["api_key_configured"] is True
     assert "top-secret" not in repr(saved)
-    assert "top-secret" not in (tmp_path / "config" / "local.yaml").read_text(encoding="utf-8")
-    assert "COMPANY_GATEWAY_KEY=top-secret" in (
-        tmp_path / "config" / "secrets.env"
-    ).read_text(encoding="utf-8")
+    dotenv = (tmp_path / ".env").read_text(encoding="utf-8")
+    assert "MODEL_PROFILES_JSON=" in dotenv
+    assert "COMPANY_GATEWAY_KEY=top-secret" in dotenv
+    assert "top-secret" not in json.dumps(saved)
 
     resolved = resolve_model_profile(
         tmp_path, profile_name="company_gateway", agent="claude", environ={}

@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from agent_eval.agent_adapters import model_adapter
+from agent_eval.env_config import effective_environment, load_root_env, update_root_env
 
 
 SUPPORTED_AGENTS = (
@@ -96,22 +97,18 @@ SUBAGENT_TRANSPORTS = {
     "justdo": "isolated_justdo_child_process",
 }
 
-AGENT_PATHS_FILE = "agent-paths.json"
-
-
 def _default_project_root() -> Path:
     # backend/src/agent_eval/runtime.py -> parents[2] = backend
     return Path(__file__).resolve().parents[2]
 
 
 def load_agent_paths(project_root: Path | None = None) -> dict[str, str]:
-    """Load user-selected Agent executables shared by the Web UI and CLI."""
-    path = (project_root or _default_project_root()) / "config" / AGENT_PATHS_FILE
-    if not path.is_file():
-        return {}
+    """Load user-selected Agent executables from repository-root ``.env``."""
+    root = project_root or _default_project_root()
+    raw = load_root_env(root).get("AGENT_PATHS_JSON", "").strip()
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        value = json.loads(raw) if raw else {}
+    except ValueError:
         return {}
     if not isinstance(value, dict):
         return {}
@@ -143,14 +140,11 @@ def save_agent_path(
     else:
         paths.pop(normalized, None)
 
-    target = root / "config" / AGENT_PATHS_FILE
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_suffix(f"{target.suffix}.tmp")
-    temporary.write_text(
-        json.dumps(paths, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    os.replace(temporary, target)
+    update_root_env(root, {
+        "AGENT_PATHS_JSON": (
+            json.dumps(paths, ensure_ascii=False, separators=(",", ":")) if paths else None
+        )
+    })
     return paths
 
 
@@ -167,13 +161,15 @@ def normalize_agent(value: str) -> str:
 
 def default_agent_command(agent: str, project_root: Path | None = None) -> str:
     normalized = normalize_agent(agent)
-    if normalized == "justdo":
-        configured = os.environ.get("JUSTDO_AGENT_EXECUTABLE", "").strip()
-        if configured:
-            return configured
     configured_paths = load_agent_paths(project_root)
     if normalized in configured_paths:
         return configured_paths[normalized]
+    if normalized == "justdo":
+        configured = effective_environment(project_root or _default_project_root()).get(
+            "JUSTDO_AGENT_EXECUTABLE", ""
+        ).strip()
+        if configured:
+            return configured
     if normalized == "justdo":
         if os.name == "nt":
             appdata = os.environ.get("APPDATA", "").strip()

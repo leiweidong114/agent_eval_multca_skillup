@@ -10,8 +10,10 @@ client = TestClient(app)
 
 
 def test_health_and_discovery_endpoints(monkeypatch):
-    monkeypatch.setenv("LITELLM_JUDGE_MODEL", "test-judge-model")
-    monkeypatch.setattr("app.api.routes_skill.load_runtime_settings", lambda root: {})
+    monkeypatch.setattr(
+        "app.api.routes_skill.load_runtime_settings",
+        lambda root: {"judge_model": "test-judge-model"},
+    )
     assert client.get("/api/health").json()["status"] == "ok"
     agents = client.get("/api/agents")
     assert agents.status_code == 200
@@ -42,7 +44,7 @@ def test_agent_path_endpoint_persists_shared_executable(tmp_path, monkeypatch):
     assert response.json()["configured_path"] == str(executable.resolve())
     listed = {item["agent"]: item for item in client.get("/api/agents").json()}
     assert listed["justdo"]["detected_executable"] == str(executable.resolve())
-    assert "justdo" in (tmp_path / "config" / "agent-paths.json").read_text(encoding="utf-8")
+    assert "AGENT_PATHS_JSON=" in (tmp_path / ".env").read_text(encoding="utf-8")
 
     reset = client.put("/api/agents/justdo/path", json={"path": ""})
     assert reset.status_code == 200
@@ -73,7 +75,7 @@ def test_runtime_settings_save_non_secret_default_models(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert client.get("/api/settings").json()["judge_model"] == "judge-model"
-    saved = (config / "runtime-settings.json").read_text(encoding="utf-8")
+    saved = (tmp_path / ".env").read_text(encoding="utf-8")
     assert "judge-model" in saved
     assert "api_key" not in saved.lower()
 

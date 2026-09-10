@@ -16,6 +16,7 @@ import yaml
 import httpx
 
 from agent_eval.agent_adapters import AGENT_MODEL_ADAPTERS, model_adapter
+from agent_eval.env_config import effective_environment, load_root_env, update_root_env
 from agent_eval.failure import describe_evaluation_failure
 
 
@@ -112,26 +113,26 @@ def _write_yaml(path: Path, value: dict[str, Any]) -> None:
 
 
 def load_runtime_settings(project_root: Path) -> dict[str, Any]:
-    """Load non-secret Web/CLI model preferences from an ignored local file."""
-    path = project_root / "config" / "runtime-settings.json"
-    if not path.is_file():
-        return {}
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(value, dict):
-        return {}
-    settings: dict[str, Any] = {
-        name: str(value.get(name) or "").strip()
-        for name in ("judge_model", "agent_test_model")
-        if str(value.get(name) or "").strip()
-    }
-    skills = value.get("schematic_skills")
-    if isinstance(skills, list):
-        settings["schematic_skills"] = [
-            str(item).strip() for item in skills if str(item).strip()
-        ][:8]
+    """Load mutable Web/CLI preferences from repository-root ``.env``."""
+    environment = effective_environment(project_root)
+    settings: dict[str, Any] = {}
+    for setting, variable in (
+        ("judge_model", "LITELLM_JUDGE_MODEL"),
+        ("agent_test_model", "AGENT_TEST_MODEL"),
+    ):
+        value = str(environment.get(variable) or "").strip()
+        if value:
+            settings[setting] = value
+    raw_skills = str(environment.get("SCHEMATIC_SKILLS_JSON") or "").strip()
+    if raw_skills:
+        try:
+            skills = json.loads(raw_skills)
+        except ValueError:
+            skills = None
+        if isinstance(skills, list):
+            settings["schematic_skills"] = [
+                str(item).strip() for item in skills if str(item).strip()
+            ][:8]
     return settings
 
 
@@ -159,10 +160,11 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
     if any(len(item) > 300 or any(char in item for char in "\r\n\0") for item in schematic_skills):
         raise ValueError("Invalid schematic_skills")
     settings["schematic_skills"] = schematic_skills
-    _atomic_write(
-        project_root / "config" / "runtime-settings.json",
-        json.dumps(settings, ensure_ascii=False, indent=2) + "\n",
-    )
+    update_root_env(project_root, {
+        "LITELLM_JUDGE_MODEL": settings["judge_model"],
+        "AGENT_TEST_MODEL": settings["agent_test_model"],
+        "SCHEMATIC_SKILLS_JSON": json.dumps(schematic_skills, ensure_ascii=False),
+    })
     return settings
 
 
@@ -193,10 +195,20 @@ def _positive_int(value: object, *, field_name: str, default: int) -> int:
 
 def load_model_config(project_root: Path) -> dict[str, Any]:
     config_dir = project_root / "config"
-    return _merge(
-        _read_yaml(config_dir / "models.yaml"),
-        _read_yaml(config_dir / "local.yaml"),
-    )
+    config = _read_yaml(config_dir / "models.yaml")
+    raw_profiles = load_root_env(project_root).get("MODEL_PROFILES_JSON", "").strip()
+    if raw_profiles:
+        try:
+            profiles = json.loads(raw_profiles)
+        except ValueError as exc:
+            raise ValueError("MODEL_PROFILES_JSON must be valid JSON") from exc
+        if not isinstance(profiles, dict):
+            raise ValueError("MODEL_PROFILES_JSON must be a JSON object")
+        config = _merge(config, {"profiles": profiles})
+    default_profile = load_root_env(project_root).get("LITELLM_PROFILE", "").strip()
+    if default_profile:
+        config["default_profile"] = default_profile
+    return config
 
 
 def _normalized_base_url(value: str) -> tuple[str, str]:
@@ -239,22 +251,53 @@ def resolve_model_profile(
     environ: Mapping[str, str] | None = None,
 ) -> ResolvedModelProfile:
     config = load_model_config(project_root)
+    source_environment = effective_environment(project_root, environ)
+    requested_profile = profile_name or source_environment.get("LITELLM_PROFILE")
     unified_litellm = config.get("litellm")
     profiles = config.get("profiles") or {}
-    if profile_name in (None, "litellm") and isinstance(unified_litellm, dict):
+    if requested_profile in (None, "", "litellm") and isinstance(unified_litellm, dict):
         selected = "litellm"
-        profile = unified_litellm
+        profile = dict(unified_litellm)
     else:
-        selected = profile_name or str(config.get("default_profile") or "").strip()
+        selected = requested_profile or str(config.get("default_profile") or "").strip()
         if not selected or not isinstance(profiles, dict) or selected not in profiles:
             raise ValueError(f"Unknown or missing model profile: {selected or '<empty>'}")
-        profile = profiles[selected]
+        raw_profile = profiles[selected]
+        profile = dict(raw_profile) if isinstance(raw_profile, dict) else raw_profile
     if not isinstance(profile, dict):
         raise ValueError(f"Model profile must be a mapping: {selected}")
 
-    source_environment = environ if environ is not None else os.environ
-    env_secrets = load_env_secrets(project_root)
-    default_model = source_environment.get("LITELLM_MODEL") or env_secrets.get("LITELLM_MODEL")
+    if selected == "litellm":
+        scalar_overrides = {
+            "model": "LITELLM_MODEL",
+            "api_base": "LITELLM_API_BASE",
+            "protocol": "LITELLM_PROTOCOL",
+            "context_window": "LITELLM_CONTEXT_WINDOW",
+            "max_output_tokens": "LITELLM_MAX_OUTPUT_TOKENS",
+        }
+        for field_name, variable in scalar_overrides.items():
+            value = str(source_environment.get(variable) or "").strip()
+            if value:
+                profile[field_name] = value
+        if "LITELLM_REASONING" in source_environment:
+            profile["reasoning"] = str(source_environment["LITELLM_REASONING"]).strip().lower() in {
+                "1", "true", "yes", "on"
+            }
+        for field_name, variable in (
+            ("agent_models", "LITELLM_AGENT_MODELS_JSON"),
+            ("gateway_models", "LITELLM_GATEWAY_MODELS_JSON"),
+        ):
+            raw_mapping = str(source_environment.get(variable) or "").strip()
+            if raw_mapping:
+                try:
+                    parsed_mapping = json.loads(raw_mapping)
+                except ValueError as exc:
+                    raise ValueError(f"{variable} must be valid JSON") from exc
+                if not isinstance(parsed_mapping, dict):
+                    raise ValueError(f"{variable} must be a JSON object")
+                profile[field_name] = parsed_mapping
+
+    default_model = source_environment.get("LITELLM_MODEL") if selected == "litellm" else None
     model = (model_override or default_model or str(profile.get("model") or "")).strip()
     if not model:
         raise ValueError(f"Model profile has no model: {selected}")
@@ -287,15 +330,7 @@ def resolve_model_profile(
                 f"Model profile {selected!r} exposes {protocol}, but Agent {agent!r} "
                 f"requires {adapter_protocol}; use an openai_compatible gateway profile"
             )
-    local_secrets = config.get("secrets") or {}
-    env_secrets = load_env_secrets(project_root)
-    source_environment = environ if environ is not None else os.environ
-    env_api_base = (
-        source_environment.get("LITELLM_API_BASE")
-        or env_secrets.get("LITELLM_API_BASE")
-        if selected == "litellm"
-        else None
-    )
+    env_api_base = source_environment.get("LITELLM_API_BASE") if selected == "litellm" else None
     api_base = str(env_api_base or profile.get("api_base") or "").strip()
     openai_base, anthropic_base = _normalized_base_url(api_base)
 
@@ -308,14 +343,11 @@ def resolve_model_profile(
     )
     api_key = str(
         source_environment.get(key_name)
-        or env_secrets.get(key_name)
-        or local_secrets.get(key_name)
         or ""
     ).strip()
     if not api_key:
         raise ValueError(
-            f"Model profile {selected!r} requires {key_name}; set it in the environment "
-            "or the ignored config/litellm.env file"
+            f"Model profile {selected!r} requires {key_name}; set it in repository-root .env"
         )
 
     agent_models = profile.get("agent_models") or {}
@@ -459,30 +491,8 @@ def resolve_model_profile(
 
 
 def load_env_secrets(project_root: Path) -> dict[str, str]:
-    """Load ignored KEY=value files without mutating process globals."""
-    result: dict[str, str] = {}
-    for path in (
-        project_root / "config" / "secrets.env",
-        project_root / "config" / "litellm.env",
-        project_root / ".env",
-        project_root.parent / ".env" if project_root.name == "backend" else project_root / ".env",
-    ):
-        if not path.is_file():
-            continue
-        for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip().removeprefix("export ").strip()
-            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
-                value = value.strip()
-                if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-                    value = value[1:-1]
-                else:
-                    value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
-                result[key] = value
-    return result
+    """Compatibility alias: deployment values now come only from root ``.env``."""
+    return load_root_env(project_root)
 
 
 def resolve_config_secret(
@@ -491,11 +501,7 @@ def resolve_config_secret(
     *,
     environ: Mapping[str, str] | None = None,
 ) -> str:
-    config = load_model_config(project_root)
-    secrets = config.get("secrets") or {}
-    env_secrets = load_env_secrets(project_root)
-    source_environment = environ if environ is not None else os.environ
-    return str(source_environment.get(name) or env_secrets.get(name) or secrets.get(name) or "").strip()
+    return str(effective_environment(project_root, environ).get(name) or "").strip()
 
 
 def _profile_compatible_agents(protocol: str) -> list[str]:
@@ -516,12 +522,16 @@ def _profile_compatible_agents(protocol: str) -> list[str]:
 def list_model_profiles(project_root: Path) -> list[dict[str, Any]]:
     """Return editable, non-secret provider profiles and their Agent coverage."""
     config = load_model_config(project_root)
-    local = _read_yaml(project_root / "config" / "local.yaml")
+    environment = load_root_env(project_root)
     raw_profiles = config.get("profiles") or {}
     profiles = dict(raw_profiles) if isinstance(raw_profiles, dict) else {}
     if isinstance(config.get("litellm"), dict):
         profiles["litellm"] = config["litellm"]
-    local_profiles = local.get("profiles") or {}
+    raw_local_profiles = environment.get("MODEL_PROFILES_JSON", "").strip()
+    try:
+        local_profiles = json.loads(raw_local_profiles) if raw_local_profiles else {}
+    except ValueError:
+        local_profiles = {}
     if not isinstance(profiles, dict):
         return []
     result: list[dict[str, Any]] = []
@@ -563,7 +573,7 @@ def list_model_profiles(project_root: Path) -> list[dict[str, Any]]:
                     protocol == "openai_compatible"
                 ),
                 "source": "local" if name in local_profiles else "built_in",
-                "is_default": name == str(config.get("default_profile") or ""),
+                "is_default": name == str(environment.get("LITELLM_PROFILE") or "litellm"),
             }
         )
     return result
@@ -587,20 +597,7 @@ def _normalize_agent_mapping(value: object, *, field_name: str) -> dict[str, str
 
 
 def _store_secret(project_root: Path, name: str, value: str) -> None:
-    path = project_root / "config" / "secrets.env"
-    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-    output: list[str] = []
-    replaced = False
-    for line in lines:
-        if re.match(rf"^\s*{re.escape(name)}\s*=", line):
-            if not replaced:
-                output.append(f"{name}={value}")
-                replaced = True
-        else:
-            output.append(line)
-    if not replaced:
-        output.append(f"{name}={value}")
-    _atomic_write(path, "\n".join(output).rstrip() + "\n")
+    update_root_env(project_root, {name: value})
 
 
 def save_model_profile(
@@ -611,7 +608,7 @@ def save_model_profile(
     api_key: str | None = None,
     make_default: bool = False,
 ) -> dict[str, Any]:
-    """Create/update an ignored local provider profile with atomic writes."""
+    """Create/update a provider profile in repository-root ``.env``."""
     normalized_name = _validate_profile_name(name)
     model = str(values.get("model") or "").strip()
     if not model:
@@ -650,15 +647,21 @@ def save_model_profile(
     if gateway_models:
         profile["gateway_models"] = gateway_models
 
-    path = project_root / "config" / "local.yaml"
-    local = _read_yaml(path)
-    profiles = local.setdefault("profiles", {})
+    environment = load_root_env(project_root)
+    raw_profiles = environment.get("MODEL_PROFILES_JSON", "").strip()
+    try:
+        profiles = json.loads(raw_profiles) if raw_profiles else {}
+    except ValueError as exc:
+        raise ValueError("MODEL_PROFILES_JSON must be valid JSON") from exc
     if not isinstance(profiles, dict):
-        raise ValueError("Local profiles configuration must be an object")
+        raise ValueError("MODEL_PROFILES_JSON must be a JSON object")
     profiles[normalized_name] = profile
+    updates: dict[str, str | None] = {
+        "MODEL_PROFILES_JSON": json.dumps(profiles, ensure_ascii=False, separators=(",", ":")),
+    }
     if make_default:
-        local["default_profile"] = normalized_name
-    _write_yaml(path, local)
+        updates["LITELLM_PROFILE"] = normalized_name
+    update_root_env(project_root, updates)
     if api_key is not None and api_key.strip():
         _store_secret(project_root, key_name, api_key.strip())
     return next(
@@ -667,21 +670,26 @@ def save_model_profile(
 
 
 def delete_model_profile(project_root: Path, name: str) -> bool:
-    """Delete a local profile/override; built-in profiles themselves are immutable."""
+    """Delete a custom profile from repository-root ``.env``."""
     normalized_name = _validate_profile_name(name)
-    path = project_root / "config" / "local.yaml"
-    local = _read_yaml(path)
-    profiles = local.get("profiles") or {}
+    environment = load_root_env(project_root)
+    raw_profiles = environment.get("MODEL_PROFILES_JSON", "").strip()
+    try:
+        profiles = json.loads(raw_profiles) if raw_profiles else {}
+    except ValueError as exc:
+        raise ValueError("MODEL_PROFILES_JSON must be valid JSON") from exc
     if not isinstance(profiles, dict) or normalized_name not in profiles:
         return False
     del profiles[normalized_name]
-    if profiles:
-        local["profiles"] = profiles
-    else:
-        local.pop("profiles", None)
-    if local.get("default_profile") == normalized_name:
-        local.pop("default_profile", None)
-    _write_yaml(path, local)
+    updates: dict[str, str | None] = {
+        "MODEL_PROFILES_JSON": (
+            json.dumps(profiles, ensure_ascii=False, separators=(",", ":"))
+            if profiles else None
+        )
+    }
+    if environment.get("LITELLM_PROFILE") == normalized_name:
+        updates["LITELLM_PROFILE"] = "litellm"
+    update_root_env(project_root, updates)
     return True
 
 
@@ -689,11 +697,12 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
     config = load_model_config(project_root)
     profiles = config.get("profiles") or {}
     unified = config.get("litellm")
-    if isinstance(unified, dict):
+    selected = load_root_env(project_root).get("LITELLM_PROFILE", "").strip()
+    if isinstance(unified, dict) and selected in {"", "litellm"}:
         default_name = "litellm"
         default = unified
     else:
-        default_name = str(config.get("default_profile") or "").strip()
+        default_name = selected or str(config.get("default_profile") or "").strip()
         default = profiles.get(default_name, {}) if isinstance(profiles, dict) else {}
     key_name = (
         str(default.get("api_key_env") or "LITELLM_API_KEY")
@@ -709,12 +718,18 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
         profile_models["litellm"] = unified["model"]
     common = {
         "default_profile": default_name or None,
-        "default_model": resolve_config_secret(project_root, "LITELLM_MODEL") or (default.get("model") if isinstance(default, dict) else None),
-        "api_base": resolve_config_secret(project_root, "LITELLM_API_BASE") or (default.get("api_base") if isinstance(default, dict) else None),
+        "default_model": (
+            resolve_config_secret(project_root, "LITELLM_MODEL")
+            if default_name == "litellm" else None
+        ) or (default.get("model") if isinstance(default, dict) else None),
+        "api_base": (
+            resolve_config_secret(project_root, "LITELLM_API_BASE")
+            if default_name == "litellm" else None
+        ) or (default.get("api_base") if isinstance(default, dict) else None),
         "api_key_env": key_name,
         "api_key_configured": bool(resolve_config_secret(project_root, key_name)),
     }
-    if isinstance(unified, dict):
+    if isinstance(unified, dict) and default_name == "litellm":
         common.pop("default_profile", None)
         common.update(
             configuration_mode="unified_litellm",

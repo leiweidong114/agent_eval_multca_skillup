@@ -19,6 +19,9 @@ from pydantic import BaseModel, Field
 from maeval.adapters import _run_process, get_adapter, resolve_executable
 from maeval.models import Candidate, ScorerSpec, Task
 from agent_eval.model_config import resolve_model_profile
+from agent_eval.env_config import apply_root_env
+
+apply_root_env(Path(__file__).resolve().parents[3])
 
 from .benchmarks import install_benchmark, seed_catalog
 from .auth import (

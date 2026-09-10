@@ -10,7 +10,12 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
+
+from agent_eval.env_config import apply_root_env
+
+apply_root_env(Path(__file__).resolve().parents[2])
 
 
 PROVIDER_KINDS = (

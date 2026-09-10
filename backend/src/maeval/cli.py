@@ -8,6 +8,10 @@ import shutil
 import sys
 from pathlib import Path
 
+from agent_eval.env_config import apply_root_env
+
+apply_root_env(Path(__file__).resolve().parents[2])
+
 from .config import Experiment, load_experiment
 from .adapters import resolve_executable
 from .runner import run_experiment

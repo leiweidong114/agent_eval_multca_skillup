@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from agent_eval.env_config import apply_root_env
+
+apply_root_env(Path(__file__).resolve().parents[1])
 
 from app.api import routes_eval, routes_runs, routes_schematic, routes_skill
 from app.model_eval import model_eval_app

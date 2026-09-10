@@ -79,7 +79,9 @@ def create_trace_key(
     *,
     master_key: str | None = None,
 ) -> TraceKey | None:
-    master_key = (master_key or os.environ.get("LITELLM_MASTER_KEY", "")).strip()
+    master_key = (
+        os.environ.get("LITELLM_MASTER_KEY", "") if master_key is None else master_key
+    ).strip()
     if not master_key or not api_base:
         return None
     parsed = urlsplit(api_base.rstrip("/"))
