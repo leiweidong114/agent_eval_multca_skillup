@@ -50,7 +50,7 @@ function Install-ZipToolchain {
     Assert-AgentEvalChildPath -Parent $runtime -Child $staging | Out-Null
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $staging | Out-Null
-    Expand-Archive -LiteralPath $Archive -DestinationPath $staging -Force
+    Invoke-AgentEvalCommand -FilePath 'tar.exe' -ArgumentList @('-xf', $Archive, '-C', $staging)
     $roots = @(Get-ChildItem -LiteralPath $staging -Directory)
     $contentRoot = if ($roots.Count -eq 1) { $roots[0].FullName } else { $staging }
     Copy-AgentEvalDirectoryContents -Source $contentRoot -Destination $Target
