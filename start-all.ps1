@@ -194,18 +194,20 @@ $FrontendStderr = Join-Path $RuntimeDirectory 'frontend.stderr.log'
 $StartedProcesses = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
 
 try {
-    $BackendProcess = Start-Process `
-        -FilePath $PythonExecutable `
-        -ArgumentList @(
-            (Join-Path $ProjectRoot 'backend\run_server.py'),
-            '--host', $BackendHost,
-            '--port', $BackendPort
-        ) `
-        -WorkingDirectory $ProjectRoot `
-        -RedirectStandardOutput $BackendStdout `
-        -RedirectStandardError $BackendStderr `
-        -WindowStyle Hidden `
-        -PassThru
+    $BackendProcess = Invoke-WithAgentEvalPythonIsolation {
+        Start-Process `
+            -FilePath $PythonExecutable `
+            -ArgumentList @(
+                (Join-Path $ProjectRoot 'backend\run_server.py'),
+                '--host', $BackendHost,
+                '--port', $BackendPort
+            ) `
+            -WorkingDirectory $ProjectRoot `
+            -RedirectStandardOutput $BackendStdout `
+            -RedirectStandardError $BackendStderr `
+            -WindowStyle Hidden `
+            -PassThru
+    }
     $StartedProcesses.Add($BackendProcess)
     Wait-HttpReady -Uri "$BackendUrl/api/health" -Process $BackendProcess -TimeoutSeconds $StartTimeout
 

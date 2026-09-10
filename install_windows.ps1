@@ -126,7 +126,9 @@ if (-not (Test-Path -LiteralPath $python) -or $Force) {
         Assert-AgentEvalChildPath -Parent $runtime -Child $pythonEnv | Out-Null
         Remove-Item -LiteralPath $pythonEnv -Recurse -Force
     }
-    Invoke-AgentEvalCommand -FilePath $basePython -ArgumentList @('-m', 'venv', '--copies', $pythonEnv)
+    Invoke-WithAgentEvalPythonIsolation {
+        Invoke-AgentEvalCommand -FilePath $basePython -ArgumentList @('-m', 'venv', '--copies', $pythonEnv)
+    }
 }
 
 $wheelhouse = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Directory -Patterns @(
@@ -135,10 +137,12 @@ $wheelhouse = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Directory -Patterns
 $projectWheelhouse = Join-Path $cache 'wheelhouse'
 New-Item -ItemType Directory -Force -Path $projectWheelhouse | Out-Null
 Copy-AgentEvalDirectoryContents -Source $wheelhouse -Destination $projectWheelhouse
-Invoke-AgentEvalCommand -FilePath $python -ArgumentList @(
-    '-m', 'pip', 'install', '--no-index', '--find-links', $projectWheelhouse,
-    '-e', "$((Join-Path $ProjectRoot 'backend'))[dev,web,database]"
-)
+Invoke-WithAgentEvalPythonIsolation {
+    Invoke-AgentEvalCommand -FilePath $python -ArgumentList @(
+        '-m', 'pip', 'install', '--no-index', '--find-links', $projectWheelhouse,
+        '-e', "$((Join-Path $ProjectRoot 'backend'))[dev,web,database]"
+    )
+}
 
 if (-not $SkipFrontend) {
     $npmCache = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Directory -Patterns @(

@@ -174,3 +174,26 @@ function Invoke-AgentEvalCommand {
         if ($WorkingDirectory) { Pop-Location }
     }
 }
+
+function Invoke-WithAgentEvalPythonIsolation {
+    param([Parameter(Mandatory)][scriptblock]$ScriptBlock)
+
+    $names = @('PYTHONPATH', 'PYTHONHOME', 'PYTHONUSERBASE', 'PYTHONNOUSERSITE')
+    $saved = @{}
+    foreach ($name in $names) {
+        $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+    }
+    $env:PYTHONNOUSERSITE = '1'
+    try {
+        & $ScriptBlock
+    }
+    finally {
+        foreach ($name in $names) {
+            Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+            if ($null -ne $saved[$name]) {
+                Set-Item -LiteralPath "Env:$name" -Value $saved[$name]
+            }
+        }
+    }
+}

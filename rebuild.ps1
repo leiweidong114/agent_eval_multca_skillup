@@ -18,11 +18,13 @@ if ($Target -in @('All', 'Backend')) {
     $wheelhouse = Join-Path $projectRoot 'backend\.offline-cache\windows\wheelhouse'
     if (-not (Test-Path -LiteralPath $python)) { throw "Python was not found: $python" }
     if (-not (Test-Path -LiteralPath $wheelhouse)) { throw "Python wheelhouse was not found: $wheelhouse" }
-    Invoke-AgentEvalCommand -FilePath $python -ArgumentList @(
-        '-m', 'pip', 'install', '--no-index', '--find-links', $wheelhouse,
-        '-e', "$((Join-Path $projectRoot 'backend'))[dev,web,database]"
-    )
-    if ($Test) { Invoke-AgentEvalCommand -FilePath $python -WorkingDirectory (Join-Path $projectRoot 'backend') -ArgumentList @('-m', 'pytest') }
+    Invoke-WithAgentEvalPythonIsolation {
+        Invoke-AgentEvalCommand -FilePath $python -ArgumentList @(
+            '-m', 'pip', 'install', '--no-index', '--find-links', $wheelhouse,
+            '-e', "$((Join-Path $projectRoot 'backend'))[dev,web,database]"
+        )
+        if ($Test) { Invoke-AgentEvalCommand -FilePath $python -WorkingDirectory (Join-Path $projectRoot 'backend') -ArgumentList @('-m', 'pytest') }
+    }
     Write-Host 'BACKEND_BUILD_OK' -ForegroundColor Green
 }
 if ($Target -in @('All', 'Frontend')) { & (Join-Path $projectRoot 'build_frontend_windows.ps1') -CleanInstall:$false }

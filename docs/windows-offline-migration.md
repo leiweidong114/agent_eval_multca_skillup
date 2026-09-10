@@ -46,6 +46,8 @@ Python 默认直接从 portable `install_only` 包解压到项目，不调用系
 
 安装后不再依赖原 Release 解压目录。已有 `.env`、题库和第三方源码默认保留；`-Force` 只用于重建工具链和 Python 环境。
 
+创建虚拟环境、安装依赖、运行后端和执行测试时，脚本会临时隔离系统级 `PYTHONPATH`、`PYTHONHOME` 和用户 site-packages，避免 Anaconda 或其他全局 Python 包混入项目环境。
+
 安装完成后编辑根目录 `.env`，再启动：
 
 ```powershell
