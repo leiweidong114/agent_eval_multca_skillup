@@ -66,6 +66,16 @@ $nodeArchive = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Patterns @(
 $pythonInstaller = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Patterns @(
     'toolchains\python*-amd64.exe', 'toolchains\python\*.exe', 'python*-amd64.exe'
 )
+$vcRedist = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Optional -Patterns @(
+    'toolchains\VC_redist.x64.exe', 'VC_redist.x64.exe'
+)
+
+if ($vcRedist) {
+    $vcProcess = Start-Process -FilePath $vcRedist -ArgumentList @('/install', '/quiet', '/norestart') -Wait -PassThru
+    if ($vcProcess.ExitCode -notin @(0, 1638, 3010)) {
+        throw "Visual C++ Runtime installation failed with exit code $($vcProcess.ExitCode)."
+    }
+}
 
 Install-ZipToolchain -Name 'Go' -Archive $goArchive -Target (Join-Path $runtime 'go') -ExecutableRelativePath 'bin\go.exe'
 Install-ZipToolchain -Name 'Node' -Archive $nodeArchive -Target (Join-Path $runtime 'node') -ExecutableRelativePath 'node.exe'

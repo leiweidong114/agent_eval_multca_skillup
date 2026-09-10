@@ -11,7 +11,8 @@ release-root/
 ├─ toolchains/
 │  ├─ go1.26.7.windows-amd64.zip
 │  ├─ node-v26.1.0-win-x64.zip
-│  └─ python-3.10.9-amd64.exe
+│  ├─ python-3.12.10-amd64.exe
+│  └─ VC_redist.x64.exe
 ├─ python/wheelhouse/*.whl
 ├─ frontend/npm-cache/
 ├─ sources/
@@ -88,7 +89,8 @@ Multica 评测入口的项目定制代码保存在 `backend/runtime/multica-loca
   -OutputRoot D:\release-work\agent-eval-runtime-windows-x64 `
   -GoArchive D:\packages\go1.26.7.windows-amd64.zip `
   -NodeArchive D:\packages\node-v26.1.0-win-x64.zip `
-  -PythonInstaller D:\packages\python-3.10.9-amd64.exe `
+  -PythonInstaller D:\packages\python-3.12.10-amd64.exe `
+  -VCRedist D:\packages\VC_redist.x64.exe `
   -Wheelhouse D:\packages\wheelhouse `
   -NpmCache D:\packages\npm-cache `
   -QuestionBank D:\packages\maeval-public.db `

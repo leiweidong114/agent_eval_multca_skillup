@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory)][string]$GoArchive,
     [Parameter(Mandatory)][string]$NodeArchive,
     [Parameter(Mandatory)][string]$PythonInstaller,
+    [string]$VCRedist,
     [Parameter(Mandatory)][string]$Wheelhouse,
     [Parameter(Mandatory)][string]$NpmCache,
     [Parameter(Mandatory)][string]$QuestionBank,
@@ -53,6 +54,10 @@ $questionBankRoot = Join-Path $output 'question-bank'
 New-Item -ItemType Directory -Force -Path $toolchains, $releaseWheelhouse, $releaseNpmCache, $releaseSources, $prebuilt, $justDo, $questionBankRoot | Out-Null
 
 Copy-Item -LiteralPath $GoArchive, $NodeArchive, $PythonInstaller -Destination $toolchains
+if ($VCRedist) {
+    if (-not (Test-Path -LiteralPath $VCRedist -PathType Leaf)) { throw "VC Runtime installer was not found: $VCRedist" }
+    Copy-Item -LiteralPath $VCRedist -Destination (Join-Path $toolchains 'VC_redist.x64.exe')
+}
 Copy-AgentEvalDirectoryContents -Source $Wheelhouse -Destination $releaseWheelhouse
 Copy-AgentEvalDirectoryContents -Source $NpmCache -Destination $releaseNpmCache
 function Copy-ReleaseSource {
