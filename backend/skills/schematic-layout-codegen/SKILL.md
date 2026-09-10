@@ -1,6 +1,6 @@
 ---
 name: schematic-layout-codegen
-description: 将"信号接口列表 sheets.json"翻译为可执行的 Python 电路 DSL 代码并调用 auto_layout 服务完成自动布局，输出每 sheet 一个带坐标的布局 JSON。器件级代码生成必须在多个 subagent 中并行完成（每批 2 个、逐批推进）。适用于 schematic-pipeline 的步骤二。
+description: 将"信号接口列表 sheets.json"翻译为可执行的 Python 电路 DSL 代码并调用 auto_layout 服务完成自动布局，输出每 sheet 一个带坐标的布局 JSON。器件级代码生成必须由多个独立 subagent 完成；普通运行时每批最多并行 2 个，JustDo/OpenClaw 顺序执行。适用于 schematic-pipeline 的步骤二。
 ---
 
 # 原理图生成 + 自动布局 (schematic-layout-codegen)
@@ -22,8 +22,8 @@ python <skill-root>/scripts/codegen_base.py --input out/sheets.json --sheet <she
 - `slices.json`：切片清单。每个切片 = 一个拥有至少一个待连接网络的功能组（group 或 MAIN），含关联网络及全部端点；没有网络的组不会产生空切片。
 - 脚本标准输出会给出精简的切片 ID、`slices.json` 绝对路径和各输出文件绝对路径。主 agent 直接用这个摘要分派，不要再打印完整 `base.txt` 或 `slices.json` 浪费上下文。
 
-## 步骤 B：并行 subagent 生成连接代码片段（核心，必须这样做）
-1. 把切片按序两两一组；**并行启动 2 个 subagent**，每个 subagent 负责一个切片，产出 `out/frags/<sheet_id>/<slice_id>.py`。
+## 步骤 B：独立 subagent 生成连接代码片段（核心，必须这样做）
+1. 每个 subagent 只负责一个切片，产出 `out/frags/<sheet_id>/<slice_id>.py`。普通运行时每批最多并行 2 个；JustDo/OpenClaw 必须顺序执行，保持同一时间只有 1 个子任务活动，避免低并发模型网关被“父 Agent + 两个子 Agent”同时请求压垮。
 2. subagent 任务说明（随 prompt 下发）：
    - prompt 中提供 `slices.json`、`references/python_codegen_guide.md`、目标 `.py` 的**绝对路径**；
    - subagent 只读取自己 `slice_id` 的对象，不处理其他切片；
@@ -34,8 +34,8 @@ python <skill-root>/scripts/codegen_base.py --input out/sheets.json --sheet <she
    - 失败信息要回传主 agent；主 agent 等待成功后验证目标文件不再以 `# subagent` 开头。
    - Codex 的原生 subagent 通常是只读 workspace。此时用 `fork_context=false`。JustDo/OpenClaw 必须调用 `sessions_spawn`，使用 `runtime="subagent"`、`context="isolated"`，省略 `agentId` 与 `model`，禁止 `context="fork"`；这样子任务隔离父上下文，同时继承本次运行级 LiteLLM 模型。任务改为只读输入并在最终回复中返回：`FRAGMENT_BEGIN`、纯 connect 代码、`FRAGMENT_END`。主 Agent 只做机械落盘，必须逐字复制标记之间的内容，禁止自行补写/改写。
    - **`slice_id=<ID>` 必须写进 `message` 文本本身**，不能只放在 `spawn_agent.target` 等元数据字段；这些字段不会传给子任务。推荐模板：`只读 <slices绝对路径> 中 slice_id=<ID> 及 <指南绝对路径>。只处理 slice_id=<ID>，逐一生成该对象 nets 中的 connect，不得输出其他网络；用 ast.parse 在内存自查。最终仅在 FRAGMENT_BEGIN/FRAGMENT_END 之间返回代码。`
-3. 一批先连续 spawn 两个（不要继承整个父上下文），再等待两个完成。等待超时使用 120 秒，若只完成一个则再次等待另一个；不要高频轮询、不要因第一次等待超时而由主 Agent 代写。主 Agent 将每个成功返回的标记区间原样写入对应 `.py`，然后运行 `ast.parse`。
-4. 该批两个完成后，**再启动新 subagent 处理下一批 2 个切片**，直到本 sheet 全部切片完成。禁止一次性把全部切片交给一个 subagent。
+3. 普通运行时一批可连续 spawn 两个（不要继承整个父上下文）再等待；JustDo/OpenClaw 必须 spawn 一个后立即 `sessions_yield`，收集该子任务终态结果并机械落盘、运行 `ast.parse` 后，才 spawn 下一个。等待超时使用 120 秒；不要高频轮询、不要因第一次等待超时而由主 Agent 代写。
+4. 当前批次完成后再启动新 subagent，直到本 sheet 全部切片完成。禁止一次性把全部切片交给一个 subagent。
 5. 若某切片被布局校验拒绝，另起 subagent 依据服务端报错修复该切片文件，再进入步骤 C。
 
 ## 步骤 C：合并并调用布局（每 sheet 一次）

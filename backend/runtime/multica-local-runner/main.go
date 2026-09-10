@@ -256,9 +256,11 @@ override so the child inherits the parent session's run-scoped LiteLLM model.
 For each ordinary delegated task, call sessions_spawn with runtime="subagent"
 and context="isolated". Omit agentId and model: agentId must remain the current
 allowed agent and the omitted model inherits the parent session's run-scoped
-LiteLLM model. Never use context="fork" for an isolated slice task. Follow any
-task-specific concurrency limit and wait until every child reaches a terminal
-state before using its result. Never simulate a child response in the parent.
+LiteLLM model. Never use context="fork" for an isolated slice task. For
+evaluation slice generation, keep only one child active at a time: spawn one,
+yield and collect its terminal result, then spawn the next. This avoids three
+simultaneous model streams (parent plus two children) on providers with strict
+concurrency limits. Never simulate a child response in the parent.
 `
 
 func installOpenclawSubagentGuidance(workspace string) error {

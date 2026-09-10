@@ -26,6 +26,7 @@ def test_schematic_skills_define_isolated_justdo_subagents():
         assert 'context="isolated"' in text
         assert "省略 `agentId` 与 `model`" in text
         assert '禁止使用 `context="fork"`' in text or '禁止 `context="fork"`' in text
+        assert "同一时间只有 1 个子任务活动" in text
 
 
 def test_validate_sheets_rejects_pin_on_multiple_nets():

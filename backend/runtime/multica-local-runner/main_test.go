@@ -89,7 +89,7 @@ func TestJustdoSubagentGuidanceUsesNativeTransport(t *testing.T) {
 	if !strings.Contains(text, "Use sessions_spawn") || !strings.Contains(text, "sessions_yield") {
 		t.Fatalf("JustDo native subagent guidance missing: %s", text)
 	}
-	for _, required := range []string{`runtime="subagent"`, `context="isolated"`, "Omit agentId and model", `Never use context="fork"`} {
+	for _, required := range []string{`runtime="subagent"`, `context="isolated"`, "Omit agentId and model", `Never use context="fork"`, "keep only one child active at a time"} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("JustDo isolated child guidance missing %q: %s", required, text)
 		}
