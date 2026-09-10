@@ -172,6 +172,10 @@ class CodeBuddyCompatibilityProxy:
                 "detail": _safe_failure_excerpt(body),
             }
 
+    def _clear_failure(self) -> None:
+        with self._lock:
+            self._last_failure = None
+
     def start(self) -> None:
         if self._server is not None:
             return
@@ -272,6 +276,8 @@ class CodeBuddyCompatibilityProxy:
                                 response_body,
                                 response.getheader("Retry-After"),
                             )
+                        else:
+                            owner._clear_failure()
                         owner._record(
                             request=attempt == 0,
                             retry=retryable and attempt + 1 < owner.max_attempts,

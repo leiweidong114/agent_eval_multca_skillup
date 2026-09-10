@@ -836,6 +836,14 @@ def run_evaluation(
     evaluation_status = "completed" if cases_executed and not verification_failed else "failed"
     if evaluation_status == "completed":
         failure = None
+    elif isinstance(gateway_resilience.get("last_failure"), dict):
+        proxy_failure = gateway_resilience["last_failure"]
+        failure = describe_evaluation_failure(
+            str(proxy_failure.get("detail") or ""),
+            returncode=completed.returncode or 1,
+            status_code=int(proxy_failure["status_code"]),
+            component="agent",
+        )
     if verification_failed and failure is None:
         failure = {
             "category": "model_verification_failed",

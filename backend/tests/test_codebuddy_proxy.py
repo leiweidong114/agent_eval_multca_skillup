@@ -103,6 +103,7 @@ def test_proxy_retries_429_and_forces_the_gateway_model():
     assert all(item["model"] == "opencode-go/minimax-m2.7" for item in received)
     assert stats["retry_count"] == 1
     assert stats["status_counts"] == {"200": 1, "429": 1}
+    assert stats["last_failure"] is None
 
 
 def test_proxy_does_not_retry_permanent_weekly_usage_limit():
