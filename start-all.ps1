@@ -10,6 +10,17 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = $PSScriptRoot
+. (Join-Path $ProjectRoot 'scripts\windows\common.ps1')
+$EnvValues = Import-AgentEvalEnv -ProjectRoot $ProjectRoot
+if (-not $PSBoundParameters.ContainsKey('BackendStartPort') -and $EnvValues.ContainsKey('BACKEND_PORT')) {
+    $BackendStartPort = [int]$EnvValues['BACKEND_PORT']
+}
+if (-not $PSBoundParameters.ContainsKey('FrontendStartPort') -and $EnvValues.ContainsKey('FRONTEND_PORT')) {
+    $FrontendStartPort = [int]$EnvValues['FRONTEND_PORT']
+}
+$BackendHost = if ($EnvValues.ContainsKey('BACKEND_HOST')) { $EnvValues['BACKEND_HOST'] } else { '127.0.0.1' }
+$FrontendHost = if ($EnvValues.ContainsKey('FRONTEND_HOST')) { $EnvValues['FRONTEND_HOST'] } else { '127.0.0.1' }
+$StartTimeout = if ($EnvValues.ContainsKey('SERVICE_START_TIMEOUT_SECONDS')) { [int]$EnvValues['SERVICE_START_TIMEOUT_SECONDS'] } else { 45 }
 $RuntimeDirectory = Join-Path $ProjectRoot 'backend\.runtime\service-manager'
 $StateFile = Join-Path $RuntimeDirectory 'services.json'
 $StopScript = Join-Path $ProjectRoot 'stop-all.ps1'
@@ -24,12 +35,12 @@ function Test-ProcessAlive {
 }
 
 function Test-PortAvailable {
-    param([int]$Port)
+    param([int]$Port, [string]$HostAddress)
 
     $listener = $null
     try {
         $listener = [System.Net.Sockets.TcpListener]::new(
-            [System.Net.IPAddress]::Parse('127.0.0.1'),
+            [System.Net.IPAddress]::Parse($HostAddress),
             $Port
         )
         $listener.Start()
@@ -48,6 +59,7 @@ function Test-PortAvailable {
 function Find-FreePort {
     param(
         [int]$StartPort,
+        [string]$HostAddress,
         [int[]]$ExcludedPorts = @()
     )
 
@@ -59,7 +71,7 @@ function Find-FreePort {
         if ($ExcludedPorts -contains $candidate) {
             continue
         }
-        if (Test-PortAvailable -Port $candidate) {
+        if (Test-PortAvailable -Port $candidate -HostAddress $HostAddress) {
             return $candidate
         }
     }
@@ -143,7 +155,9 @@ if (Test-Path -LiteralPath $StateFile) {
     }
 }
 
+$ConfiguredPython = Get-AgentEvalConfiguredPath -ProjectRoot $ProjectRoot -Name 'PYTHON_EXECUTABLE' -Default 'backend/.runtime/windows/python/Scripts/python.exe'
 $PythonCandidates = @(
+    $ConfiguredPython,
     (Join-Path $ProjectRoot 'backend\.runtime\windows\python\Scripts\python.exe'),
     (Join-Path $ProjectRoot 'backend\.runtime\windows\python\python.exe')
 )
@@ -155,7 +169,10 @@ if (-not $PythonExecutable) {
     throw 'Python was not found. Run backend\scripts\setup_windows.ps1 first.'
 }
 
-$NodeExecutable = (Get-Command node -ErrorAction SilentlyContinue).Source
+$NodeExecutable = Get-AgentEvalConfiguredPath -ProjectRoot $ProjectRoot -Name 'NODE_EXECUTABLE' -Default 'backend/.runtime/windows/node/node.exe'
+if (-not (Test-Path -LiteralPath $NodeExecutable)) {
+    $NodeExecutable = (Get-Command node -ErrorAction SilentlyContinue).Source
+}
 $ViteEntry = Join-Path $ProjectRoot 'frontend\node_modules\vite\bin\vite.js'
 if (-not $NodeExecutable) {
     throw 'Node.js was not found in PATH.'
@@ -164,10 +181,12 @@ if (-not (Test-Path -LiteralPath $ViteEntry)) {
     throw 'Frontend dependencies are missing. Run npm install under frontend first.'
 }
 
-$BackendPort = Find-FreePort -StartPort $BackendStartPort
-$FrontendPort = Find-FreePort -StartPort $FrontendStartPort -ExcludedPorts @($BackendPort)
-$BackendUrl = "http://127.0.0.1:$BackendPort"
-$FrontendUrl = "http://127.0.0.1:$FrontendPort"
+$BackendPort = Find-FreePort -StartPort $BackendStartPort -HostAddress $BackendHost
+$FrontendPort = Find-FreePort -StartPort $FrontendStartPort -HostAddress $FrontendHost -ExcludedPorts @($BackendPort)
+$BackendProbeHost = if ($BackendHost -in @('0.0.0.0', '::')) { '127.0.0.1' } else { $BackendHost }
+$FrontendProbeHost = if ($FrontendHost -in @('0.0.0.0', '::')) { '127.0.0.1' } else { $FrontendHost }
+$BackendUrl = "http://$BackendProbeHost`:$BackendPort"
+$FrontendUrl = "http://$FrontendProbeHost`:$FrontendPort"
 $BackendStdout = Join-Path $RuntimeDirectory 'backend.stdout.log'
 $BackendStderr = Join-Path $RuntimeDirectory 'backend.stderr.log'
 $FrontendStdout = Join-Path $RuntimeDirectory 'frontend.stdout.log'
@@ -179,7 +198,7 @@ try {
         -FilePath $PythonExecutable `
         -ArgumentList @(
             (Join-Path $ProjectRoot 'backend\run_server.py'),
-            '--host', '127.0.0.1',
+            '--host', $BackendHost,
             '--port', $BackendPort
         ) `
         -WorkingDirectory $ProjectRoot `
@@ -188,7 +207,7 @@ try {
         -WindowStyle Hidden `
         -PassThru
     $StartedProcesses.Add($BackendProcess)
-    Wait-HttpReady -Uri "$BackendUrl/api/health" -Process $BackendProcess
+    Wait-HttpReady -Uri "$BackendUrl/api/health" -Process $BackendProcess -TimeoutSeconds $StartTimeout
 
     $PreviousApiTarget = $env:VITE_API_TARGET
     $env:VITE_API_TARGET = $BackendUrl
@@ -197,7 +216,7 @@ try {
             -FilePath $NodeExecutable `
             -ArgumentList @(
                 $ViteEntry,
-                '--host', '127.0.0.1',
+                '--host', $FrontendHost,
                 '--port', $FrontendPort,
                 '--strictPort'
             ) `
@@ -211,7 +230,7 @@ try {
         $env:VITE_API_TARGET = $PreviousApiTarget
     }
     $StartedProcesses.Add($FrontendProcess)
-    Wait-HttpReady -Uri $FrontendUrl -Process $FrontendProcess
+    Wait-HttpReady -Uri $FrontendUrl -Process $FrontendProcess -TimeoutSeconds $StartTimeout
 
     $State = [ordered]@{
         schema_version = 1

@@ -141,3 +141,25 @@ def test_runtime_discovery_uses_backend_layout(tmp_path):
     backend_runtime.touch()
     assert find_skill_up(backend) == backend_tool.resolve()
     assert find_multica_runtime(backend) == backend_runtime.resolve()
+
+
+def test_runtime_discovery_uses_relative_paths_from_root_env(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    configured_skill_up = tmp_path / "portable" / (
+        "skill-up.exe" if os.name == "nt" else "skill-up"
+    )
+    configured_multica = tmp_path / "portable" / (
+        "multica.exe" if os.name == "nt" else "multica"
+    )
+    configured_skill_up.parent.mkdir()
+    configured_skill_up.touch()
+    configured_multica.touch()
+    (tmp_path / ".env").write_text(
+        "SKILLUP_EXECUTABLE=portable/" + configured_skill_up.name + "\n"
+        "MULTICA_EXECUTABLE=portable/" + configured_multica.name + "\n",
+        encoding="utf-8",
+    )
+
+    assert find_skill_up(backend) == configured_skill_up.resolve()
+    assert find_multica_runtime(backend) == configured_multica.resolve()

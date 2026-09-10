@@ -1,6 +1,9 @@
 # 运行时产物（规范位置在 backend/；根目录规则仅阻止旧版工具误提交）
 .runtime/
 .tools/
+.offline-cache/
+.run/
+backend/.offline-cache/
 runs/
 evaluation_results/
 backend/evaluation_results/

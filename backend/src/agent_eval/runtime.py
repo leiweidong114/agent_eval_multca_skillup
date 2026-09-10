@@ -234,12 +234,19 @@ def validate_evaluation_capabilities(
 
 
 def find_skill_up(project_root: Path) -> Path:
-    candidates = [
+    environment = effective_environment(project_root)
+    repository = project_root.resolve().parent if project_root.resolve().name.lower() == "backend" else project_root.resolve()
+    configured = environment.get("SKILLUP_EXECUTABLE", "").strip()
+    candidates = []
+    if configured:
+        configured_path = Path(configured).expanduser()
+        candidates.append(configured_path if configured_path.is_absolute() else repository / configured_path)
+    candidates.extend([
         project_root
         / ".tools"
         / ("windows" if os.name == "nt" else "linux")
         / ("skill-up.exe" if os.name == "nt" else "skill-up")
-    ]
+    ])
     discovered = shutil.which("skill-up")
     if discovered:
         candidates.append(Path(discovered))
@@ -250,13 +257,20 @@ def find_skill_up(project_root: Path) -> Path:
 
 
 def find_multica_runtime(project_root: Path) -> Path:
-    paths = [
+    environment = effective_environment(project_root)
+    repository = project_root.resolve().parent if project_root.resolve().name.lower() == "backend" else project_root.resolve()
+    configured = environment.get("MULTICA_EXECUTABLE", "").strip()
+    paths = []
+    if configured:
+        configured_path = Path(configured).expanduser()
+        paths.append(configured_path if configured_path.is_absolute() else repository / configured_path)
+    paths.extend([
         project_root
         / ".runtime"
         / ("windows" if os.name == "nt" else "linux")
         / "bin"
         / ("multica-eval-runtime.exe" if os.name == "nt" else "multica-eval-runtime")
-    ]
+    ])
     for path in paths:
         if path.is_file():
             return path.resolve()

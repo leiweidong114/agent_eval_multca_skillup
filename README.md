@@ -325,20 +325,28 @@ schematic-pipeline/            以上三步的总编排 SKILL
 
 ## Windows 安装
 
-要求：Windows 10/11、PowerShell、Git、Python 3.10+。运行：
+Windows 使用独立离线 Runtime Release。新电脑只需要 PowerShell 和用于克隆仓库的 Git；Go、Python、Node.js、Python wheel、npm cache、Skill-Up、Multica、JustDo 和公开题库均由离线包提供。
 
 ```powershell
-Set-Location D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skillup
-.\backend\scripts\setup_windows.ps1
+Set-Location D:\workspace\agent_eval_multca_skillup
+.\install_windows.ps1 -ReleaseRoot D:\Downloads\agent-eval-runtime-windows-x64
+notepad .env
+.\start.ps1
 ```
 
-安装内容都保存在项目的 `backend/.runtime/windows` 和 `backend/.tools/windows` 下，不修改系统 Go。脚本固定使用：
+安装内容保存在项目的 `backend/.runtime/windows`、`backend/.tools/windows` 和 `backend/.offline-cache/windows`，安装完成后不再依赖 Release 解压目录。根目录 `.env` 是唯一部署配置入口。停止、重启和修改代码后重新构建：
 
-- Multica `v0.4.36` / commit `c1a61e1e863eb62ddd7b5fd5ab5ff85391f212fd`
-- Skill-Up `v0.9.1` / commit `80c3147101f81017c66f882b767bdc532de5e74f`
-- Go `1.26.7`
+```powershell
+.\stop.ps1
+.\restart.ps1
+.\rebuild.ps1 -Target Frontend
+.\rebuild.ps1 -Target SkillUp
+.\rebuild.ps1 -Target Multica
+```
 
 Skill-Up 0.9.1 的自定义本地引擎硬编码了 POSIX 命令语法。本项目构建时自动应用 [`backend/patches/skill-up-v0.9.1-windows-custom-engine.patch`](backend/patches/skill-up-v0.9.1-windows-custom-engine.patch)，仅修复 Windows `cmd.exe` 的路径引用和旧输出清理，不改变评分逻辑。
+
+Release 目录规范、离线依赖要求和完整操作说明见 [`docs/windows-offline-migration.md`](docs/windows-offline-migration.md)。安装过程按部署目录直接读取文件，不校验 manifest/SHA256，也不管理 Release 版本。
 
 ## Linux 安装
 

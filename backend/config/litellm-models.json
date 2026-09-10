@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "refreshed_at": "2026-09-08T06:12:17.862565+00:00",
-  "status": "completed",
+  "refreshed_at": "2026-09-10T04:15:42.899927+00:00",
+  "status": "failed",
   "source": "LiteLLM /v1/models + /v1/chat/completions",
   "catalog_visible_only": false,
   "connectivity_tested": true,
@@ -10,30 +10,17 @@
   "probe_prompt": "HI",
   "probe_workers": 8,
   "visible_model_count": 40,
-  "available_model_count": 1,
-  "unavailable_model_count": 39,
+  "available_model_count": 0,
+  "unavailable_model_count": 40,
   "note": "models contains only deployments that returned a successful real inference. Agent-specific protocol compatibility must still be verified with check-agent.",
-  "model_count": 1,
-  "models": [
-    {
-      "id": "glm-4.5-air",
-      "owned_by": "openai",
-      "available": true,
-      "enabled": true,
-      "reasoning": null,
-      "reasoning_policy": "provider_default_not_disabled",
-      "probe_scope": "text_only_not_tool_or_agent_validation",
-      "probe_endpoint": "chat/completions",
-      "probe_status_code": 200,
-      "probe_latency_ms": 5162.79
-    }
-  ],
+  "model_count": 0,
+  "models": [],
   "unavailable_models": [
     {
       "id": "deepseek",
       "available": false,
       "probe_status_code": 402,
-      "probe_latency_ms": 623.35,
+      "probe_latency_ms": 727.46,
       "failure": {
         "category": "gateway_quota_exhausted",
         "retryable": false,
@@ -47,10 +34,27 @@
       }
     },
     {
+      "id": "glm-4.5-air",
+      "available": false,
+      "probe_status_code": 429,
+      "probe_latency_ms": 6018.3,
+      "failure": {
+        "category": "gateway_quota_exhausted",
+        "retryable": false,
+        "summary": "模型使用额度已达上限",
+        "title": "模型使用额度已达上限",
+        "detail": "上游模型账户的可用额度或时间窗口已经用完。",
+        "suggested_action": "等待额度重置，或由管理员补充上游模型账户额度/资源包后重试。",
+        "component": "litellm_model_probe",
+        "status_code": 429,
+        "reset_after": null
+      }
+    },
+    {
       "id": "glm-4.7",
       "available": false,
       "probe_status_code": 429,
-      "probe_latency_ms": 5657.87,
+      "probe_latency_ms": 5601.02,
       "failure": {
         "category": "gateway_quota_exhausted",
         "retryable": false,
@@ -67,7 +71,7 @@
       "id": "glm-4.7-anthropic",
       "available": false,
       "probe_status_code": 429,
-      "probe_latency_ms": 5480.55,
+      "probe_latency_ms": 5276.67,
       "failure": {
         "category": "gateway_quota_exhausted",
         "retryable": false,
@@ -84,7 +88,7 @@
       "id": "glm-4.7-no-thinking",
       "available": false,
       "probe_status_code": null,
-      "probe_latency_ms": 47.81,
+      "probe_latency_ms": 48.01,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -102,7 +106,7 @@
       "id": "MiniMax-M2.7",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1198.77,
+      "probe_latency_ms": 1013.37,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -119,7 +123,7 @@
       "id": "MiniMax-M3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1222.02,
+      "probe_latency_ms": 1068.53,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -136,7 +140,7 @@
       "id": "opencode-go/deepseek-v4-flash",
       "available": false,
       "probe_status_code": 403,
-      "probe_latency_ms": 6355.68,
+      "probe_latency_ms": 6559.12,
       "failure": {
         "category": "gateway_authorization",
         "retryable": false,
@@ -153,7 +157,7 @@
       "id": "opencode-go/deepseek-v4-flash-vision-exp",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1006.41,
+      "probe_latency_ms": 1049.14,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -170,7 +174,7 @@
       "id": "opencode-go/deepseek-v4-pro",
       "available": false,
       "probe_status_code": 403,
-      "probe_latency_ms": 6591.54,
+      "probe_latency_ms": 6224.22,
       "failure": {
         "category": "gateway_authorization",
         "retryable": false,
@@ -187,7 +191,7 @@
       "id": "opencode-go/glm-5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 464.63,
+      "probe_latency_ms": 487.08,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -204,7 +208,7 @@
       "id": "opencode-go/glm-5.1",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 476.54,
+      "probe_latency_ms": 537.23,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -221,7 +225,7 @@
       "id": "opencode-go/glm-5.2",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1132.37,
+      "probe_latency_ms": 940.24,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -238,7 +242,7 @@
       "id": "opencode-go/glm-5.3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 465.27,
+      "probe_latency_ms": 448.12,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -255,7 +259,7 @@
       "id": "opencode-go/glm-5.3-flash",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 448.35,
+      "probe_latency_ms": 493.54,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -272,7 +276,7 @@
       "id": "opencode-go/gpt-5.6-luna",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 873.55,
+      "probe_latency_ms": 987.23,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -289,7 +293,7 @@
       "id": "opencode-go/grok-4.5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1558.78,
+      "probe_latency_ms": 932.97,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -306,7 +310,7 @@
       "id": "opencode-go/grok-4.6",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 891.38,
+      "probe_latency_ms": 900.82,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -323,7 +327,7 @@
       "id": "opencode-go/hy3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1066.25,
+      "probe_latency_ms": 542.24,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -340,7 +344,7 @@
       "id": "opencode-go/hy3-preview",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1063.1,
+      "probe_latency_ms": 531.01,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -357,7 +361,7 @@
       "id": "opencode-go/hy4-preview",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 454.35,
+      "probe_latency_ms": 507.25,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -374,7 +378,7 @@
       "id": "opencode-go/kimi-k2.5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 483.29,
+      "probe_latency_ms": 468.94,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -391,7 +395,7 @@
       "id": "opencode-go/kimi-k2.6",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 921.36,
+      "probe_latency_ms": 502.33,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -408,7 +412,7 @@
       "id": "opencode-go/kimi-k2.7-code",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 468.69,
+      "probe_latency_ms": 527.43,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -425,7 +429,7 @@
       "id": "opencode-go/kimi-k3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 457.29,
+      "probe_latency_ms": 471.44,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -442,7 +446,7 @@
       "id": "opencode-go/longcat-2.0",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 456.88,
+      "probe_latency_ms": 482.33,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -459,7 +463,7 @@
       "id": "opencode-go/mimo-v2-omni",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 454.42,
+      "probe_latency_ms": 474.12,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -476,7 +480,7 @@
       "id": "opencode-go/mimo-v2-pro",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 485.73,
+      "probe_latency_ms": 506.9,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -493,7 +497,7 @@
       "id": "opencode-go/mimo-v2.5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 446.41,
+      "probe_latency_ms": 515.59,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -510,7 +514,7 @@
       "id": "opencode-go/mimo-v2.5-pro",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 472.29,
+      "probe_latency_ms": 502.12,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -527,7 +531,7 @@
       "id": "opencode-go/minimax-m2.5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 451.7,
+      "probe_latency_ms": 492.15,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -544,7 +548,7 @@
       "id": "opencode-go/minimax-m2.7",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 490.16,
+      "probe_latency_ms": 510.56,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -561,7 +565,7 @@
       "id": "opencode-go/minimax-m3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 958.83,
+      "probe_latency_ms": 948.0,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -578,7 +582,7 @@
       "id": "opencode-go/muse-spark-1.2-contributor",
       "available": false,
       "probe_status_code": 403,
-      "probe_latency_ms": 5491.51,
+      "probe_latency_ms": 5299.88,
       "failure": {
         "category": "gateway_authorization",
         "retryable": false,
@@ -595,7 +599,7 @@
       "id": "opencode-go/qwen3.5-plus",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 454.91,
+      "probe_latency_ms": 465.16,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -612,7 +616,7 @@
       "id": "opencode-go/qwen3.6-plus",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 985.95,
+      "probe_latency_ms": 508.0,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -629,7 +633,7 @@
       "id": "opencode-go/qwen3.7-max",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 916.24,
+      "probe_latency_ms": 502.15,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -646,7 +650,7 @@
       "id": "opencode-go/qwen3.7-plus",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 875.16,
+      "probe_latency_ms": 538.5,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -663,7 +667,7 @@
       "id": "opencode-go/qwen3.8-flash",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 959.13,
+      "probe_latency_ms": 488.37,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -680,7 +684,7 @@
       "id": "opencode-go/qwen3.8-max",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 436.12,
+      "probe_latency_ms": 481.6,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
