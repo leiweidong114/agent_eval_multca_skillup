@@ -29,6 +29,8 @@ Python wheelhouse 必须包含项目及构建所需的全部直接、间接依�
 
 ## 新电脑安装
 
+当前完整离线包：[`agent-eval-runtime-windows-x64-portable.zip`](https://github.com/leiweidong114/agent_eval_multca_skillup/releases/download/windows-runtime-20260910/agent-eval-runtime-windows-x64-portable.zip)
+
 ```powershell
 git clone <repository-url> D:\workspace\agent_eval_multca_skillup
 Set-Location D:\workspace\agent_eval_multca_skillup

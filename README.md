@@ -327,6 +327,8 @@ schematic-pipeline/            以上三步的总编排 SKILL
 
 Windows 使用独立离线 Runtime Release。新电脑只需要 PowerShell 和用于克隆仓库的 Git；Go、Python、Node.js、Python wheel、npm cache、Skill-Up、Multica、JustDo 和公开题库均由离线包提供。
 
+下载当前完整包：[`agent-eval-runtime-windows-x64-portable.zip`](https://github.com/leiweidong114/agent_eval_multca_skillup/releases/download/windows-runtime-20260910/agent-eval-runtime-windows-x64-portable.zip)
+
 ```powershell
 Set-Location D:\workspace\agent_eval_multca_skillup
 .\install_windows.ps1 -ReleaseRoot D:\Downloads\agent-eval-runtime-windows-x64
