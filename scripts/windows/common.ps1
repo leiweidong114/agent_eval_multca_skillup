@@ -139,7 +139,15 @@ function Find-AgentEvalAsset {
     )
 
     foreach ($pattern in $Patterns) {
-        $matches = @(Get-ChildItem -Path (Join-Path $ReleaseRoot $pattern) -ErrorAction SilentlyContinue)
+        $candidate = Join-Path $ReleaseRoot $pattern
+        if (
+            -not [System.Management.Automation.WildcardPattern]::ContainsWildcardCharacters($candidate) -and
+            (Test-Path -LiteralPath $candidate)
+        ) {
+            $matches = @(Get-Item -LiteralPath $candidate)
+        } else {
+            $matches = @(Get-ChildItem -Path $candidate -ErrorAction SilentlyContinue)
+        }
         if ($Directory) { $matches = @($matches | Where-Object { $_.PSIsContainer }) }
         else { $matches = @($matches | Where-Object { -not $_.PSIsContainer }) }
         if ($matches.Count -gt 0) { return $matches[0].FullName }
