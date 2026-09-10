@@ -63,10 +63,10 @@ Copy-AgentEvalDirectoryContents -Source $NpmCache -Destination $releaseNpmCache
 function Copy-ReleaseSource {
     param([string]$Source, [string]$Destination)
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-    Get-ChildItem -LiteralPath $Source -Force | Where-Object {
-        $_.Name -notin @('.git', 'node_modules', 'dist')
-    } | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $Destination -Recurse -Force
+    & robocopy.exe $Source $Destination /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD .git node_modules dist | Out-Null
+    $robocopyExitCode = $LASTEXITCODE
+    if ($robocopyExitCode -ge 8) {
+        throw "Source copy failed with robocopy exit code $robocopyExitCode`: $Source -> $Destination"
     }
 }
 Copy-ReleaseSource -Source $SkillUpSource -Destination (Join-Path $releaseSources 'skill-up')
