@@ -16,6 +16,18 @@ def _load(name: str, path: Path):
     return module
 
 
+def test_schematic_skills_define_isolated_justdo_subagents():
+    for path in (
+        BACKEND / "skills/schematic-pipeline/SKILL.md",
+        BACKEND / "skills/schematic-layout-codegen/SKILL.md",
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert 'runtime="subagent"' in text
+        assert 'context="isolated"' in text
+        assert "省略 `agentId` 与 `model`" in text
+        assert '禁止使用 `context="fork"`' in text or '禁止 `context="fork"`' in text
+
+
 def test_validate_sheets_rejects_pin_on_multiple_nets():
     module = _load(
         "validate_sheets",

@@ -242,6 +242,25 @@ process, call process.poll once with timeout 120000 instead of repeatedly
 requesting logs.
 `
 
+const justdoNativeSubagentGuidanceTemplate = `
+
+## Agent Eval native subagent transport
+
+This evaluation runs the patched JustDo OpenClaw runtime with its native
+Gateway dispatcher. Use sessions_spawn for delegated work and sessions_yield
+to wait for and collect each child result. Do not start another agent-eval
+process from exec as a substitute for a native subagent.
+
+Unless the task explicitly requests another agent or model, omit the model
+override so the child inherits the parent session's run-scoped LiteLLM model.
+For each ordinary delegated task, call sessions_spawn with runtime="subagent"
+and context="isolated". Omit agentId and model: agentId must remain the current
+allowed agent and the omitted model inherits the parent session's run-scoped
+LiteLLM model. Never use context="fork" for an isolated slice task. Follow any
+task-specific concurrency limit and wait until every child reaches a terminal
+state before using its result. Never simulate a child response in the parent.
+`
+
 func installOpenclawSubagentGuidance(workspace string) error {
 	path := filepath.Join(workspace, "AGENTS.md")
 	data, err := os.ReadFile(path)
@@ -251,17 +270,10 @@ func installOpenclawSubagentGuidance(workspace string) error {
 	if strings.Contains(string(data), "## Agent Eval subagent transport") {
 		return nil
 	}
-	command := `openclaw agent exec --state-dir .agent-eval/subagent-state --cwd . --json "<complete subtask prompt>"`
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_EVAL_REQUESTED_AGENT")), "justdo") {
-		model := strings.TrimSpace(os.Getenv("AGENT_EVAL_SUBAGENT_MODEL"))
-		if model == "" {
-			model = "<configured LiteLLM model>"
-		}
-		command = fmt.Sprintf(
-			`agent-eval check-agent --agent justdo --model %q --prompt "<complete subtask prompt>" --timeout 120 --max-turns 4 --no-database-verify`,
-			model,
-		)
+		return os.WriteFile(path, append(data, []byte(justdoNativeSubagentGuidanceTemplate)...), 0o644)
 	}
+	command := `openclaw agent exec --state-dir .agent-eval/subagent-state --cwd . --json "<complete subtask prompt>"`
 	guidance := fmt.Sprintf(openclawSubagentGuidanceTemplate, command)
 	return os.WriteFile(path, append(data, []byte(guidance)...), 0o644)
 }

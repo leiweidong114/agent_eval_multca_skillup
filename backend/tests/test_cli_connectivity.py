@@ -221,3 +221,52 @@ def test_subagent_verification_accepts_justdo_native_session_spawn():
 
     assert result["verified"] is True
     assert result["transport"] == "native"
+
+
+def test_subagent_verification_accepts_justdo_sessions_yield_result():
+    from agent_eval.cli import _verify_subagent_evidence
+
+    rows = [
+        {
+            "status": "success",
+            "model": "glm-4.5-air",
+            "proxy_server_request": {"messages": [
+                {"role": "assistant", "tool_calls": [{
+                    "id": "spawn-1",
+                    "function": {
+                        "name": "sessions_spawn",
+                        "arguments": '{"task":"Reply with exactly SUBAGENT_OK"}',
+                    },
+                }]},
+            ]},
+        },
+        {
+            "status": "success",
+            "model": "glm-4.5-air",
+            "proxy_server_request": {"messages": [
+                {"role": "assistant", "tool_calls": [{
+                    "id": "yield-1",
+                    "function": {"name": "sessions_yield", "arguments": "{}"},
+                }]},
+                {
+                    "role": "tool",
+                    "tool_call_id": "yield-1",
+                    "content": json.dumps({
+                        "status": "completed",
+                        "results": [{
+                            "sessionKey": "agent:main:subagent:child-1",
+                            "status": "ok",
+                            "result": "SUBAGENT_OK",
+                        }],
+                    }),
+                },
+            ]},
+        },
+    ]
+
+    result = _verify_subagent_evidence(
+        "justdo", "glm-4.5-air", {"final_message": "PARENT_OK:SUBAGENT_OK"}, rows
+    )
+
+    assert result["verified"] is True
+    assert result["transport"] == "native"

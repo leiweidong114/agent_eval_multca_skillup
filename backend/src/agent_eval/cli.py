@@ -73,7 +73,14 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
         required=True,
         help="Provider model id; JustDo applies it as a session-only model override",
     )
-    parser.add_argument("--prompt", required=True)
+    parser.add_argument(
+        "--prompt",
+        required=not pipeline,
+        help=(
+            "Ad-hoc evaluation prompt. For pipeline-eval, either --prompt or at least one "
+            "--case must be supplied."
+        ),
+    )
     parser.add_argument("--case", action="append", default=[])
     parser.add_argument("--must-contain", action="append", default=[])
     parser.add_argument("--must-not-contain", action="append", default=[])
@@ -675,6 +682,25 @@ def _verify_subagent_evidence(
             or (name == "exec" and "agent-eval check-agent --agent justdo" in arguments)
         ):
             correlated_child_result = True
+        elif normalized_agent == "justdo" and name == "sessions_yield" and native_invocation:
+            # Current JustDo/OpenClaw returns the completed child payload from
+            # ``sessions_yield`` rather than from ``sessions_spawn``.  Accept
+            # only a structured, successful subagent result so an unrelated
+            # tool or parent-authored marker cannot satisfy verification.
+            try:
+                yielded = json.loads(content)
+            except (TypeError, ValueError):
+                yielded = None
+            if isinstance(yielded, dict) and yielded.get("status") == "completed":
+                results = yielded.get("results")
+                if isinstance(results, list):
+                    correlated_child_result = any(
+                        isinstance(item, dict)
+                        and item.get("status") == "ok"
+                        and str(item.get("result") or "").strip() == "SUBAGENT_OK"
+                        and ":subagent:" in str(item.get("sessionKey") or "")
+                        for item in results
+                    )
     child_model_marker = any(
         text.strip() == "SUBAGENT_OK" for text in assistant_results
     )

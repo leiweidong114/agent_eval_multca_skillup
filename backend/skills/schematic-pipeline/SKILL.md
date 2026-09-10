@@ -45,7 +45,7 @@ out/
 - 这批完成后，**再启动新的 subagent** 处理下一批（2 个切片），直到全部切片完成；
 - 绝不把多个切片合并给同一个 subagent，也绝不在主上下文中手写连接代码；
 - 全部完成后运行 `layout_sheet.py` 提交布局；若返回 422，把报错发给对应切片的新 subagent 修复后重提。
-- Codex 原生 subagent 可能是只读 workspace：用 `fork_context=false` 启动，必须在 `message` 正文写出具体 `slice_id`（不能只写在 `target` 字段），给它切片与指南的绝对路径，让它在最终回复的 `FRAGMENT_BEGIN`/`FRAGMENT_END` 之间返回代码；主 Agent 只可把该区间**原样**写入目标文件，不可自行生成或修改连接代码。其他可写运行时允许 subagent 直接写目标文件。
+- Codex 原生 subagent 可能是只读 workspace：用 `fork_context=false` 启动。JustDo/OpenClaw 必须调用 `sessions_spawn`，参数使用 `runtime="subagent"`、`context="isolated"`，并且省略 `agentId` 与 `model`；禁止使用 `context="fork"`，从而既隔离父任务上下文，又让子任务继承本次运行级 LiteLLM 模型。两种运行时都必须在任务正文写出具体 `slice_id`，给出切片与指南的绝对路径，让子任务在最终回复的 `FRAGMENT_BEGIN`/`FRAGMENT_END` 之间返回代码；主 Agent 只可把该区间**原样**写入目标文件，不可自行生成或修改连接代码。其他可写运行时允许 subagent 直接写目标文件。
 - 一批先连续启动两个 subagent，再用一次较长等待（建议 120 秒）收集；未完成则继续等待，不要在 30 秒后猜测失败。检查每个子任务状态、返回代码/目标文件和 `ast.parse`。任何 subagent 失败都不得由主 Agent 自己补写片段冒充完成。
 
 ### 3. 网页应用 —— 主 agent 执行 skill3

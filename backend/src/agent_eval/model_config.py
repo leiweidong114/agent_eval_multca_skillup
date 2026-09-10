@@ -1034,11 +1034,9 @@ def write_openclaw_profile_config(
                 "main": {
                     "identity": {"name": "main"},
                     "model": {"primary": primary},
-                    # Embedded OpenClaw cannot deliver ``sessions_spawn``
-                    # replies because that primitive requires a running
-                    # Gateway reply dispatcher.  Subagents use the documented
-                    # ``openclaw agent exec`` transport installed into the case
-                    # AGENTS.md by multica-local-runner instead.
+                    # The packaged JustDo runtime owns a native Gateway
+                    # dispatcher. Keep its native spawn/wait/status tools
+                    # visible so pipeline evaluations exercise real subagents.
                     "tools": {
                         "allow": [
                             "read",
@@ -1048,6 +1046,9 @@ def write_openclaw_profile_config(
                             "exec",
                             "process",
                             "session_status",
+                            "sessions_spawn",
+                            "sessions_yield",
+                            "subagents",
                         ]
                     },
                     **({"workspace": str(workspace)} if workspace is not None else {}),

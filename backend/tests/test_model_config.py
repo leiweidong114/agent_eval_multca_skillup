@@ -296,8 +296,9 @@ def test_openclaw_profile_config_uses_litellm_without_embedding_the_key(tmp_path
     allowed_tools = config["agents"]["entries"]["main"]["tools"]["allow"]
     assert "read" in allowed_tools
     assert "exec" in allowed_tools
-    assert "sessions_spawn" not in allowed_tools
-    assert "subagents" not in allowed_tools
+    assert "sessions_spawn" in allowed_tools
+    assert "sessions_yield" in allowed_tools
+    assert "subagents" in allowed_tools
     assert "skill_workshop" not in allowed_tools
     assert "browser" not in allowed_tools
     assert "image_generate" not in allowed_tools

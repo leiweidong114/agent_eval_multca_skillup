@@ -32,7 +32,7 @@ python <skill-root>/scripts/codegen_base.py --input out/sheets.json --sheet <she
    - `3V3`、`5V` 等数字开头的网络不是合法 Python 属性，必须写成 `circuit.__getattr__("3V3")`；其他网络仍用 `circuit.<网络名>`；
    - 输出前用 `python -c "import ast;ast.parse(open(r'<file>',encoding='utf-8').read())"` 自查语法；
    - 失败信息要回传主 agent；主 agent 等待成功后验证目标文件不再以 `# subagent` 开头。
-   - Codex 的原生 subagent 通常是只读 workspace。此时用 `fork_context=false`，任务改为只读输入并在最终回复中返回：`FRAGMENT_BEGIN`、纯 connect 代码、`FRAGMENT_END`。主 Agent 只做机械落盘，必须逐字复制标记之间的内容，禁止自行补写/改写。
+   - Codex 的原生 subagent 通常是只读 workspace。此时用 `fork_context=false`。JustDo/OpenClaw 必须调用 `sessions_spawn`，使用 `runtime="subagent"`、`context="isolated"`，省略 `agentId` 与 `model`，禁止 `context="fork"`；这样子任务隔离父上下文，同时继承本次运行级 LiteLLM 模型。任务改为只读输入并在最终回复中返回：`FRAGMENT_BEGIN`、纯 connect 代码、`FRAGMENT_END`。主 Agent 只做机械落盘，必须逐字复制标记之间的内容，禁止自行补写/改写。
    - **`slice_id=<ID>` 必须写进 `message` 文本本身**，不能只放在 `spawn_agent.target` 等元数据字段；这些字段不会传给子任务。推荐模板：`只读 <slices绝对路径> 中 slice_id=<ID> 及 <指南绝对路径>。只处理 slice_id=<ID>，逐一生成该对象 nets 中的 connect，不得输出其他网络；用 ast.parse 在内存自查。最终仅在 FRAGMENT_BEGIN/FRAGMENT_END 之间返回代码。`
 3. 一批先连续 spawn 两个（不要继承整个父上下文），再等待两个完成。等待超时使用 120 秒，若只完成一个则再次等待另一个；不要高频轮询、不要因第一次等待超时而由主 Agent 代写。主 Agent 将每个成功返回的标记区间原样写入对应 `.py`，然后运行 `ast.parse`。
 4. 该批两个完成后，**再启动新 subagent 处理下一批 2 个切片**，直到本 sheet 全部切片完成。禁止一次性把全部切片交给一个 subagent。

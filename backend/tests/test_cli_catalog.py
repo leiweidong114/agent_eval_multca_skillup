@@ -99,6 +99,20 @@ def test_multi_commands_parse_repeated_agents():
     assert args.workers == 2
 
 
+def test_pipeline_eval_accepts_case_without_duplicate_prompt():
+    args = cli._parser().parse_args(
+        [
+            "pipeline-eval",
+            "--agent", "justdo",
+            "--model", "oc/big-pickle",
+            "--case", "smart-street-light-e2e.yaml",
+        ]
+    )
+
+    assert args.case == ["smart-street-light-e2e.yaml"]
+    assert args.prompt is None
+
+
 def test_evaluation_batch_runs_each_agent_with_same_prompt(tmp_path, monkeypatch):
     skill = _skill(tmp_path, "example-marker")
     seen = []

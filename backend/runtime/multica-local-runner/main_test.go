@@ -74,7 +74,7 @@ func TestOpenclawSubagentGuidanceIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestJustdoSubagentGuidanceUsesEvaluatorChild(t *testing.T) {
+func TestJustdoSubagentGuidanceUsesNativeTransport(t *testing.T) {
 	workspace := t.TempDir()
 	t.Setenv("AGENT_EVAL_REQUESTED_AGENT", "justdo")
 	t.Setenv("AGENT_EVAL_SUBAGENT_MODEL", "glm-4.5-air")
@@ -86,11 +86,16 @@ func TestJustdoSubagentGuidanceUsesEvaluatorChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	if !strings.Contains(text, `agent-eval check-agent --agent justdo --model "glm-4.5-air"`) {
-		t.Fatalf("JustDo child command missing: %s", text)
+	if !strings.Contains(text, "Use sessions_spawn") || !strings.Contains(text, "sessions_yield") {
+		t.Fatalf("JustDo native subagent guidance missing: %s", text)
 	}
-	if !strings.Contains(text, "--no-database-verify") {
-		t.Fatalf("nested trace-key creation must stay disabled: %s", text)
+	for _, required := range []string{`runtime="subagent"`, `context="isolated"`, "Omit agentId and model", `Never use context="fork"`} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("JustDo isolated child guidance missing %q: %s", required, text)
+		}
+	}
+	if strings.Contains(text, "agent-eval check-agent") || strings.Contains(text, "Do not call sessions_spawn") {
+		t.Fatalf("obsolete evaluator-child guidance remains: %s", text)
 	}
 }
 
