@@ -726,6 +726,11 @@ def run_evaluation(
                 workspace=openclaw_workspace,
                 api_base_override=resilience_proxy.openai_base_url,
             )
+            # JustDo intentionally ignores the evaluator's temporary OpenClaw
+            # config and imports this request-scoped provider instead. Point
+            # that provider at the same resilience proxy so JustDo receives
+            # retries and the evaluator can retain the real upstream failure.
+            env["AGENT_EVAL_PROVIDER_BASE_URL"] = resilience_proxy.openai_base_url
     if interaction_thread is not None:
         interaction_thread.start()
     try:
@@ -821,6 +826,7 @@ def run_evaluation(
             completed.stdout,
             completed.stderr,
             json.dumps(results, ensure_ascii=False, default=str),
+            json.dumps(gateway_resilience, ensure_ascii=False, default=str),
         )
     )
     failure = classify_evaluation_failure(combined_failure_text, completed.returncode)

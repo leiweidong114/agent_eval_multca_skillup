@@ -19,6 +19,22 @@ from pathlib import Path
 DEFAULT_URL = os.environ.get("AUTOLAYOUT_URL", "http://127.0.0.1:8631")
 
 
+def _workspace_path(path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    for parent in Path(__file__).resolve().parents:
+        if parent.name == ".agents":
+            workspace = parent.parent
+            # Agents occasionally run a bundled script from its own directory and
+            # prefix an artifact path with several ``..`` components.  Artifacts in
+            # this pipeline are rooted at ``out/``; keep that suffix inside the
+            # evaluation workspace instead of allowing it to escape the sandbox.
+            if "out" in path.parts:
+                return workspace.joinpath(*path.parts[path.parts.index("out") :])
+            return workspace / path
+    return Path.cwd() / path
+
+
 def _get(url: str) -> dict:
     with urllib.request.urlopen(url, timeout=30) as resp:
         return json.loads(resp.read().decode("utf-8"))
@@ -30,6 +46,7 @@ def main() -> int:
     parser.add_argument("--with-pins", action="store_true", help="fetch pin lists too")
     parser.add_argument("--url", default=DEFAULT_URL)
     args = parser.parse_args()
+    args.out = _workspace_path(args.out)
 
     try:
         payload = _get(args.url + "/api/auto_layout/devices")

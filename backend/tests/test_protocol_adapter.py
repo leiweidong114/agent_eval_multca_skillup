@@ -97,6 +97,40 @@ def test_codex_additional_tools_requires_a_list():
         }, 'responses')
 
 
+def test_codex_recovers_known_tagged_tool_call_from_chat_text():
+    request = {
+        'model': 'glm',
+        'input': 'write the fragment',
+        'tools': [{'type': 'function', 'name': 'shell_command',
+                   'parameters': {'type': 'object'}}],
+    }
+    command = 'Set-Content -Path "out/file.py" -Value "连接"'
+    upstream = {'choices': [{'finish_reason': 'stop', 'message': {
+        'content': (
+            '准备写入</think>\n<think>shell_command\n'
+            f'<arg_key>command</arg_key><arg_value>{command}</arg_value>\n'
+            '</tool_call>'
+        ),
+        'tool_calls': None,
+    }}]}
+    body, _ = from_chat(upstream, 'responses', 'glm', False, request)
+    output = json.loads(body)['output']
+    assert len(output) == 1
+    assert output[0]['type'] == 'function_call'
+    assert output[0]['name'] == 'shell_command'
+    assert json.loads(output[0]['arguments']) == {'command': command}
+
+
+def test_codex_does_not_recover_unoffered_tagged_tool_call():
+    request = {'model': 'glm', 'input': 'answer', 'tools': []}
+    tagged = '<think>shell_command\n<arg_key>command</arg_key><arg_value>whoami</arg_value></tool_call>'
+    upstream = {'choices': [{'finish_reason': 'stop', 'message': {'content': tagged}}]}
+    body, _ = from_chat(upstream, 'responses', 'glm', False, request)
+    output = json.loads(body)['output']
+    assert output[0]['type'] == 'message'
+    assert output[0]['content'][0]['text'] == tagged
+
+
 def test_gateway_tool_fallback_deduplicates_history_and_does_not_invent_results():
     from agent_eval.scoring import supplement_database_tool_metrics
     row = {'proxy_server_request': {'body': {'messages': [

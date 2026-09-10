@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import threading
 import time
 import uuid
@@ -27,6 +28,14 @@ HOP_BY_HOP_HEADERS = frozenset(
     {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
      "te", "trailers", "transfer-encoding", "upgrade", "host", "content-length"}
 )
+
+_SECRET = re.compile(rb"(?i)(?:Bearer\s+|sk-)[A-Za-z0-9._-]+")
+
+
+def _safe_failure_excerpt(body: bytes, *, limit: int = 1200) -> str:
+    """Keep enough upstream detail to classify failures without leaking keys."""
+    redacted = _SECRET.sub(b"[REDACTED]", body)
+    return redacted.decode("utf-8", errors="replace")[:limit]
 
 
 def _restore_client_model(body: bytes, content_type: str, forced: str, client: str) -> bytes:
@@ -107,6 +116,7 @@ class CodeBuddyCompatibilityProxy:
         self._retry_count = 0
         self._status_counts: Counter[int] = Counter()
         self._transport_errors = 0
+        self._last_failure: dict[str, object] | None = None
 
     @property
     def api_root(self) -> str:
@@ -136,6 +146,7 @@ class CodeBuddyCompatibilityProxy:
                 "transport_errors": self._transport_errors,
                 "status_counts": {str(k): v for k, v in sorted(self._status_counts.items())},
                 "max_attempts": self.max_attempts,
+                "last_failure": dict(self._last_failure) if self._last_failure else None,
             }
 
     def _record(self, *, request: bool = False, retry: bool = False,
@@ -150,6 +161,16 @@ class CodeBuddyCompatibilityProxy:
                 self._status_counts[status] += 1
             if transport_error:
                 self._transport_errors += 1
+
+    def _record_failure(
+        self, status: int, body: bytes, retry_after: str | None = None
+    ) -> None:
+        with self._lock:
+            self._last_failure = {
+                "status_code": status,
+                "retry_after": retry_after,
+                "detail": _safe_failure_excerpt(body),
+            }
 
     def start(self) -> None:
         if self._server is not None:
@@ -245,6 +266,12 @@ class CodeBuddyCompatibilityProxy:
                             response.status in RETRYABLE_STATUS_CODES
                             and not _is_permanent_rate_limit(response.status, response_body)
                         )
+                        if response.status >= 400:
+                            owner._record_failure(
+                                response.status,
+                                response_body,
+                                response.getheader("Retry-After"),
+                            )
                         owner._record(
                             request=attempt == 0,
                             retry=retryable and attempt + 1 < owner.max_attempts,

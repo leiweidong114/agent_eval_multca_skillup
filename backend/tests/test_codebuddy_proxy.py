@@ -200,6 +200,48 @@ def test_proxy_does_not_retry_permanent_chinese_balance_limit():
     assert calls == 1
     assert stats["retry_count"] == 0
     assert stats["attempt_count"] == 1
+    assert stats["last_failure"]["status_code"] == 429
+    assert "余额不足或无可用资源包" in stats["last_failure"]["detail"]
+
+
+def test_proxy_redacts_credentials_from_recorded_failure():
+    class Upstream(BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            response = b'{"error":{"message":"Bearer sk-secret-value rejected"}}'
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+    upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+    thread.start()
+    host, port = upstream.server_address[:2]
+    try:
+        with CodeBuddyCompatibilityProxy(f"http://{host}:{port}/v1") as proxy:
+            request = Request(
+                proxy.url,
+                data=json.dumps({"model": "test", "messages": []}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                urlopen(request)
+            except Exception as exc:
+                assert getattr(exc, "code", None) == 401
+            stats = proxy.stats()
+    finally:
+        upstream.shutdown()
+        upstream.server_close()
+        thread.join(timeout=5)
+
+    assert "secret-value" not in stats["last_failure"]["detail"]
+    assert "[REDACTED]" in stats["last_failure"]["detail"]
 
 
 def test_proxy_restores_client_model_in_anthropic_response():

@@ -239,9 +239,7 @@ def supplement_database_tool_metrics(process: dict[str, Any], interactions: list
     Calls are deduplicated across repeated conversation histories by call ID.
     Missing results remain missing. This is run-level, not per-case telemetry.
     """
-    if process.get('tool_calls'):
-        process['tool_event_source'] = 'agent_transcript'
-        return
+    transcript_has_tools = bool(process.get('tool_calls'))
     def obj(value):
         if isinstance(value, str):
             try: return json.loads(value)
@@ -299,7 +297,11 @@ def supplement_database_tool_metrics(process: dict[str, Any], interactions: list
         ]
         if cid not in calls and len(matches) != 1:
             calls[cid] = call_info
-    process['tool_event_source'] = 'litellm_conversation_fallback' if calls else 'not_observed'
+    process['tool_event_source'] = (
+        'agent_transcript' if transcript_has_tools
+        else 'litellm_conversation_fallback' if calls
+        else 'not_observed'
+    )
     if calls:
         matched = set(results) & set(calls)
         failed = {cid for cid in matched if result_failed(results[cid])}
@@ -308,21 +310,34 @@ def supplement_database_tool_metrics(process: dict[str, Any], interactions: list
             cid for cid, (name, arguments) in calls.items()
             if _is_subagent_spawn_tool(name, arguments)
         }
-        process.update(tool_calls=len(calls), tool_results=completed,
-                       tool_completion_rate=round(100*completed/len(calls), 2),
-                       tool_failures=len(failed),
-                       subagent_calls=len((subagent_ids & matched) - failed),
-                       subagent_attempts=len(subagent_ids),
-                       subagent_failures=len(subagent_ids - ((subagent_ids & matched) - failed)),
-                       subagent_detection='successful_tool_result_correlation',
-                       tool_failure_measurement='tool_result_content')
+        if not transcript_has_tools:
+            process.update(tool_calls=len(calls), tool_results=completed,
+                           tool_completion_rate=round(100*completed/len(calls), 2),
+                           tool_failures=len(failed),
+                           tool_failure_measurement='tool_result_content')
+        # Codex executes additional_tools (including native spawn_agent) inside
+        # its runtime and does not always emit them on the outer message stream.
+        # Always supplement subagent evidence from the exact run-key database
+        # conversation, even when ordinary shell tools were present upstream.
+        if subagent_ids:
+            successful_subagents = (subagent_ids & matched) - failed
+            process.update(
+                subagent_calls=len(successful_subagents),
+                subagent_attempts=len(subagent_ids),
+                subagent_failures=len(subagent_ids - successful_subagents),
+                subagent_detection='litellm_tool_call_and_result_correlation',
+                subagent_tool_names=sorted({calls[cid][0] for cid in subagent_ids}),
+            )
+            if transcript_has_tools:
+                process['tool_event_source'] = 'agent_transcript+litellm_subagent_supplement'
 
 
 def collect_skill_read_evidence(
     interactions: list[dict[str, Any]], selected_skills: list[str]
 ) -> dict[str, Any]:
-    """Prove explicit SKILL.md reads from model-emitted read-like tool calls."""
+    """Prove Skill use from an instruction read or bundled script execution."""
     observed: dict[str, list[dict[str, str]]] = {name: [] for name in selected_skills}
+    read_skills: set[str] = set()
 
     def obj(value: Any) -> Any:
         if isinstance(value, str):
@@ -347,10 +362,29 @@ def collect_skill_read_evidence(
             tool = str(function.get("name") or call.get("name") or "").lower()
             arguments = obj(function.get("arguments") or call.get("arguments") or {})
             argument_text = json.dumps(arguments, ensure_ascii=False, default=str).lower()
-            if any(marker in tool for marker in ("read", "open", "view")) and "skill.md" in argument_text:
+            explicit_read_tool = any(marker in tool for marker in ("read", "open", "view"))
+            shell_read = (
+                tool.rsplit("__", 1)[-1] in {"exec", "exec_command", "shell_command"}
+                and any(marker in argument_text for marker in ("get-content", "type ", "cat "))
+            )
+            if (explicit_read_tool or shell_read) and "skill.md" in argument_text:
                 for skill in selected_skills:
                     if skill.lower() in argument_text:
-                        observed[skill].append({"request_id": request_id, "tool": tool})
+                        observed[skill].append({
+                            "request_id": request_id, "tool": tool, "kind": "instruction_read",
+                        })
+                        read_skills.add(skill)
+            shell_execution = (
+                tool.rsplit("__", 1)[-1] in {"exec", "exec_command", "shell_command"}
+                and ".py" in argument_text
+                and "scripts" in argument_text
+            )
+            if shell_execution:
+                for skill in selected_skills:
+                    if skill.lower() in argument_text:
+                        observed[skill].append({
+                            "request_id": request_id, "tool": tool, "kind": "bundled_script_execution",
+                        })
         for key, child in node.items():
             if key != "tool_calls":
                 visit(child, request_id)
@@ -362,12 +396,14 @@ def collect_skill_read_evidence(
     missing = [skill for skill, evidence in observed.items() if not evidence]
     return {
         "status": "verified" if not missing else "partial" if len(missing) < len(selected_skills) else "not_observed",
-        "all_selected_skills_read": not missing,
+        "all_selected_skills_read": len(read_skills) == len(selected_skills),
+        "all_selected_skills_observed": not missing,
         "selected_skills": selected_skills,
         "observed_skills": [skill for skill, evidence in observed.items() if evidence],
         "missing_skills": missing,
+        "missing_read_skills": [skill for skill in selected_skills if skill not in read_skills],
         "evidence": observed,
-        "method": "explicit_read_tool_call_with_skill_md_path",
+        "method": "explicit_skill_md_read_or_bundled_script_execution",
     }
 
 

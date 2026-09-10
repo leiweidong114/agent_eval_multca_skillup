@@ -4,6 +4,7 @@ from agent_eval.scoring import (
     collect_process_metrics,
     collect_skill_read_evidence,
     combine_dimensions,
+    supplement_database_tool_metrics,
 )
 
 
@@ -20,6 +21,57 @@ def test_skill_read_evidence_requires_read_tool_and_skill_md_path():
     assert result["status"] == "partial"
     assert result["observed_skills"] == ["schematic-pipeline"]
     assert result["missing_skills"] == ["schematic-web-apply"]
+
+
+def test_skill_read_evidence_accepts_powershell_get_content():
+    interactions = [{
+        "request_id": "req-1",
+        "response": {"choices": [{"message": {"tool_calls": [{
+            "function": {"name": "shell_command", "arguments":
+                         '{"command":"Get-Content skills/02-signal-interface-generation/SKILL.md"}'},
+        }]}}]},
+    }]
+    result = collect_skill_read_evidence(interactions, ["signal-interface-generation"])
+    assert result["status"] == "verified"
+
+
+def test_skill_usage_evidence_accepts_bundled_script_execution():
+    interactions = [{
+        "request_id": "req-apply",
+        "response": {"choices": [{"message": {"tool_calls": [{
+            "function": {"name": "shell_command", "arguments":
+                         '{"command":"python .agents/skills/bundle/skills/04-schematic-web-apply/scripts/apply.py --layout-dir out/layout"}'},
+        }]}}]},
+    }]
+    result = collect_skill_read_evidence(interactions, ["schematic-web-apply"])
+    assert result["status"] == "verified"
+    assert result["all_selected_skills_observed"] is True
+    assert result["all_selected_skills_read"] is False
+    assert result["evidence"]["schematic-web-apply"][0]["kind"] == "bundled_script_execution"
+
+
+def test_database_supplements_native_subagent_when_transcript_has_shell_tools():
+    process = {
+        "tool_calls": 2, "tool_results": 2, "tool_failures": 0,
+        "subagent_calls": 0, "subagent_attempts": 0, "subagent_failures": 0,
+    }
+    interactions = [
+        {"response": {"choices": [{"message": {"tool_calls": [{
+            "id": "spawn-1", "function": {
+                "name": "multi_agent_v1__spawn_agent", "arguments": "{}",
+            },
+        }]}}]}},
+        {"proxy_server_request": {"messages": [{
+            "role": "tool", "tool_call_id": "spawn-1",
+            "content": '{"agent_id":"child-1"}',
+        }]}},
+    ]
+    supplement_database_tool_metrics(process, interactions)
+    assert process["tool_calls"] == 2
+    assert process["subagent_calls"] == 1
+    assert process["subagent_attempts"] == 1
+    assert process["subagent_tool_names"] == ["multi_agent_v1__spawn_agent"]
+    assert process["tool_event_source"] == "agent_transcript+litellm_subagent_supplement"
 
 
 def test_collects_normalized_tool_token_context_and_subagent_metrics():

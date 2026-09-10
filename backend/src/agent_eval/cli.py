@@ -582,20 +582,24 @@ def _verify_subagent_evidence(
     rows: list[dict[str, object]],
 ) -> dict[str, object]:
     """Require tool-result evidence, not a parent-authored marker."""
-    tool_calls: list[tuple[str, str]] = []
-    tool_results: list[str] = []
+    tool_calls: list[tuple[str, str, str]] = []
+    tool_results: list[tuple[str, str]] = []
     assistant_results: list[str] = []
 
     def walk(value: object) -> None:
         if isinstance(value, dict):
             role = str(value.get("role") or "").lower()
             if role == "tool" and value.get("content") is not None:
-                tool_results.append(str(value.get("content")))
+                tool_results.append((
+                    str(value.get("tool_call_id") or value.get("call_id") or ""),
+                    str(value.get("content")),
+                ))
             if role == "assistant" and value.get("content") is not None:
                 assistant_results.append(str(value.get("content")))
             direct = value.get("tool_call")
             if isinstance(direct, dict):
                 tool_calls.append((
+                    str(direct.get("id") or direct.get("call_id") or ""),
                     str(direct.get("name") or ""),
                     json.dumps(direct.get("arguments") or {}, ensure_ascii=False, default=str),
                 ))
@@ -607,6 +611,7 @@ def _verify_subagent_evidence(
                     function = call.get("function") or {}
                     if isinstance(function, dict):
                         tool_calls.append((
+                            str(call.get("id") or call.get("call_id") or ""),
                             str(function.get("name") or call.get("name") or ""),
                             str(function.get("arguments") or call.get("arguments") or ""),
                         ))
@@ -632,24 +637,49 @@ def _verify_subagent_evidence(
     expected = native_names.get(normalized_agent, set())
     invocation = False
     native_invocation = False
-    for name, arguments in tool_calls:
+    for _call_id, name, arguments in tool_calls:
         lowered = name.lower()
         if lowered in expected:
             invocation = True
             native_invocation = True
         if normalized_agent == "codex" and lowered.endswith("__spawn_agent"):
             invocation = True
+            native_invocation = True
         if normalized_agent == "openclaw" and lowered == "exec" and "openclaw agent exec" in arguments:
             invocation = True
         if normalized_agent == "justdo" and lowered == "exec" and "agent-eval check-agent --agent justdo" in arguments:
             invocation = True
 
-    result_text = "\n".join(tool_results)
+    result_text = "\n".join(content for _call_id, content in tool_results)
+    call_by_id = {
+        call_id: (name.lower(), arguments)
+        for call_id, name, arguments in tool_calls
+        if call_id
+    }
+    correlated_child_result = False
+    for call_id, content in tool_results:
+        call = call_by_id.get(call_id)
+        if not call or "SUBAGENT_OK" not in content:
+            continue
+        name, arguments = call
+        if normalized_agent == "codex" and name.endswith("__wait_agent"):
+            correlated_child_result = True
+        elif normalized_agent in {"claude", "codebuddy"} and name == "agent":
+            correlated_child_result = True
+        elif normalized_agent == "opencode" and name == "task":
+            correlated_child_result = True
+        elif normalized_agent == "openclaw" and name == "exec" and "openclaw agent exec" in arguments:
+            correlated_child_result = True
+        elif normalized_agent == "justdo" and (
+            name == "sessions_spawn"
+            or (name == "exec" and "agent-eval check-agent --agent justdo" in arguments)
+        ):
+            correlated_child_result = True
     child_model_marker = any(
         text.strip() == "SUBAGENT_OK" for text in assistant_results
     )
     if normalized_agent == "openclaw":
-        child_result = (
+        child_result = correlated_child_result or (
             child_model_marker
             or (
                 "SUBAGENT_OK" in result_text
@@ -658,7 +688,7 @@ def _verify_subagent_evidence(
             )
         )
     elif normalized_agent == "justdo":
-        child_result = (
+        child_result = correlated_child_result or (
             child_model_marker
             or (
                 "SUBAGENT_OK" in result_text
@@ -667,7 +697,7 @@ def _verify_subagent_evidence(
             )
         )
     else:
-        child_result = "SUBAGENT_OK" in result_text
+        child_result = correlated_child_result or child_model_marker
 
     # Some CLIs retain a short progress preface in FinalMessage even though
     # the terminal answer is the requested marker. Require the exact marker at
@@ -694,7 +724,7 @@ def _verify_subagent_evidence(
         "status": "verified" if verified else "unverified",
         "verified": verified,
         "transport": "native" if native_invocation else "isolated_child_process",
-        "tool_calls": sorted({name for name, _ in tool_calls if name}),
+        "tool_calls": sorted({name for _, name, _ in tool_calls if name}),
         "successful_matching_model_calls": same_model_calls,
         "reason": None if verified else "missing: " + ", ".join(missing),
     }

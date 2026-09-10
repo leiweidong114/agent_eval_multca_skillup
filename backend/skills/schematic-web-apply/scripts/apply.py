@@ -13,10 +13,23 @@ import argparse
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
 DEFAULT_URL = os.environ.get("AUTOLAYOUT_URL", "http://127.0.0.1:8631")
+
+
+def _workspace_path(path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    for parent in Path(__file__).resolve().parents:
+        if parent.name == ".agents":
+            workspace = parent.parent
+            if "out" in path.parts:
+                return workspace.joinpath(*path.parts[path.parts.index("out") :])
+            return workspace / path
+    return Path.cwd() / path
 
 
 def _post(url: str, body: dict) -> dict:
@@ -63,14 +76,43 @@ def main() -> int:
     parser.add_argument("--layout-dir", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--url", default=DEFAULT_URL)
+    parser.add_argument("--no-verify-url", action="store_true",
+                        help="do not GET the generated page URL")
     args = parser.parse_args()
+    if args.layout_dir:
+        args.layout_dir = _workspace_path(args.layout_dir)
+    args.out = _workspace_path(args.out)
+    if args.sheet:
+        normalized = []
+        for token in args.sheet:
+            if "|" in token:
+                title, path = token.split("|", 1)
+                normalized.append(f"{title}|{_workspace_path(Path(path))}")
+            else:
+                normalized.append(str(_workspace_path(Path(token))))
+        args.sheet = normalized
 
     sheets = _collect_sheets(args)
     payload = _post(args.url, {"title": args.title, "sheets": sheets})
+    page_url = urllib.parse.urljoin(args.url + "/", str(payload.get("url", "")))
+    if not payload.get("url"):
+        print("apply 服务返回异常：缺少 url")
+        return 1
+    if not args.no_verify_url:
+        try:
+            with urllib.request.urlopen(page_url, timeout=30) as response:
+                if response.status != 200:
+                    print(f"生成页面不可访问: HTTP {response.status} {page_url}")
+                    return 1
+        except Exception as exc:  # noqa: BLE001
+            print(f"生成页面不可访问: {page_url}: {exc}")
+            return 1
+        payload["url_verification"] = {"status": "ok", "http_status": 200}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({
         "url": payload["url"],
+        "url_verified": not args.no_verify_url,
         "project_id": payload["project_id"],
         "sheet_count": payload["sheet_count"],
     }, ensure_ascii=False, indent=2))

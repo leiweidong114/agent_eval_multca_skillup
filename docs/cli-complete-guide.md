@@ -346,6 +346,17 @@ agent-eval check-agent `
 - 父 Agent 最终返回 `PARENT_OK:SUBAGENT_OK`；
 - 同一运行级 Trace Key 下至少有两次指定模型的成功调用。
 
+其证据链不是检查最终回答里有没有“已调用 Subagent”这句话，而是：
+
+1. 为本次命令创建唯一、短时有效的 LiteLLM Trace Key，并注入父 Agent；
+2. 从 Agent transcript 与该 Trace Key 对应的 LiteLLM 请求/响应中寻找真实的子任务工具调用（例如 Codex 的 `multi_agent_v1__spawn_agent`）；
+3. 将工具调用 ID 与成功的工具结果关联，要求子任务结果或独立子模型响应出现精确标记 `SUBAGENT_OK`；
+4. 要求父 Agent 最终返回 `PARENT_OK:SUBAGENT_OK`；
+5. 数据库中至少有两次由该 Trace Key 精确归因、模型匹配且成功的推理调用，证明父、子请求都经过指定模型路由；
+6. 任一环缺失都返回 `subagent_verification.status=unverified`，不会因父 Agent 自己打印标记而通过。
+
+这能证明“观察到真实子任务通道、子结果回传、父结果汇总且父子都走指定模型”，但不声称能读取模型内部思维过程。若 LiteLLM 数据库不可访问或内容日志被关闭，严格模式会失败/不可验证，而不会降级为猜测。
+
 六个重点 Agent 的 Subagent 通道如下：
 
 | Agent | 通道 |

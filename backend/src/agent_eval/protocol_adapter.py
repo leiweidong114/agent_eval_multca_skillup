@@ -3,9 +3,24 @@
 Unsupported modalities fail explicitly instead of silently discarding inputs.
 The upstream still performs all inference; this module only translates envelopes.
 """
+import html
 import json
+import re
 import time
 import uuid
+
+
+_TAGGED_TOOL_CALL = re.compile(
+    r"(?:</think>\s*)?(?:<think>|<tool_call>)\s*"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_.-]*)\s*"
+    r"(?P<body>.*?)</tool_call>",
+    re.DOTALL,
+)
+_TAGGED_TOOL_ARGUMENT = re.compile(
+    r"<arg_key>\s*(?P<key>.*?)\s*</arg_key>\s*"
+    r"<arg_value>(?P<value>.*?)</arg_value>",
+    re.DOTALL,
+)
 
 
 def flatten_tools(tools, namespace=None):
@@ -49,6 +64,42 @@ def text_blocks(content):
             raise ValueError(f"Unsupported content modality: {block.get('type')}")
         texts.append(block.get("text", ""))
     return "\n".join(texts)
+
+
+def recover_tagged_tool_call(message, request):
+    """Recover a tool call emitted as tagged text by OpenAI-compatible models.
+
+    Some chat models occasionally serialize an otherwise unambiguous Codex tool
+    call as ``<think>tool_name <arg_key>...`` text and finish with ``stop``.
+    Only convert the strict tagged shape when the named tool was actually offered
+    in this request.  Ordinary text and unknown tool names remain untouched.
+    """
+    if message.get("tool_calls") or not isinstance(message.get("content"), str):
+        return message, False
+    matches = list(_TAGGED_TOOL_CALL.finditer(message["content"]))
+    if not matches:
+        return message, False
+    match = matches[-1]
+    available = {wire_name(tool) for tool in flatten_tools(response_tools(request or {}))}
+    name = match.group("name")
+    if name not in available:
+        return message, False
+    arguments = {}
+    for item in _TAGGED_TOOL_ARGUMENT.finditer(match.group("body")):
+        key = html.unescape(item.group("key")).strip()
+        if not key or key in arguments:
+            return message, False
+        arguments[key] = html.unescape(item.group("value")).strip()
+    if not arguments:
+        return message, False
+    recovered = dict(message)
+    recovered["content"] = None
+    recovered["tool_calls"] = [{
+        "id": "call_recovered_" + uuid.uuid4().hex,
+        "type": "function",
+        "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
+    }]
+    return recovered, True
 
 
 def to_chat(payload, protocol):
@@ -146,7 +197,9 @@ def to_chat(payload, protocol):
 
 def from_chat(payload, protocol, model, stream, request=None):
     choice = payload["choices"][0]
-    message = choice["message"]
+    message, recovered_tool_call = recover_tagged_tool_call(choice["message"], request or {})
+    if recovered_tool_call:
+        choice = {**choice, "finish_reason": "tool_calls"}
     usage = payload.get("usage") or {}
     tokens = {"input_tokens": usage.get("prompt_tokens", 0), "output_tokens": usage.get("completion_tokens", 0)}
     events = []

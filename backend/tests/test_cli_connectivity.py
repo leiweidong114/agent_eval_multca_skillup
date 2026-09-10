@@ -129,6 +129,36 @@ def test_subagent_verification_rejects_a_parent_simulation():
     assert "subagent_invocation" in result["reason"]
 
 
+def test_subagent_verification_rejects_unrelated_shell_marker_after_spawn():
+    from agent_eval.cli import _verify_subagent_evidence
+
+    rows = [
+        {
+            "status": "success",
+            "model": "glm-4.5-air",
+            "proxy_server_request": {"messages": [
+                {"role": "assistant", "tool_calls": [{
+                    "id": "spawn-1",
+                    "function": {"name": "multi_agent_v1__spawn_agent", "arguments": "{}"},
+                }]},
+                {"role": "assistant", "tool_calls": [{
+                    "id": "shell-1",
+                    "function": {"name": "shell_command", "arguments": "{}"},
+                }]},
+                {"role": "tool", "tool_call_id": "shell-1", "content": "SUBAGENT_OK"},
+            ]},
+        },
+        {"status": "success", "model": "glm-4.5-air"},
+    ]
+
+    result = _verify_subagent_evidence(
+        "codex", "glm-4.5-air", {"final_message": "PARENT_OK:SUBAGENT_OK"}, rows
+    )
+
+    assert result["verified"] is False
+    assert "successful_child_tool_result" in result["reason"]
+
+
 def test_subagent_verification_accepts_justdo_child_cli_evidence():
     from agent_eval.cli import _verify_subagent_evidence
 

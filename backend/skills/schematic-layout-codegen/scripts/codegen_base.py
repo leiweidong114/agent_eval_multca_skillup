@@ -14,6 +14,18 @@ from pathlib import Path
 from typing import Any
 
 
+def _workspace_path(path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    for parent in Path(__file__).resolve().parents:
+        if parent.name == ".agents":
+            workspace = parent.parent
+            if "out" in path.parts:
+                return workspace.joinpath(*path.parts[path.parts.index("out") :])
+            return workspace / path
+    return Path.cwd() / path
+
+
 def _quote(value: Any) -> str:
     return json.dumps(str(value), ensure_ascii=False)
 
@@ -27,10 +39,10 @@ def _safe(name: str) -> str:
 def pick_slices(sheet: dict) -> list[dict]:
     """Determine the slice assignment for a sheet.
 
-    A slice is created for every group seen in the components list, plus a
-    special ``MAIN`` slice that owns main-only nets.  Each net is assigned to
-    exactly one slice (deterministic): if it touches any group component, the
-    lexicographically-first group wins; otherwise it belongs to ``MAIN``.
+    Each net is assigned to exactly one slice (deterministic): if it touches
+    any group component, the lexicographically-first group wins; otherwise it
+    belongs to ``MAIN``. Groups with no assigned networks are omitted because
+    they need no connect fragment or subagent call.
     """
     groups: list[str] = []
     for comp in sheet.get("components", []):
@@ -66,6 +78,8 @@ def pick_slices(sheet: dict) -> list[dict]:
 
     slices = []
     for group in groups:
+        if not assignment[group]:
+            continue
         slices.append({
             "slice_id": group,
             "file_id": _safe(group),
@@ -126,6 +140,8 @@ def main() -> int:
     parser.add_argument("--sheet", type=str, required=True)
     parser.add_argument("--fragdir", type=Path, required=True)
     args = parser.parse_args()
+    args.input = _workspace_path(args.input)
+    args.fragdir = _workspace_path(args.fragdir)
 
     sheets = json.loads(args.input.read_text(encoding="utf-8"))
     project = str(sheets.get("project", "board"))
@@ -150,8 +166,16 @@ def main() -> int:
                 % item["slice_id"],
                 encoding="utf-8",
             )
-    print(f"base + slices written to {args.fragdir}")
-    print("slices:", [item["slice_id"] for item in slices])
+    print(json.dumps({
+        "status": "ok",
+        "fragdir": str(args.fragdir.resolve()),
+        "slices_file": str((args.fragdir / "slices.json").resolve()),
+        "slices": [
+            {"slice_id": item["slice_id"], "file_id": item["file_id"],
+             "output": str((args.fragdir / f"{item['file_id']}.py").resolve())}
+            for item in slices
+        ],
+    }, ensure_ascii=False, indent=2))
     return 0
 
 

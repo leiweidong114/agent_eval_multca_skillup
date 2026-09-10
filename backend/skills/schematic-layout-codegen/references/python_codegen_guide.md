@@ -28,7 +28,7 @@ connect([pin(circuit.U1, 10), pin(circuit.R1, 1)], circuit.LED0_DRIVE)
 # 网络 GND 连接 LED1 阴极(脚1)
 connect([pin(circuit.LED1, 1)], circuit.GND)
 ```
-4. 网络对象、器件对象已在 base 中定义，直接 `circuit.<NAME>` 引用；位号/网络名从切片 JSON 里原样抄。
+4. 网络对象、器件对象已在 base 中定义。合法 Python 标识符的网络直接用 `circuit.<NAME>`；`3V3`、`5V` 等数字开头的网络必须用 `circuit.__getattr__("3V3")`（这是受限 DSL 明确允许的动态引用），不要用无效的 `circuit.3V3`、被安全沙箱禁止的内置 `getattr(...)`，也不要假设支持 `circuit["3V3"]`。位号/网络名从切片 JSON 里原样抄。
 5. 每行网络 connect 前用 `# 网络 <NAME>: <简要电气说明>` 注释，方便人工复核。
 6. 一个器件引脚可多次出现在不同 connect（同引脚连到不同网络会由服务端去重/报错），但每个切片的 `pins` 字段已把网络—引脚关系给全，按图索骥即可。
 
