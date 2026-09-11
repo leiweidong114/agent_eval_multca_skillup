@@ -195,7 +195,7 @@ def list_jobs(request: Request) -> list[dict[str, object]]:
 
 @router.get("/evaluators")
 def list_evaluators() -> list[dict[str, object]]:
-    """List built-in and .env-configured external evaluators."""
+    """List built-in, bundled, project-local, and configured external evaluators."""
     return installed_evaluators(BACKEND_ROOT)
 
 

@@ -9,22 +9,23 @@ from agent_eval.evaluators.protocol import (
     PluginEvaluation,
 )
 from agent_eval.scoring import calculate_rule_dimensions
+from .judge_prompt import SYSTEM_PROMPT
+from .result_rules import evaluate_result
+from .trace_rules import evaluate_trace
 
 
-class DefaultEvaluator:
-    """Generic Skill evaluator that preserves the original three-dimension scoring."""
+class SchematicDefaultEvaluator:
+    """Public default plugin shared by all supported schematic task types."""
 
+    id = "schematic-default"
+    version = "2"
     api_version = EVALUATOR_API_VERSION
-    version = "1"
+    evaluation_types = ("schematic",)
     schematic_task_types = (
         "block_to_schematic",
         "block_to_signal_list",
         "signal_list_to_schematic",
     )
-
-    def __init__(self, evaluator_id: str, evaluation_types: tuple[str, ...]) -> None:
-        self.id = evaluator_id
-        self.evaluation_types = evaluation_types
 
     def evaluate(
         self,
@@ -33,13 +34,15 @@ class DefaultEvaluator:
         evidence: EvaluationEvidence,
         scoring_config: dict[str, Any],
     ) -> PluginEvaluation:
-        rule_dimensions = calculate_rule_dimensions(
+        dimensions = calculate_rule_dimensions(
             scores=evidence.deterministic_scores,
             process=evidence.process_metrics,
             skill_quality=evidence.skill_quality,
             config=scoring_config,
         )
-        llm_evidence = {
+        result_evidence = evaluate_result(evidence)
+        trace_evidence = evaluate_trace(evidence)
+        judge_evidence = {
             "task": {
                 "task_id": context.task_id,
                 "agent": context.agent,
@@ -57,9 +60,17 @@ class DefaultEvaluator:
             "skill_up_results": evidence.results,
         }
         return PluginEvaluation(
-            rule_dimensions=rule_dimensions,
-            llm_evidence=llm_evidence,
+            rule_dimensions=dimensions,
+            llm_evidence=judge_evidence,
+            judge_system_prompt=SYSTEM_PROMPT,
+            extensions={
+                "schematic": {
+                    "profile": self.id,
+                    "trace": trace_evidence,
+                    "result": result_evidence,
+                }
+            },
         )
 
 
-GENERIC_EVALUATOR = DefaultEvaluator("generic", ("skill", "schematic"))
+PLUGIN = SchematicDefaultEvaluator()

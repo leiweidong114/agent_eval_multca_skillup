@@ -16,6 +16,14 @@ DEFAULT_SCHEMATIC_EVALUATOR=schematic-large
 标准化的上下文和证据，不应自行读取数据库、修改运行目录或管理 LiteLLM 密钥。
 API 版本不兼容、ID 重复或评测类型不匹配时，系统会在执行前拒绝运行。
 
+`evidence.artifact_manifest` 列出 Skill-Up 收集的产物；需要读取原理图 JSON、
+网表或 ERC 报告时，使用 `evidence.resolve_artifact(relative_path)`。该方法只允许
+解析 `artifact_root` 内的相对文件路径。插件应只读这些文件。
+
+模板中的 `trace_rules.py` 和 `result_rules.py` 默认只产生结果页扩展信息。若专业
+规则需要影响最终得分，应在 `evaluator.py` 中用规则返回的 `score` 替换
+`dimensions["process"]` 或 `dimensions["result"]`。
+
 插件还可以用 `schematic_task_types` 限定兼容任务：
 
 ```python

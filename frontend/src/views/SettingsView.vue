@@ -51,7 +51,7 @@ const loading=ref(false),saving=ref(false),models=ref([]),skills=ref([]),evaluat
 const form=reactive({judge_model:'',agent_test_model:'',schematic_skills:[],schematic_task_profiles:structuredClone(defaultProfiles)})
 const selectableModels=computed(()=>[...models.value].sort((a,b)=>Number(a.connectivity?.available!==true)-Number(b.connectivity?.available!==true)||a.id.localeCompare(b.id)))
 const modelLabel=model=>`${model.id}${model.connectivity?.available===true?' · 已测试可用':model.connectivity?.available===false?' · 测试失败':' · 未测试'}`
-const sourceLabel=source=>source==='built_in'?'内置':source==='uploaded'?'已导入':source==='external'||String(source||'').includes(':')?'本机扩展':'外部'
+const sourceLabel=source=>source==='built_in'?'内置':source==='bundled'?'项目插件':source==='uploaded'?'已导入':source==='external'||String(source||'').includes(':')?'本机扩展':'外部'
 const contractLabel=value=>({block_diagram:'框图',signal_interface_v1:'信号接口列表',schematic_project:'原理图工程'}[value]||value)
 const profile=id=>{if(!form.schematic_task_profiles[id])form.schematic_task_profiles[id]={skills:[],evaluator_id:''};return form.schematic_task_profiles[id]}
 const compatibleEvaluators=id=>evaluators.value.filter(item=>item.evaluation_types?.includes('schematic')&&(!item.schematic_task_types?.length||item.schematic_task_types.includes(id)))

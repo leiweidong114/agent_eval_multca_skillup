@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -10,16 +11,31 @@ from agent_eval.evaluators.protocol import (
 )
 
 
+BUNDLED_SCHEMATIC_PLUGIN = (
+    Path(__file__).resolve().parents[1] / "evaluator_plugins" / "schematic-default"
+)
+
+
+def install_bundled_schematic_plugin(backend: Path) -> None:
+    target = backend / "evaluator_plugins" / "schematic-default"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(BUNDLED_SCHEMATIC_PLUGIN, target)
+
+
 def test_builtin_evaluator_defaults_preserve_skill_and_schematic_modes(tmp_path):
     backend = tmp_path / "backend"
     backend.mkdir()
+    install_bundled_schematic_plugin(backend)
 
     assert resolve_evaluator(backend, evaluation_type="skill").id == "generic"
-    assert resolve_evaluator(backend, evaluation_type="schematic").id == "schematic-default"
-    assert {item["id"] for item in list_evaluators(backend)} == {
+    schematic = resolve_evaluator(backend, evaluation_type="schematic")
+    assert schematic.id == "schematic-default"
+    catalog = list_evaluators(backend)
+    assert {item["id"] for item in catalog} == {
         "generic",
         "schematic-default",
     }
+    assert next(item for item in catalog if item["id"] == "schematic-default")["source"] == "bundled"
 
 
 def test_external_evaluator_is_loaded_only_from_configured_roots(tmp_path):

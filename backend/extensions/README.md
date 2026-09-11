@@ -7,3 +7,6 @@
 后端和设置页会自动扫描这两个目录，不需要再把固定目录写入 `.env`。目录内容
 默认被 Git 忽略；`EXTERNAL_SKILL_PATHS_JSON` 和
 `EVALUATOR_PLUGIN_PATHS_JSON` 仅用于加载位于其他位置的附加目录。
+
+项目随仓库发布的正式公共插件位于 `../evaluator_plugins/`；可复制
+`../evaluator_plugins.example/schematic-custom/` 作为内网评测插件起点。

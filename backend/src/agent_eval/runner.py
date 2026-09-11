@@ -39,6 +39,7 @@ from agent_eval.failure import describe_evaluation_failure
 from agent_eval.agent_contract import assess_agent_contract
 from agent_eval.llm_judge import run_llm_judge
 from agent_eval.evaluators import resolve_evaluator
+from agent_eval.evaluators.artifacts import build_artifact_manifest
 from agent_eval.evaluators.protocol import EvaluationContext, EvaluationEvidence, PluginEvaluation
 from agent_eval.scoring import (
     collect_process_metrics,
@@ -926,6 +927,8 @@ def run_evaluation(
             skill_quality=skill_quality,
             results=results,
             interactions=interactions,
+            artifact_root=output.resolve(),
+            artifact_manifest=build_artifact_manifest(output),
         ),
         scoring_config=scoring_config,
     )

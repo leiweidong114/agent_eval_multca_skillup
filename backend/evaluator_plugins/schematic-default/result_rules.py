@@ -2,11 +2,7 @@ from agent_eval.evaluators.protocol import EvaluationEvidence
 
 
 def evaluate_result(evidence: EvaluationEvidence) -> dict[str, object]:
-    """Replace with private schematic artifact/ERC/connectivity checks.
-
-    Use evidence.artifact_manifest to discover collected files and
-    evidence.resolve_artifact(relative_path) to open one inside artifact_root.
-    """
+    """Expose generic result evidence without imposing private schematic rules."""
     return {
         "iteration_count": len(evidence.results),
         "task_score": evidence.deterministic_scores.get("task_score"),

@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+import shutil
 
 from fastapi.testclient import TestClient
 
@@ -6,6 +8,7 @@ from app.main import app
 from app.api.routes_eval import RunRequest, _apply_schematic_skill_settings
 
 
+BACKEND = Path(__file__).resolve().parents[1]
 client = TestClient(app)
 assert client.post(
     "/api/auth/login", json={"employee_no": "test-worker", "password": "ignored"}
@@ -86,6 +89,10 @@ def test_database_health_never_exposes_credentials_or_crashes():
 def test_runtime_settings_save_non_secret_default_models(tmp_path, monkeypatch):
     config = tmp_path / "config"
     config.mkdir()
+    bundled_source = BACKEND / "evaluator_plugins" / "schematic-default"
+    bundled_target = tmp_path / "backend" / "evaluator_plugins" / "schematic-default"
+    bundled_target.parent.mkdir(parents=True)
+    shutil.copytree(bundled_source, bundled_target)
     (config / "models.yaml").write_text(
         "litellm:\n  model: fallback-model\n  api_base: https://gateway.example/v1\n  api_key_env: LITELLM_API_KEY\n",
         encoding="utf-8",
@@ -96,7 +103,7 @@ def test_runtime_settings_save_non_secret_default_models(tmp_path, monkeypatch):
         json={"judge_model": "judge-model", "agent_test_model": "agent-model"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert client.get("/api/settings").json()["judge_model"] == "judge-model"
     saved = (tmp_path / ".env").read_text(encoding="utf-8")
     assert "judge-model" in saved

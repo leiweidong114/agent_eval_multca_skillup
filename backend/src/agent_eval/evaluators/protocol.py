@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 
-EVALUATOR_API_VERSION = "agent-eval-evaluator-v1"
+EVALUATOR_API_VERSION = "agent-eval-evaluator-v2"
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,25 @@ class EvaluationEvidence:
     skill_quality: dict[str, Any]
     results: list[dict[str, Any]]
     interactions: list[dict[str, Any]]
+    artifact_root: Path | None = None
+    artifact_manifest: tuple[dict[str, Any], ...] = ()
+
+    def resolve_artifact(self, relative_path: str) -> Path:
+        """Resolve one collected artifact without allowing paths outside the run output."""
+        if self.artifact_root is None:
+            raise FileNotFoundError("This evaluation did not expose an artifact root")
+        relative = Path(relative_path)
+        if relative.is_absolute():
+            raise ValueError("Artifact paths must be relative to artifact_root")
+        root = self.artifact_root.resolve()
+        candidate = (root / relative).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError as exc:
+            raise ValueError("Artifact path escapes artifact_root") from exc
+        if not candidate.is_file():
+            raise FileNotFoundError(f"Artifact does not exist: {relative_path}")
+        return candidate
 
 
 @dataclass(frozen=True)

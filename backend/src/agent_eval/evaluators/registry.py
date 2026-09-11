@@ -10,7 +10,7 @@ from types import ModuleType
 from typing import Any
 
 from agent_eval.env_config import effective_environment, repository_root
-from agent_eval.evaluators.default import GENERIC_EVALUATOR, SCHEMATIC_DEFAULT_EVALUATOR
+from agent_eval.evaluators.default import GENERIC_EVALUATOR
 from agent_eval.evaluators.protocol import EVALUATOR_API_VERSION, EvaluationPlugin
 from agent_eval.schematic_tasks import SCHEMATIC_TASK_TYPES
 
@@ -18,14 +18,18 @@ from agent_eval.schematic_tasks import SCHEMATIC_TASK_TYPES
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 
 
-def _external_roots(project_root: Path) -> list[Path]:
-    environment = effective_environment(project_root)
+def _backend_root(project_root: Path) -> Path:
     resolved_project = project_root.resolve()
-    backend_root = (
+    return (
         resolved_project
         if resolved_project.name.lower() == "backend"
         else resolved_project / "backend"
     )
+
+
+def _external_roots(project_root: Path) -> list[Path]:
+    environment = effective_environment(project_root)
+    backend_root = _backend_root(project_root)
     result: list[Path] = [(backend_root / "extensions" / "evaluators").resolve()]
     raw = str(environment.get("EVALUATOR_PLUGIN_PATHS_JSON") or "").strip()
     if not raw:
@@ -89,9 +93,10 @@ def _validate(plugin: Any, *, source: str) -> EvaluationPlugin:
 def _plugins(project_root: Path) -> dict[str, tuple[EvaluationPlugin, str]]:
     plugins: dict[str, tuple[EvaluationPlugin, str]] = {
         GENERIC_EVALUATOR.id: (GENERIC_EVALUATOR, "built_in"),
-        SCHEMATIC_DEFAULT_EVALUATOR.id: (SCHEMATIC_DEFAULT_EVALUATOR, "built_in"),
     }
-    for root in _external_roots(project_root):
+    roots = [((_backend_root(project_root) / "evaluator_plugins").resolve(), "bundled")]
+    roots.extend((root, "external") for root in _external_roots(project_root))
+    for root, source_kind in roots:
         candidates = [root / "evaluator.py"] if (root / "evaluator.py").is_file() else []
         if root.is_dir():
             candidates.extend(sorted(root.glob("*/evaluator.py")))
@@ -102,7 +107,8 @@ def _plugins(project_root: Path) -> dict[str, tuple[EvaluationPlugin, str]]:
             plugin = _validate(module.PLUGIN, source=str(path))
             if plugin.id in plugins:
                 raise ValueError(f"Duplicate evaluator id: {plugin.id}")
-            plugins[plugin.id] = (plugin, str(path.parent.resolve()))
+            source = source_kind if source_kind == "bundled" else str(path.parent.resolve())
+            plugins[plugin.id] = (plugin, source)
     return plugins
 
 
