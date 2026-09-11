@@ -4,7 +4,8 @@
 
 ## Release 解压目录
 
-Release 完整 ZIP 解压后应至少包含：
+Release ZIP 是可复用的离线开发环境与依赖包，不包含评测系统前后端源码或固定构建产物。
+新电脑从 Git 拉取最新 `dev` 后，再用该 ZIP 安装本地工具链与离线依赖。ZIP 解压后应至少包含：
 
 ```text
 release-root/
@@ -18,14 +19,11 @@ release-root/
 ├─ sources/
 │  ├─ skill-up/                 # 必须包含 vendor/
 │  └─ multica/                  # server/ 必须包含 vendor/
-├─ prebuilt/
-│  ├─ skill-up.exe
-│  └─ multica-eval-runtime.exe
 ├─ justdo/JustDo Setup 2026.8.27.exe
 └─ question-bank/maeval-public.db
 ```
 
-Python wheelhouse 必须包含项目及构建所需的全部直接、间接依赖。npm cache 必须在 Windows x64 上根据仓库中的 `frontend/package-lock.json` 准备。公开 Release 只允许包含清理后的公开题库，不能放入当前运行数据库、账号、密码、密钥或历史评测记录。
+Python wheelhouse 必须包含项目及构建所需的全部直接、间接依赖。npm cache 必须在 Windows x64 上根据仓库中的 `frontend/package-lock.json` 准备。Skill-Up 和 Multica 不提供预编译程序，安装脚本使用包内 Go 与完整 `vendor` 在目标电脑编译。公开 Release 只允许包含清理后的公开题库，不能放入当前运行数据库、账号、密码、密钥或历史评测记录。
 
 ## 新电脑安装
 
@@ -39,6 +37,12 @@ Set-Location D:\workspace\agent_eval_multca_skillup
 ```
 
 Python 默认直接从 portable `install_only` 包解压到项目，不调用系统安装器。VC Runtime 安装包会随 Release 提供，但默认不运行；只有确实缺少系统运行库时才加 `-InstallVCRuntime`。JustDo 默认使用 Electron/NSIS 的静默参数安装；如果目标安装包需要用户交互，可加 `-InteractiveJustDo`。不需要安装 JustDo 时使用 `-SkipJustDo`。
+
+安装脚本设置 `GOTOOLCHAIN=local`、`GOPROXY=off`、`GOSUMDB=off`，然后以
+`-mod=vendor` 编译 Skill-Up 和 Multica，确保编译过程不会下载 Go 工具链或模块。安装完成后由
+`doctor.ps1` 校验生成的程序；使用 `-SkipVerify` 时仍会编译，只跳过最终环境检查。上游完整 Go
+测试只在显式执行 `rebuild.ps1 -Target SkillUp -Test` 或 `-Target Multica -Test` 时运行，因为其中
+部分 Skill-Up 测试依赖 Bash/Linux 行为，不适合作为 Windows 安装前提。
 
 安装脚本把后续运行和编译需要的文件复制到项目的：
 
@@ -101,4 +105,4 @@ Multica 评测入口的项目定制代码保存在 `backend/runtime/multica-loca
   -ZipPath D:\release-work\agent-eval-runtime-windows-x64.zip
 ```
 
-脚本默认从当前项目运行时复制 Skill-Up/Multica 源码和预编译文件，并从指定的 JustDo `release` 目录复制安装包。默认在复制后的 Go 源码中执行 `go mod vendor`；如果输入源码已经带有完整 `vendor`，可使用 `-SkipVendor`。
+脚本默认从当前项目运行时复制 Skill-Up/Multica 源码和完整 `vendor`，并从指定的 JustDo `release` 目录复制安装包。它不再打包 `prebuilt/`；可执行文件在目标电脑安装时由最新 `dev` 中的构建脚本生成。默认在复制后的 Go 源码中执行 `go mod vendor`；如果输入源码已经带有完整 `vendor`，可使用 `-SkipVendor`。

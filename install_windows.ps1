@@ -169,14 +169,17 @@ foreach ($component in @('skill-up', 'multica')) {
     }
 }
 
-$skillUpBinary = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Patterns @(
-    'prebuilt\skill-up.exe', 'bin\skill-up.exe'
-)
-$multicaBinary = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Patterns @(
-    'prebuilt\multica-eval-runtime.exe', 'bin\multica-eval-runtime.exe'
-)
-Copy-Item -LiteralPath $skillUpBinary -Destination (Join-Path $tools 'skill-up.exe') -Force
-Copy-Item -LiteralPath $multicaBinary -Destination (Join-Path $binRoot 'multica-eval-runtime.exe') -Force
+Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'PYTHON_EXECUTABLE' -Value 'backend/.runtime/windows/python/Scripts/python.exe'
+Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'NODE_EXECUTABLE' -Value 'backend/.runtime/windows/node/node.exe'
+Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'NPM_EXECUTABLE' -Value 'backend/.runtime/windows/node/npm.cmd'
+Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'GO_EXECUTABLE' -Value 'backend/.runtime/windows/go/bin/go.exe'
+Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'SKILLUP_EXECUTABLE' -Value 'backend/.tools/windows/skill-up.exe'
+Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'MULTICA_EXECUTABLE' -Value 'backend/.runtime/windows/bin/multica-eval-runtime.exe'
+
+Write-Host 'Building Skill-Up from bundled source and vendor dependencies...' -ForegroundColor Cyan
+& (Join-Path $ProjectRoot 'build_skillup_windows.ps1')
+Write-Host 'Building Multica evaluation runtime from bundled source and vendor dependencies...' -ForegroundColor Cyan
+& (Join-Path $ProjectRoot 'build_multica_windows.ps1')
 
 $questionBank = Find-AgentEvalAsset -ReleaseRoot $ReleaseRoot -Optional -Patterns @(
     'question-bank\maeval-public.db', 'question-bank\maeval.db'
@@ -246,13 +249,6 @@ if (-not $SkipJustDo) {
         Write-Warning 'JustDo-agent.exe was not found automatically; set JUSTDO_AGENT_EXECUTABLE in .env manually.'
     }
 }
-
-Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'PYTHON_EXECUTABLE' -Value 'backend/.runtime/windows/python/Scripts/python.exe'
-Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'NODE_EXECUTABLE' -Value 'backend/.runtime/windows/node/node.exe'
-Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'NPM_EXECUTABLE' -Value 'backend/.runtime/windows/node/npm.cmd'
-Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'GO_EXECUTABLE' -Value 'backend/.runtime/windows/go/bin/go.exe'
-Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'SKILLUP_EXECUTABLE' -Value 'backend/.tools/windows/skill-up.exe'
-Set-AgentEvalEnvValue -ProjectRoot $ProjectRoot -Name 'MULTICA_EXECUTABLE' -Value 'backend/.runtime/windows/bin/multica-eval-runtime.exe'
 
 if (-not $SkipVerify) { & (Join-Path $ProjectRoot 'doctor.ps1') }
 Write-Host 'WINDOWS_OFFLINE_INSTALL_OK' -ForegroundColor Green

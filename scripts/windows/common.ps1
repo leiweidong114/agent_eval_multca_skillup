@@ -197,3 +197,27 @@ function Invoke-WithAgentEvalPythonIsolation {
         }
     }
 }
+
+function Invoke-WithAgentEvalOfflineGo {
+    param([Parameter(Mandatory)][scriptblock]$ScriptBlock)
+
+    $names = @('GOTOOLCHAIN', 'GOPROXY', 'GOSUMDB')
+    $saved = @{}
+    foreach ($name in $names) {
+        $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+    }
+    $env:GOTOOLCHAIN = 'local'
+    $env:GOPROXY = 'off'
+    $env:GOSUMDB = 'off'
+    try {
+        & $ScriptBlock
+    }
+    finally {
+        foreach ($name in $names) {
+            Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+            if ($null -ne $saved[$name]) {
+                Set-Item -LiteralPath "Env:$name" -Value $saved[$name]
+            }
+        }
+    }
+}

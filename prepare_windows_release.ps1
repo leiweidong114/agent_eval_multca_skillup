@@ -11,8 +11,6 @@ param(
     [string]$JustDoInstaller = 'D:\AI_FOR_WORLD\14_AI_workspace\common_tools\JustDo\release\JustDo Setup 2026.8.27.exe',
     [string]$SkillUpSource,
     [string]$MulticaSource,
-    [string]$SkillUpBinary,
-    [string]$MulticaBinary,
     [string]$ZipPath,
     [switch]$SkipVendor
 )
@@ -25,10 +23,7 @@ Import-AgentEvalEnv -ProjectRoot $projectRoot | Out-Null
 
 if (-not $SkillUpSource) { $SkillUpSource = Join-Path $projectRoot 'backend\.runtime\windows\src\skill-up' }
 if (-not $MulticaSource) { $MulticaSource = Join-Path $projectRoot 'backend\.runtime\windows\src\multica' }
-if (-not $SkillUpBinary) { $SkillUpBinary = Join-Path $projectRoot 'backend\.tools\windows\skill-up.exe' }
-if (-not $MulticaBinary) { $MulticaBinary = Join-Path $projectRoot 'backend\.runtime\windows\bin\multica-eval-runtime.exe' }
-
-$requiredFiles = @($GoArchive, $NodeArchive, $PythonPackage, $QuestionBank, $JustDoInstaller, $SkillUpBinary, $MulticaBinary)
+$requiredFiles = @($GoArchive, $NodeArchive, $PythonPackage, $QuestionBank, $JustDoInstaller)
 foreach ($path in $requiredFiles) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required file was not found: $path" }
 }
@@ -48,10 +43,9 @@ $toolchains = Join-Path $output 'toolchains'
 $releaseWheelhouse = Join-Path $output 'python\wheelhouse'
 $releaseNpmCache = Join-Path $output 'frontend\npm-cache'
 $releaseSources = Join-Path $output 'sources'
-$prebuilt = Join-Path $output 'prebuilt'
 $justDo = Join-Path $output 'justdo'
 $questionBankRoot = Join-Path $output 'question-bank'
-New-Item -ItemType Directory -Force -Path $toolchains, $releaseWheelhouse, $releaseNpmCache, $releaseSources, $prebuilt, $justDo, $questionBankRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $toolchains, $releaseWheelhouse, $releaseNpmCache, $releaseSources, $justDo, $questionBankRoot | Out-Null
 
 Copy-Item -LiteralPath $GoArchive, $NodeArchive, $PythonPackage -Destination $toolchains
 if ($VCRedist) {
@@ -71,8 +65,6 @@ function Copy-ReleaseSource {
 }
 Copy-ReleaseSource -Source $SkillUpSource -Destination (Join-Path $releaseSources 'skill-up')
 Copy-ReleaseSource -Source $MulticaSource -Destination (Join-Path $releaseSources 'multica')
-Copy-Item -LiteralPath $SkillUpBinary -Destination (Join-Path $prebuilt 'skill-up.exe')
-Copy-Item -LiteralPath $MulticaBinary -Destination (Join-Path $prebuilt 'multica-eval-runtime.exe')
 Copy-Item -LiteralPath $JustDoInstaller -Destination $justDo
 Copy-Item -LiteralPath $QuestionBank -Destination (Join-Path $questionBankRoot 'maeval-public.db')
 

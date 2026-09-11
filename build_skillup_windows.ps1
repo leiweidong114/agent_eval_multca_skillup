@@ -37,11 +37,13 @@ if (Test-Path -LiteralPath $patch) {
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $binary) | Out-Null
 $temporaryBinary = "$binary.new"
-Invoke-AgentEvalCommand -FilePath $go -WorkingDirectory $source -ArgumentList @(
-    'build', '-mod=vendor', '-trimpath', '-o', $temporaryBinary, '.\cmd\skill-up'
-)
-if ($Test) {
-    Invoke-AgentEvalCommand -FilePath $go -WorkingDirectory $source -ArgumentList @('test', '-mod=vendor', '.\...')
+Invoke-WithAgentEvalOfflineGo {
+    Invoke-AgentEvalCommand -FilePath $go -WorkingDirectory $source -ArgumentList @(
+        'build', '-mod=vendor', '-trimpath', '-o', $temporaryBinary, '.\cmd\skill-up'
+    )
+    if ($Test) {
+        Invoke-AgentEvalCommand -FilePath $go -WorkingDirectory $source -ArgumentList @('test', '-mod=vendor', '.\...')
+    }
 }
 Move-Item -LiteralPath $temporaryBinary -Destination $binary -Force
 Write-Host "SKILL_UP_BUILD_OK: $binary" -ForegroundColor Green

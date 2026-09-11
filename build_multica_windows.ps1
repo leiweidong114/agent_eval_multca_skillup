@@ -26,13 +26,15 @@ Copy-Item -LiteralPath (Join-Path $runnerSource 'main_test.go') -Destination $ru
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $binary) | Out-Null
 
 $temporaryBinary = "$binary.new"
-Invoke-AgentEvalCommand -FilePath $go -WorkingDirectory $server -ArgumentList @(
-    'build', '-mod=vendor', '-trimpath', '-o', $temporaryBinary, '.\cmd\multica-eval-runtime'
-)
-if ($Test) {
+Invoke-WithAgentEvalOfflineGo {
     Invoke-AgentEvalCommand -FilePath $go -WorkingDirectory $server -ArgumentList @(
-        'test', '-mod=vendor', '.\cmd\multica-eval-runtime'
+        'build', '-mod=vendor', '-trimpath', '-o', $temporaryBinary, '.\cmd\multica-eval-runtime'
     )
+    if ($Test) {
+        Invoke-AgentEvalCommand -FilePath $go -WorkingDirectory $server -ArgumentList @(
+            'test', '-mod=vendor', '.\cmd\multica-eval-runtime'
+        )
+    }
 }
 Move-Item -LiteralPath $temporaryBinary -Destination $binary -Force
 Write-Host "MULTICA_BUILD_OK: $binary" -ForegroundColor Green
