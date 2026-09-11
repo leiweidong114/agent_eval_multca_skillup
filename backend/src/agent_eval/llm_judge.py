@@ -92,7 +92,11 @@ def _json_object(text: str) -> dict[str, Any]:
 
 
 def run_llm_judge(
-    *, project_root: Path, scoring_config: dict[str, Any], evidence: dict[str, Any]
+    *,
+    project_root: Path,
+    scoring_config: dict[str, Any],
+    evidence: dict[str, Any],
+    system_prompt: str | None = None,
 ) -> dict[str, Any]:
     config = scoring_config.get("llm_judge") or {}
     if not config.get("enabled", False):
@@ -122,7 +126,7 @@ def run_llm_judge(
             "temperature": float(config.get("temperature", 0)),
             "response_format": {"type": "json_object"},
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
                 {"role": "user", "content": "Evaluate this evidence:\n" + evidence_text},
             ],
         }

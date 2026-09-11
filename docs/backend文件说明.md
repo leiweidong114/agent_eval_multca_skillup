@@ -28,6 +28,8 @@ Skill 评测	[runner.py (line 372)](/D:/AI_FOR_WORLD/14_AI_workspace/common_tool
 Skill 管理/组合	[skill_registry.py (line 48)](/D:/AI_FOR_WORLD/14_AI_workspace/common_tools/agent_eval_multca_skillup/backend/app/skill_registry.py:48)	上传、删除、版本管理、多个 Skill 合并
 Skill 质量评分	[skill_quality.py](D:/AI_FOR_WORLD/14_AI_workspace/common_tools/agent_eval_multca_skillup/backend/src/agent_eval/skill_quality.py)	检查 SKILL.md、目录、脚本、评测用例质量
 过程和规则评分	[scoring.py (line 121)](/D:/AI_FOR_WORLD/14_AI_workspace/common_tools/agent_eval_multca_skillup/backend/src/agent_eval/scoring.py:121)	工具调用、subagent、时长、token、Skill 读取证据等评分
+评测器插件接口	[evaluators/protocol.py](/D:/AI_FOR_WORLD/14_AI_workspace/common_tools/agent_eval_multca_skillup/backend/src/agent_eval/evaluators/protocol.py)	固定插件输入、输出和 API 版本
+评测器注册与加载	[evaluators/registry.py](/D:/AI_FOR_WORLD/14_AI_workspace/common_tools/agent_eval_multca_skillup/backend/src/agent_eval/evaluators/registry.py)	按 `.env` 注册内置或内网外部评测器
 LLM Judge	[llm_judge.py (line 94)](/D:/AI_FOR_WORLD/14_AI_workspace/common_tools/agent_eval_multca_skillup/backend/src/agent_eval/llm_judge.py:94)	使用配置的 LiteLLM 模型对结果、过程和 Skill 质量进行 Judge
 原理图评测入口	[routes_eval.py (line 61)](/D:/AI_FOR_WORLD/14_AI_workspace/common_tools/agent_eval_multca_skillup/backend/app/api/routes_eval.py:61)	evaluation_type=schematic 时加载设置中指定的原理图 Skills
 原理图四 Skill 组合	[cli_catalog.py (line 11)](/D:/AI_FOR_WORLD/14_AI_workspace/common_tools/agent_eval_multca_skillup/backend/src/agent_eval/cli_catalog.py:11)	定义四个原理图 Skill，并生成组合评测 Bundle
@@ -76,6 +78,8 @@ backend/src/agent_eval 的作用
 - scoring.py：规则、过程和工具/subagent 指标。
 - llm_judge.py：LLM Judge。
 - skill_quality.py：Skill 本身质量评分。
+- evaluators/：稳定评测器协议、默认兼容实现及外部插件注册器。
+- skill_sources.py：从 `.env` 配置的外部目录发现内网私有 Skill。
 - failure.py：错误分类和用户可读提示。
 - cli_catalog.py：Skill/结果查询以及原理图 Skill Bundle。
 backend/src/maeval 的作用

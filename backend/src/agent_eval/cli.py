@@ -34,6 +34,7 @@ from agent_eval.model_config import (
     describe_model_config,
     discover_available_models,
     load_litellm_model_catalog,
+    load_runtime_settings,
     refresh_litellm_model_catalog,
     resolve_config_secret,
     resolve_model_profile,
@@ -51,6 +52,7 @@ from agent_eval.runtime import (
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 from agent_eval.failure import describe_evaluation_failure
 from agent_eval.env_config import apply_root_env
+from agent_eval.skill_sources import resolve_external_skill
 
 
 # backend/src/agent_eval/cli.py -> parents[2] = backend
@@ -98,6 +100,7 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
         "--require-model-verification", action=argparse.BooleanOptionalAction, default=True
     )
     parser.add_argument("--llm-judge", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--evaluator", dest="evaluator_id", help="Installed evaluator id")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -147,6 +150,7 @@ def _parser() -> argparse.ArgumentParser:
         default=True,
         help="Run the configured LiteLLM judge in addition to deterministic rules",
     )
+    run.add_argument("--evaluator", dest="evaluator_id", help="Installed evaluator id")
 
     commands.add_parser("doctor", help="Check the local skill-up and Multica runtime")
     gateway_check = commands.add_parser("check-litellm", help="Check API authentication and optional real inference")
@@ -835,6 +839,9 @@ def _resolve_cli_skill(value: str) -> Path:
     candidate = (PROJECT_ROOT / "skills" / value).resolve()
     if (candidate / "SKILL.md").is_file():
         return candidate
+    external = resolve_external_skill(PROJECT_ROOT, value)
+    if external is not None:
+        return external
     raise FileNotFoundError(f"Skill was not found: {value}")
 
 
@@ -885,6 +892,7 @@ def _evaluation_batch(
                 run_llm_judge_enabled=args.llm_judge,
                 evaluation_type=evaluation_type,
                 selected_skills=selected_skills,
+                evaluator_id=getattr(args, "evaluator_id", None),
             )
             scores = result.get("scores") or {}
             passed = evaluation_passed(result)
@@ -1045,8 +1053,13 @@ def main() -> None:
         raise SystemExit(0 if result["status"] == "completed" else 1)
     if args.command in {"run-multi", "pipeline-eval"}:
         if args.command == "pipeline-eval":
-            selected_skills = list(SCHEMATIC_PIPELINE_SKILLS)
-            skill_dir = compose_skill_bundle(PROJECT_ROOT)
+            configured = load_runtime_settings(PROJECT_ROOT).get("schematic_skills")
+            selected_skills = (
+                list(configured)
+                if isinstance(configured, list) and configured
+                else list(SCHEMATIC_PIPELINE_SKILLS)
+            )
+            skill_dir = compose_skill_bundle(PROJECT_ROOT, tuple(selected_skills))
             evaluation_type = "schematic"
         else:
             skill_dir = _resolve_cli_skill(args.skill)
@@ -1086,6 +1099,7 @@ def main() -> None:
         task_id=args.task_id,
         client_task_id=args.client_task_id,
         run_llm_judge_enabled=args.llm_judge,
+        evaluator_id=args.evaluator_id,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     raise SystemExit(

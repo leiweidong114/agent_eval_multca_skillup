@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+from agent_eval.skill_sources import resolve_external_skill
+
 
 SCHEMATIC_PIPELINE_SKILLS = (
     "schematic-pipeline",
@@ -113,6 +115,8 @@ def compose_skill_bundle(
     for name in skill_names:
         source = (backend_root / "skills" / name).resolve()
         if not (source / "SKILL.md").is_file():
+            source = resolve_external_skill(backend_root, name) or source
+        if not (source / "SKILL.md").is_file():
             raise FileNotFoundError(f"Required pipeline Skill was not found: {name}")
         digest.update(name.encode("utf-8"))
         digest.update(b"\0")
@@ -133,12 +137,12 @@ def compose_skill_bundle(
     lines = [
         "---",
         f"name: {bundle_name}",
-        "description: Evaluate the complete four-Skill schematic generation pipeline.",
+        "description: Evaluate the configured schematic generation Skill pipeline.",
         "---",
         "",
         "# Schematic Pipeline Evaluation Bundle",
         "",
-        "Read and use all four bundled Skills. The orchestration Skill is authoritative",
+        "Read and use all bundled Skills. The orchestration Skill is authoritative",
         "for execution order; the remaining Skills implement its three stages.",
         "The children are bundled files, not separately installed Skill tools. Read the",
         "exact paths below and run scripts from those directories.",

@@ -65,6 +65,22 @@ def test_composes_all_four_pipeline_skills(tmp_path):
     assert len(list((bundle / "skills").iterdir())) == 4
 
 
+def test_pipeline_bundle_can_include_an_external_private_skill(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    private_skill = tmp_path / "private-skills" / "schematic-large"
+    private_skill.mkdir(parents=True)
+    (private_skill / "SKILL.md").write_text("# Private Skill\n", encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        'EXTERNAL_SKILL_PATHS_JSON=["private-skills"]\n', encoding="utf-8"
+    )
+
+    bundle = compose_skill_bundle(backend, ("schematic-large",))
+
+    assert "schematic-large" in (bundle / "SKILL.md").read_text(encoding="utf-8")
+    assert (next((bundle / "skills").iterdir()) / "SKILL.md").is_file()
+
+
 def test_prompt_batch_sends_same_prompt_to_each_agent(monkeypatch):
     seen = []
 

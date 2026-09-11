@@ -29,6 +29,9 @@ def test_health_and_discovery_endpoints(monkeypatch):
     assert model_config.status_code == 200
     assert "profile" not in model_config.json()["llm_judge"]
     assert model_config.json()["llm_judge"]["model"] == "test-judge-model"
+    evaluators = client.get("/api/evaluators")
+    assert evaluators.status_code == 200
+    assert {item["id"] for item in evaluators.json()} >= {"generic", "schematic-default"}
 
 
 def test_agent_path_endpoint_persists_shared_executable(tmp_path, monkeypatch):
@@ -126,6 +129,27 @@ def test_run_request_supports_single_and_joint_skill_payloads():
     assert legacy.skills == ["example-marker"]
     assert joint.skill == "example-marker"
     assert joint.skills == ["example-marker", "schematic-generation"]
+
+
+def test_run_request_accepts_a_stable_evaluator_id():
+    request = RunRequest(
+        agent="codex",
+        skill="example-marker",
+        prompt="test",
+        evaluator_id="private-evaluator-v2",
+    )
+    assert request.evaluator_id == "private-evaluator-v2"
+
+
+def test_run_rejects_an_uninstalled_evaluator_before_queueing():
+    response = client.post("/api/run", json={
+        "agent": "codex",
+        "skill": "example-marker",
+        "prompt": "test",
+        "evaluator_id": "not-installed",
+    })
+    assert response.status_code == 400
+    assert "not installed" in response.json()["detail"]
 
 
 def test_skill_files_can_be_read_without_escaping_the_skill_root():

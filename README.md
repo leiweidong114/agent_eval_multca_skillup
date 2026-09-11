@@ -21,6 +21,7 @@ agent_eval_multca_skillup/
 │   │   ├── job_manager.py / retention.py / model_eval.py
 │   │   └── api/              # REST 路由（routes_eval/routes_skill/routes_runs/routes_schematic）
 │   ├── src/                  # 原有 agent_eval 评测核心逻辑（CLI 引擎、评分、报告）
+│   ├── evaluator_plugins.example/ # 可复制到内网的外部评测器模板
 │   ├── tests/                # 后端/评测核心 Python 单元测试
 │   ├── skills/               # 评测用 Skill 仓库（SKILL.md + scripts/references/evals）
 │   │   ├── api-test-suite-builder/  webapp-testing/   # Web/API 自动化测试类技能
@@ -96,6 +97,7 @@ agent_eval_multca_skillup/
 | GET | /api/model-config | 非敏感模型配置 |
 | GET | /api/models | 从 LiteLLM 发现模型并合并本地回退配置 |
 | GET | /api/database/health | PostgreSQL 直连状态与交互记录数 |
+| GET | /api/evaluators | 已安装的内置及外部评测器 |
 | POST | /api/run | 创建后台评测任务，立即返回 job_id |
 | GET/POST | /api/jobs、/api/jobs/{id}/cancel | 进度查询与取消 |
 | GET | /api/capacity | 顶层任务池与单任务 case 并发容量 |
@@ -111,6 +113,28 @@ agent_eval_multca_skillup/
 | GET/POST | /prism/api/providers、/prism/api/experiments | 模型/Agent 接入与题库实验 |
 | POST | /prism/api/providers/auto | 按模型 Profile 和 Agent 自动创建题库 Provider |
 | GET | /prism/api/experiments/{id}/results、/comparison | 逐题证据与统计比较 |
+
+### 内网专用 Skill 和评测器
+
+Skill/原理图评测支持稳定的 `agent-eval-evaluator-v1` 插件协议。公共运行器负责
+Agent 执行、轨迹采集和统一报告；插件只负责把标准化证据转换为规则分数、Judge
+证据、Judge 提示词及领域扩展指标。未指定 `evaluator_id` 的旧请求保持兼容。
+
+在内网复制 `backend/evaluator_plugins.example/schematic-custom`，把私有 Skill 和
+评测代码放在仓库之外，然后在根目录 `.env` 配置：
+
+```dotenv
+EXTERNAL_SKILL_PATHS_JSON=["D:/private_skills"]
+EVALUATOR_PLUGIN_PATHS_JSON=["D:/private_eval_plugins"]
+DEFAULT_SKILL_EVALUATOR=generic
+DEFAULT_SCHEMATIC_EVALUATOR=schematic-large
+SCHEMATIC_SKILLS_JSON=["schematic-large-pipeline"]
+```
+
+也可以在单次 `POST /api/run` 请求中传入 `evaluator_id`，或在 CLI 使用
+`--evaluator schematic-large`。客户端只能选择已从 `.env` 目录加载的 ID，不能传入
+任意 Python 路径。统一报告继续保留三维分数字段，插件专用指标写入
+`scoring.extensions`，因此新增内网规则不需要修改公共 API 或前端。
 
 ### 统一评测前端
 

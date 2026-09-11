@@ -37,8 +37,9 @@ from agent_eval.litellm_trace import TraceKeyError, create_trace_key, delete_tra
 from agent_eval.failure import describe_evaluation_failure
 from agent_eval.agent_contract import assess_agent_contract
 from agent_eval.llm_judge import run_llm_judge
+from agent_eval.evaluators import resolve_evaluator
+from agent_eval.evaluators.protocol import EvaluationContext, EvaluationEvidence, PluginEvaluation
 from agent_eval.scoring import (
-    calculate_rule_dimensions,
     collect_process_metrics,
     collect_skill_read_evidence,
     supplement_database_tool_metrics,
@@ -402,6 +403,7 @@ def run_evaluation(
     run_llm_judge_enabled: bool = True,
     evaluation_type: str = "skill",
     selected_skills: list[str] | None = None,
+    evaluator_id: str | None = None,
 ) -> dict[str, Any]:
     def progress(phase: str, percent: int, message: str) -> None:
         if cancel_event is not None and cancel_event.is_set():
@@ -423,6 +425,11 @@ def run_evaluation(
     if not case_files and not prompt:
         raise ValueError("Pass at least one --case or --prompt")
     selected_skills = selected_skills or [source_skill.name]
+    evaluator = resolve_evaluator(
+        project_root,
+        evaluation_type=evaluation_type,
+        evaluator_id=evaluator_id,
+    )
     requested_agent = normalize_agent(agent)
     validate_evaluation_capabilities(
         requested_agent, require_model_selection=require_model_verification
@@ -580,6 +587,11 @@ def run_evaluation(
             "skill": str(source_skill),
             "skills": selected_skills,
             "evaluation_type": evaluation_type,
+            "evaluation": {
+                "evaluator_id": evaluator.id,
+                "evaluator_version": str(evaluator.version),
+                "api_version": evaluator.api_version,
+            },
             "result_dir": str(result_root),
             "validated": True,
             "skill_up_exit_code": 0,
@@ -871,28 +883,31 @@ def run_evaluation(
     process_metrics["total_duration_ms"] = scores.get("total_duration_ms", 0)
     skill_usage = collect_skill_read_evidence(interactions, selected_skills)
     scoring_config = load_scoring_config(project_root)
-    rule_dimensions = calculate_rule_dimensions(
-        scores=scores,
-        process=process_metrics,
-        skill_quality=skill_quality,
-        config=scoring_config,
+    plugin_evaluation = evaluator.evaluate(
+        context=EvaluationContext(
+            run_id=operation_id,
+            task_id=canonical_task_id,
+            evaluation_type=evaluation_type,
+            agent=agent,
+            requested_model=model,
+            skill_name=source_skill.name,
+            selected_skills=tuple(selected_skills),
+            skill_md=(source_skill / "SKILL.md").read_text(encoding="utf-8")[:30000],
+        ),
+        evidence=EvaluationEvidence(
+            deterministic_scores=scores,
+            process_metrics=process_metrics,
+            skill_usage=skill_usage,
+            skill_quality=skill_quality,
+            results=results,
+            interactions=interactions,
+        ),
+        scoring_config=scoring_config,
     )
-    llm_evidence = {
-        "task": {
-            "task_id": canonical_task_id,
-            "agent": agent,
-            "requested_model": model,
-            "skill": source_skill.name,
-            "skills": selected_skills,
-            "evaluation_type": evaluation_type,
-        },
-        "deterministic_scores": scores,
-        "process_metrics": process_metrics,
-        "skill_usage": skill_usage,
-        "skill_quality_rules": skill_quality,
-        "skill_md": (source_skill / "SKILL.md").read_text(encoding="utf-8")[:30000],
-        "skill_up_results": results,
-    }
+    if not isinstance(plugin_evaluation, PluginEvaluation):
+        raise TypeError(
+            f"Evaluator {evaluator.id} must return PluginEvaluation from evaluator API v1"
+        )
     if not run_llm_judge_enabled:
         llm_judge = {"status": "disabled_by_request"}
     elif evaluation_status != "completed":
@@ -905,16 +920,18 @@ def run_evaluation(
         llm_judge = run_llm_judge(
             project_root=project_root,
             scoring_config=scoring_config,
-            evidence=llm_evidence,
+            evidence=plugin_evaluation.llm_evidence,
+            system_prompt=plugin_evaluation.judge_system_prompt,
         )
     scoring = combine_dimensions(
-        rule_dimensions=rule_dimensions,
+        rule_dimensions=plugin_evaluation.rule_dimensions,
         llm_judge=llm_judge,
         config=scoring_config,
     )
     scoring["status"] = "completed" if not run_llm_judge_enabled or llm_judge.get("status") == "completed" else "partial"
     scoring["valid_for_ranking"] = evaluation_status == "completed" and scoring["status"] == "completed"
     scoring["diagnostic_only"] = not scoring["valid_for_ranking"]
+    scoring["extensions"] = plugin_evaluation.extensions
     scores["overall_score"] = scoring["overall_score"]
     scores["result_dimension_score"] = scoring["dimensions"]["result"]["score"]
     scores["process_dimension_score"] = scoring["dimensions"]["process"]["score"]
@@ -943,6 +960,11 @@ def run_evaluation(
         "skill": str(source_skill),
         "skills": selected_skills,
         "evaluation_type": evaluation_type,
+        "evaluation": {
+            "evaluator_id": evaluator.id,
+            "evaluator_version": str(evaluator.version),
+            "api_version": evaluator.api_version,
+        },
         "result_dir": str(result_root),
         "skill_up_exit_code": completed.returncode,
         "iterations": len(results),

@@ -39,6 +39,7 @@ from agent_eval.runtime import (
 )
 from agent_eval.scoring import load_scoring_config
 from agent_eval.cli_catalog import SCHEMATIC_PIPELINE_SKILLS
+from agent_eval.skill_sources import list_external_skills
 from app.config import BACKEND_ROOT, SKILLS_ROOT
 from app.skill_registry import (
     delete_skill,
@@ -436,10 +437,14 @@ def run_retention_cleanup(request: CleanupRequest) -> dict[str, object]:
 
 @router.get("/skills")
 def list_skills() -> dict[str, object]:
-    """List available Skills under backend/skills."""
+    """List built-in, uploaded, and .env-configured external Skills."""
     return {
         "root": str(SKILLS_ROOT),
-        "skills": _scan_skills(SKILLS_ROOT) + list_uploaded_skills(),
+        "skills": (
+            _scan_skills(SKILLS_ROOT)
+            + list_uploaded_skills()
+            + list_external_skills(BACKEND_ROOT)
+        ),
     }
 
 

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import SKILLS_ROOT
+from agent_eval.skill_sources import resolve_external_skill
 
 
 REGISTRY_ROOT = SKILLS_ROOT / ".registry"
@@ -129,7 +130,7 @@ def resolve_skill(identifier: str) -> Path | None:
         root = SKILLS_ROOT.resolve()
     if candidate != root and root in candidate.parents and (candidate / "SKILL.md").is_file():
         return candidate
-    return None
+    return resolve_external_skill(SKILLS_ROOT.parent, identifier)
 
 
 def compose_skills(identifiers: list[str]) -> Path:

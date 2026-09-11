@@ -73,7 +73,8 @@ class EvaluationJobManager:
             "status": "queued", "phase": "queued", "progress": 0,
             "message": "Waiting for a worker", "created_at": now, "updated_at": now,
             "skill": skill_dir.name, "skills": request.get("skills") or [skill_dir.name],
-            "evaluation_type": request.get("evaluation_type", "skill"), "agent": request.get("agent"),
+            "evaluation_type": request.get("evaluation_type", "skill"),
+            "evaluator_id": request.get("evaluator_id"), "agent": request.get("agent"),
             "user_id": request.get("user_id", "local"),
             "task_name": request.get("task_name") or skill_dir.name,
             "model": request.get("model"), "profile": request.get("profile"),
@@ -105,6 +106,7 @@ class EvaluationJobManager:
             "updated_at": now,
             "job_ids": [job["job_id"] for job in jobs],
             "evaluation_type": requests[0].get("evaluation_type", "skill"),
+            "evaluator_id": requests[0].get("evaluator_id"),
             "skills": requests[0].get("skills") or [skill_dir.name],
             "user_id": requests[0].get("user_id", "local"),
         }
@@ -233,6 +235,7 @@ class EvaluationJobManager:
                 run_llm_judge_enabled=request.get("llm_judge", True),
                 evaluation_type=request.get("evaluation_type", "skill"),
                 selected_skills=request.get("skills") or [skill_dir.name],
+                evaluator_id=request.get("evaluator_id"),
             )
             status = "completed" if result.get("status", "completed") == "completed" else "failed"
             failure = result.get("failure") if status == "failed" else None

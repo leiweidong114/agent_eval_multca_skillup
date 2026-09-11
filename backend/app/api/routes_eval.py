@@ -9,6 +9,8 @@ from agent_eval.runner import run_evaluation
 from agent_eval.runtime import validate_evaluation_capabilities
 from agent_eval.model_config import load_runtime_settings
 from agent_eval.cli_catalog import SCHEMATIC_PIPELINE_SKILLS
+from agent_eval.evaluators import list_evaluators as installed_evaluators
+from agent_eval.evaluators import resolve_evaluator
 from app.config import BACKEND_ROOT, RUNS_ROOT
 from app.job_manager import job_manager
 from app.skill_registry import compose_skills, resolve_skill
@@ -21,6 +23,11 @@ class RunRequest(BaseModel):
     task_name: str | None = Field(default=None, max_length=200)
     client_task_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$")
     evaluation_type: str = Field(default="skill", pattern=r"^(skill|schematic)$")
+    evaluator_id: str | None = Field(
+        default=None,
+        pattern=r"^[a-z0-9][a-z0-9-]{0,62}$",
+        description="Installed evaluator id; omitted uses the .env default",
+    )
     skill: str | None = Field(default=None, description="Backward-compatible primary Skill")
     skills: list[str] = Field(default_factory=list, max_length=8)
     agent: str = Field(..., description="Multica Agent backend name")
@@ -127,6 +134,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         run_llm_judge_enabled=request.llm_judge,
         evaluation_type=request.evaluation_type,
         selected_skills=request.skills,
+        evaluator_id=request.evaluator_id,
     )
     return result
 
@@ -136,6 +144,11 @@ def create_run(request: RunRequest) -> dict[str, object]:
     """Queue an evaluation and return immediately with a job id."""
     try:
         request = _apply_schematic_skill_settings(request)
+        resolve_evaluator(
+            BACKEND_ROOT,
+            evaluation_type=request.evaluation_type,
+            evaluator_id=request.evaluator_id,
+        )
         skill_dir = _resolve_request_skill(request)
         validate_evaluation_capabilities(
             request.agent,
@@ -153,6 +166,12 @@ def create_run(request: RunRequest) -> dict[str, object]:
 @router.get("/jobs")
 def list_jobs(user_id: str | None = None) -> list[dict[str, object]]:
     return job_manager.list(user_id=user_id)
+
+
+@router.get("/evaluators")
+def list_evaluators() -> list[dict[str, object]]:
+    """List built-in and .env-configured external evaluators."""
+    return installed_evaluators(BACKEND_ROOT)
 
 
 @router.get("/capacity")
