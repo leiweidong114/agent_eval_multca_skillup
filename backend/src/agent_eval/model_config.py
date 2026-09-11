@@ -418,6 +418,12 @@ def resolve_model_profile(
     # OpenAI-compatible and Anthropic-compatible conventions used by them.
     environment = {
         "LITELLM_API_KEY": api_key,
+        # JustDo's Multica bridge consumes these explicit values to provision a
+        # run-scoped provider. OPENAI_* alone is intentionally insufficient:
+        # JustDo may otherwise retain the model configured in its local UI.
+        "AGENT_EVAL_PROVIDER_PROTOCOL": "openai_compatible",
+        "AGENT_EVAL_PROVIDER_BASE_URL": openai_base,
+        "AGENT_EVAL_PROVIDER_MODEL": gateway_model,
         "OPENAI_API_KEY": api_key,
         "OPENAI_BASE_URL": openai_base,
         "ANTHROPIC_API_KEY": api_key,
@@ -508,6 +514,10 @@ def resolve_model_profile(
             "-c",
             'web_search="disabled"',
         )
+    internal_gateway = bool(profile.get("internal_gateway", False))
+    override = source_environment.get("LITELLM_INTERNAL_GATEWAY")
+    if override is not None:
+        internal_gateway = override.strip().lower() in {"1", "true", "yes", "on"}
     return ResolvedModelProfile(
         selected,
         model,
@@ -798,10 +808,12 @@ def describe_model_config(project_root: Path) -> dict[str, Any]:
 def discover_available_models(
     project_root: Path,
     *,
+    employee_no: str | None = None,
     transport: httpx.BaseTransport | None = None,
 ) -> dict[str, Any]:
     """Read LiteLLM's OpenAI-compatible model catalog without exposing keys."""
     config = load_model_config(project_root)
+    source_environment = effective_environment(project_root)
     profiles = config.get("profiles") or {}
     models: dict[str, dict[str, Any]] = {}
     gateways: dict[str, list[str]] = {}
@@ -812,7 +824,11 @@ def discover_available_models(
     for name, value in profiles.items():
         if not isinstance(value, dict):
             continue
-        configured_model = str(value.get("model") or "").strip()
+        configured_model = str(
+            (source_environment.get("LITELLM_MODEL") if name == selected_profile else None)
+            or value.get("model")
+            or ""
+        ).strip()
         if str(value.get("type") or "").lower() == "native":
             if configured_model:
                 models.setdefault(
@@ -820,7 +836,11 @@ def discover_available_models(
                     {"id": configured_model, "source": "native", "profiles": []},
                 )["profiles"].append(name)
             continue
-        api_base = str(value.get("api_base") or "").strip()
+        api_base = str(
+            (source_environment.get("LITELLM_API_BASE") if name == selected_profile else None)
+            or value.get("api_base")
+            or ""
+        ).strip()
         if not api_base:
             continue
         openai_base, _ = _normalized_base_url(api_base)
@@ -830,7 +850,7 @@ def discover_available_models(
                 configured_model,
                 {"id": configured_model, "source": "configured", "profiles": []},
             )["profiles"].append(name)
-    with httpx.Client(timeout=8.0, transport=transport) as client:
+    with httpx.Client(timeout=8.0, transport=transport, trust_env=False) as client:
         for base_url, profile_names in gateways.items():
             first = profiles[profile_names[0]]
             key_name = str(first.get("api_key_env") or "LITELLM_API_KEY")
@@ -839,9 +859,13 @@ def discover_available_models(
                 errors.append({"api_base": base_url, "error": f"{key_name} is not configured"})
                 continue
             try:
+                profile = resolve_model_profile(project_root, profile_name=profile_names[0])
                 response = client.get(
                     f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        **gateway_request_headers(project_root, profile, employee_no),
+                    },
                 )
                 response.raise_for_status()
                 payload = response.json()
@@ -859,7 +883,7 @@ def discover_available_models(
                     item["profiles"] = sorted(set(item["profiles"] + profile_names))
             except (httpx.HTTPError, ValueError) as exc:
                 errors.append({"api_base": base_url, "error": str(exc)})
-    default_profile = str(config.get("default_profile") or "")
+    default_profile = selected_profile
     result = sorted(models.values(), key=lambda item: (item["source"] != "litellm", item["id"].lower()))
     for item in result:
         item["profiles"] = sorted(set(item["profiles"]))

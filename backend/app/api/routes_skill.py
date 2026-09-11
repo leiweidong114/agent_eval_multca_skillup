@@ -10,7 +10,7 @@ import mimetypes
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 import httpx
 from pydantic import BaseModel, Field, SecretStr
 
@@ -279,7 +279,7 @@ def remove_model_profile(profile_name: str) -> dict[str, object]:
 
 
 @router.get("/models")
-def list_models() -> dict[str, object]:
+def list_models(request: Request) -> dict[str, object]:
     """Return models discovered from LiteLLM plus configured native fallbacks."""
     result = discover_available_models(BACKEND_ROOT)
     try:
@@ -357,20 +357,20 @@ def put_runtime_settings(request: RuntimeSettingsRequest) -> dict[str, object]:
 
 
 @router.post("/models/test")
-def test_model(request: ModelTestRequest) -> dict[str, object]:
+def test_model(payload: ModelTestRequest, request: Request) -> dict[str, object]:
     """Send a minimal non-streaming completion through the selected LiteLLM profile."""
     started = time.perf_counter()
     try:
         profile = resolve_model_profile(
             BACKEND_ROOT,
-            profile_name=request.profile,
-            model_override=request.model,
+            profile_name=payload.profile,
+            model_override=payload.model,
         )
         if not profile.api_base:
             return {
                 "ok": True,
-                "model": request.model,
-                "profile": request.profile,
+                "model": payload.model,
+                "profile": payload.profile,
                 "duration_ms": 0,
                 "message": "本地原生模型配置有效；实际可用性由 Agent 负责",
             }
@@ -399,13 +399,17 @@ def test_model(request: ModelTestRequest) -> dict[str, object]:
             }
         response = httpx.post(endpoint, headers=headers, json=payload, timeout=30.0)
         response.raise_for_status()
-        payload = response.json()
-        actual_model = str(payload.get("model") or request.model) if isinstance(payload, dict) else request.model
+        response_payload = response.json()
+        actual_model = (
+            str(response_payload.get("model") or payload.model)
+            if isinstance(response_payload, dict)
+            else payload.model
+        )
         return {
             "ok": True,
-            "model": request.model,
+            "model": payload.model,
             "actual_model": actual_model,
-            "profile": request.profile,
+            "profile": payload.profile,
             "duration_ms": round((time.perf_counter() - started) * 1000),
             "message": "模型响应正常",
         }
@@ -421,8 +425,8 @@ def test_model(request: ModelTestRequest) -> dict[str, object]:
             )
         return {
             "ok": False,
-            "model": request.model,
-            "profile": request.profile,
+            "model": payload.model,
+            "profile": payload.profile,
             "duration_ms": round((time.perf_counter() - started) * 1000),
             "message": (failure or {}).get("detail") or str(exc)[:500],
             "failure": failure,

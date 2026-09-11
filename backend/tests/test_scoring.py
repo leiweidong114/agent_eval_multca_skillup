@@ -81,7 +81,7 @@ def test_collects_normalized_tool_token_context_and_subagent_metrics():
             "final_message": "done",
             "transcript": [
                 {"role": "assistant", "content": "working"},
-                {"role": "tool_call", "tool_call": {"id": "1", "name": "spawn_agent"}},
+                {"role": "tool_call", "tool_call": {"id": "1", "name": "sessions_spawn"}},
                 {"role": "tool_result", "tool_result": {"call_id": "1", "status": "completed"}},
                 {"role": "assistant", "content": "AGENT_EVAL_TELEMETRY_JSON:{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":2,\"models\":[\"tested-model\"]}"},
             ],

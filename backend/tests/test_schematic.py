@@ -28,6 +28,7 @@ def test_schematic_pipeline_and_judge(tmp_path):
 def test_schematic_api_returns_openable_project_url(tmp_path, monkeypatch):
     monkeypatch.setattr('app.api.routes_schematic.PROJECTS_ROOT', tmp_path)
     client = TestClient(app)
+    client.post("/api/auth/login", json={"employee_no": "schematic-user", "password": "x"})
     diagram = client.get("/api/schematic/example").json()
     response = client.post("/api/schematic/generate", json=diagram)
     assert response.status_code == 200, response.text

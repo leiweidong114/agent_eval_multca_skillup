@@ -300,6 +300,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
     runtime = find_multica_runtime(PROJECT_ROOT)
     env = os.environ.copy()
     env.update(profile.environment)
+    internal_headers = gateway_request_headers(PROJECT_ROOT, profile, args.user_id)
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = detected
     env["AGENT_EVAL_REQUESTED_AGENT"] = args.agent.strip().lower()
     env["AGENT_EVAL_SUBAGENT_MODEL"] = profile.model
@@ -323,6 +324,8 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 profile.gateway_model_for_agent(runtime_agent),
                 f"connectivity-{uuid.uuid4().hex}",
                 master_key=resolve_config_secret(PROJECT_ROOT, "LITELLM_MASTER_KEY"),
+                request_headers=internal_headers,
+                metadata={"agent_eval_user_id": args.user_id, "agent_eval_agent": args.agent},
             )
         except Exception as exc:
             return {
@@ -456,6 +459,14 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 translate_protocols=runtime_agent in {"claude", "codex"},
             )
             resilience_proxy.start()
+            env["OPENAI_BASE_URL"] = resilience_proxy.openai_base_url
+            env["MINIMAX_BASE_URL"] = resilience_proxy.openai_base_url
+            env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+            env["AGENT_EVAL_PROVIDER_BASE_URL"] = resilience_proxy.openai_base_url
+            if env.get("OPENCODE_CONFIG_CONTENT"):
+                opencode_config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
+                opencode_config["provider"]["litellm"]["options"]["baseURL"] = resilience_proxy.openai_base_url
+                env["OPENCODE_CONFIG_CONTENT"] = json.dumps(opencode_config, ensure_ascii=False)
             if runtime_agent == "claude":
                 env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
             elif runtime_agent == "codex":
@@ -468,12 +479,17 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                     endpoint=resilience_proxy.url,
                 )
             else:
-                write_openclaw_profile_config(
-                    Path(env["OPENCLAW_CONFIG_PATH"]),
-                    profile,
-                    workspace=root,
-                    api_base_override=resilience_proxy.openai_base_url,
-                )
+                if runtime_agent == "openclaw":
+                    write_openclaw_profile_config(
+                        Path(env["OPENCLAW_CONFIG_PATH"]), profile, workspace=root,
+                        api_base_override=resilience_proxy.openai_base_url,
+                    )
+                elif runtime_agent == "codex":
+                    command = [
+                        f'model_providers.litellm.base_url="{resilience_proxy.openai_base_url}"'
+                        if item.startswith("model_providers.litellm.base_url=") else item
+                        for item in command
+                    ]
         started_at = datetime.now(timezone.utc).replace(tzinfo=None)
         try:
             try:
@@ -512,6 +528,10 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                     finished_at=finished_at,
                     model=profile.model,
                     key_alias=trace_key.alias if trace_key else None,
+                    task_id=probe_id,
+                    user_id=args.user_id,
+                    agent=args.agent,
+                    requested_model=profile.model,
                 )
             database_trace = summarize_model_interactions(rows, exact=trace_key is not None)
             model_verification = verify_requested_model(
@@ -941,6 +961,7 @@ def _evaluation_batch(
 
 
 def main() -> None:
+    apply_root_env(PROJECT_ROOT)
     args = _parser().parse_args()
     if args.command in {"check-litellm", "check-database"}:
         from agent_eval.diagnostics import check_database, check_litellm

@@ -17,6 +17,7 @@ from agent_eval.database import (
     summarize_interaction_rows,
 )
 
+from app.auth import employee_from_request
 from app.config import RUNS_ROOT
 
 router = APIRouter(prefix="/api", tags=["runs"])
@@ -60,7 +61,7 @@ def _find_run_dir(run_id: str) -> Path | None:
 
 
 @router.get("/runs")
-def list_runs(user_id: str | None = None) -> list[dict[str, object]]:
+def list_runs(request: Request) -> list[dict[str, object]]:
     """List evaluation run directories with a report, newest first."""
     if not RUNS_ROOT.is_dir():
         return []
@@ -75,7 +76,7 @@ def list_runs(user_id: str | None = None) -> list[dict[str, object]]:
         report = _load_report(run_dir)
         if report is None:
             continue
-        if user_id is not None and report.get("user_id") != user_id:
+        if report.get("user_id") != employee_from_request(request):
             continue
         entries.append(
             {
@@ -91,7 +92,7 @@ def list_runs(user_id: str | None = None) -> list[dict[str, object]]:
 
 
 @router.get("/runs/{run_id}")
-def get_run(run_id: str) -> dict[str, object]:
+def get_run(run_id: str, request: Request) -> dict[str, object]:
     """Return a single evaluation report by run_id."""
     found = _find_run(run_id)
     if found:

@@ -30,7 +30,9 @@ def _judge_request(endpoint: str, *, headers: dict[str, str], body: dict[str, An
     last_response: httpx.Response | None = None
     for attempt in range(4):
         try:
-            response = httpx.post(endpoint, headers=headers, json=body, timeout=timeout)
+            response = httpx.post(
+                endpoint, headers=headers, json=body, timeout=timeout, trust_env=False
+            )
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             last_error = exc
         else:
@@ -130,7 +132,10 @@ def run_llm_judge(
                 {"role": "user", "content": "Evaluate this evidence:\n" + evidence_text},
             ],
         }
-        headers = {"Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}"}
+        headers = {
+            "Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}",
+            **gateway_request_headers(project_root, profile, employee_no),
+        }
         timeout = float(config.get("timeout_seconds") or 120)
         response = _judge_request(
             endpoint, headers=headers, body=request_body, timeout=timeout

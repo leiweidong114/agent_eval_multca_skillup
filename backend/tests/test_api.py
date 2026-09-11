@@ -7,6 +7,21 @@ from app.api.routes_eval import RunRequest, _apply_schematic_skill_settings
 
 
 client = TestClient(app)
+assert client.post(
+    "/api/auth/login", json={"employee_no": "test-worker", "password": "ignored"}
+).status_code == 200
+
+
+def test_login_is_required_and_password_is_not_returned():
+    anonymous = TestClient(app)
+    assert anonymous.get("/api/agents").status_code == 401
+    response = anonymous.post(
+        "/api/auth/login", json={"employee_no": "E10001", "password": "not-validated"}
+    )
+    assert response.status_code == 200
+    assert response.json()["employee_no"] == "E10001"
+    assert "password" not in response.text.lower()
+    assert anonymous.get("/api/auth/me").json()["employee_no"] == "E10001"
 
 
 def test_health_and_discovery_endpoints(monkeypatch):

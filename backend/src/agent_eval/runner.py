@@ -613,11 +613,19 @@ def run_evaluation(
     trace_key_error: str | None = None
     if collect_database_trace and resolved_profile.api_base:
         try:
+            internal_headers = gateway_request_headers(project_root, resolved_profile, user_id)
             trace_key = create_trace_key(
                 resolved_profile.api_base,
                 gateway_model,
                 operation_id,
                 master_key=resolve_config_secret(project_root, "LITELLM_MASTER_KEY"),
+                request_headers=internal_headers,
+                metadata={
+                    "agent_eval_user_id": user_id,
+                    "agent_eval_task_id": canonical_task_id,
+                    "agent_eval_agent": requested_agent,
+                    "agent_eval_model": provider_model,
+                },
             )
             if trace_key is not None:
                 for key_name in CREDENTIAL_ENV_NAMES:
@@ -721,6 +729,14 @@ def run_evaluation(
                 pass
             raise
         gateway_resilience = {"status": "active"}
+        env["OPENAI_BASE_URL"] = resilience_proxy.openai_base_url
+        env["MINIMAX_BASE_URL"] = resilience_proxy.openai_base_url
+        env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+        env["AGENT_EVAL_PROVIDER_BASE_URL"] = resilience_proxy.openai_base_url
+        if env.get("OPENCODE_CONFIG_CONTENT"):
+            opencode_config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
+            opencode_config["provider"]["litellm"]["options"]["baseURL"] = resilience_proxy.openai_base_url
+            env["OPENCODE_CONFIG_CONTENT"] = json.dumps(opencode_config, ensure_ascii=False)
         if agent == "claude":
             env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
         elif agent == "codex":
@@ -802,6 +818,10 @@ def run_evaluation(
                     finished_at=evaluation_finished_at,
                     model=provider_model,
                     key_alias=trace_key.alias if trace_key else None,
+                    task_id=canonical_task_id,
+                    user_id=user_id,
+                    agent=requested_agent,
+                    requested_model=provider_model,
                 )
             database_trace = summarize_model_interactions(interactions, exact=trace_key is not None)
             database_trace["collection_policy"] = "bounded_60s_wait_for_stable_rows_not_lossless_guarantee"

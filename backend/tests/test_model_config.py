@@ -18,6 +18,20 @@ from agent_eval.model_config import (
 )
 
 
+def test_internal_headers_are_profile_scoped(tmp_path):
+    _write_config(tmp_path)
+    profile = resolve_model_profile(
+        tmp_path, environ={"TEST_LITELLM_KEY": "secret"}
+    )
+    assert gateway_request_headers(tmp_path, profile, "E123") == {}
+    internal = profile.__class__(
+        **{**profile.__dict__, "internal_gateway": True}
+    )
+    assert gateway_request_headers(tmp_path, internal, "E123") == {
+        "User-Agent": "OpenAI/Python", "x-cookie": "11", "x-user-account": "E123"
+    }
+
+
 def _write_config(root: Path) -> None:
     config = root / "config"
     config.mkdir()
@@ -51,6 +65,9 @@ def test_resolves_default_litellm_profile_and_agent_environment(tmp_path):
     assert profile.model == "MiniMax-M3"
     assert profile.api_base == "http://127.0.0.1:4000/v1"
     assert profile.environment["OPENAI_BASE_URL"] == "http://127.0.0.1:4000/v1"
+    assert profile.environment["AGENT_EVAL_PROVIDER_PROTOCOL"] == "openai_compatible"
+    assert profile.environment["AGENT_EVAL_PROVIDER_BASE_URL"] == "http://127.0.0.1:4000/v1"
+    assert profile.environment["AGENT_EVAL_PROVIDER_MODEL"] == profile.gateway_model_for_agent("openclaw")
     assert profile.environment["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:4000"
     assert profile.environment["OPENAI_API_KEY"] == "virtual-key"
     assert profile.environment["ANTHROPIC_AUTH_TOKEN"] == "virtual-key"
@@ -197,10 +214,39 @@ def test_root_env_overrides_model_without_committing_a_key(tmp_path):
     description = describe_model_config(tmp_path)
 
     assert profile.model == "MiniMax-M3-test"
+    assert profile.api_base == "http://gateway.example:4100"
+    assert profile.environment["OPENAI_BASE_URL"] == "http://gateway.example:4100/v1"
     assert profile.environment["LITELLM_API_KEY"] == "local-key"
     assert description["default_model"] == "MiniMax-M3-test"
+    assert description["api_base"] == "http://gateway.example:4100"
     assert description["api_key_configured"] is True
-    assert description["profile_models"] == {"minimax": "MiniMax-M3-test"}
+
+
+def test_process_environment_overrides_root_env(tmp_path):
+    _write_config(tmp_path)
+    (tmp_path / ".env").write_text(
+        "TEST_LITELLM_KEY=file-key\nLITELLM_MODEL=file-model\n",
+        encoding="utf-8",
+    )
+
+    profile = resolve_model_profile(
+        tmp_path,
+        environ={"TEST_LITELLM_KEY": "process-key", "LITELLM_MODEL": "process-model"},
+    )
+
+    assert profile.model == "process-model"
+    assert profile.environment["LITELLM_API_KEY"] == "process-key"
+
+
+def test_backend_project_reads_env_from_repository_root(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    _write_config(backend)
+    (tmp_path / ".env").write_text("TEST_LITELLM_KEY=root-key\n", encoding="utf-8")
+
+    profile = resolve_model_profile(backend, environ={})
+
+    assert profile.environment["LITELLM_API_KEY"] == "root-key"
 
 
 def test_missing_virtual_key_is_rejected(tmp_path):

@@ -4,6 +4,16 @@ import httpx
 import pytest
 
 from agent_eval.failure import describe_evaluation_failure
+
+
+def test_domain_numbers_are_not_misclassified_as_http_statuses():
+    failure = describe_evaluation_failure(
+        "assertion failed: continuous current must stay below 500mA",
+        returncode=1,
+    )
+    assert failure is not None
+    assert failure["category"] == "agent_execution_failed"
+    assert failure["status_code"] is None
 from agent_eval.llm_judge import JudgeGatewayError, _judge_request
 
 

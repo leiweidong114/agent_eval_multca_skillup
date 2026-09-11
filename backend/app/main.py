@@ -15,7 +15,7 @@ from app.model_eval import model_eval_app
 app = FastAPI(
     title="Agent Eval Multca Skillup API",
     version="0.1.0",
-    description="Local, login-free Agent Skill evaluation backend",
+    description="Agent Skill evaluation backend with claimed employee identity",
 )
 
 # 允许前端开发服务器跨域调用（Vite 默认 http://localhost:5173）
@@ -27,6 +27,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def require_claimed_login(request: Request, call_next):
+    path = request.url.path
+    protected = path.startswith("/api/") or path.startswith("/prism/api/")
+    public = path == "/api/health" or path.startswith("/api/auth/") or not protected
+    if not public:
+        from app.auth import identity_from_request
+
+        if identity_from_request(request, required=False) is None:
+            return JSONResponse({"detail": "请先登录"}, status_code=401)
+    return await call_next(request)
+
+app.include_router(routes_auth.router)
 app.include_router(routes_skill.router)
 app.include_router(routes_eval.router)
 app.include_router(routes_runs.router)

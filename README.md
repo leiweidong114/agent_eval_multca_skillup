@@ -1,5 +1,8 @@
 # agent_eval_multca_skillup
 
+新电脑部署、内网 LiteLLM Header、数据库权限及 JustDo 子 Agent 适配见
+[docs/new-computer-setup.md](docs/new-computer-setup.md)。
+
 一个本地、无 Multica 登录的 Agent Skill 评测工具。支持 Agent 原生模型认证或远程 LiteLLM，并可直接读取 LiteLLM PostgreSQL 交互数据参与过程评测：
 
 - Skill-Up 负责隔离 Skill、执行用例、断言、基准对照和生成 JSON/HTML/JUnit 报告。
@@ -246,6 +249,10 @@ LITELLM_API_KEY=sk-your-virtual-key
 LITELLM_MODEL=glm-4.5-air
 LITELLM_JUDGE_MODEL=glm-4.5-air
 ```
+
+`.env` 被 Git 忽略；`backend/config/models.yaml`、`database.yaml` 和 `scoring.yaml`
+只保存程序内置的 profile、Agent 路由和默认策略，不再作为部署者的配置入口。
+进程环境变量可临时覆盖 `.env` 中的同名值。
 
 运行时会为不同 Agent CLI 同时提供 OpenAI 兼容变量
 `OPENAI_BASE_URL`/`OPENAI_API_KEY` 和 Anthropic 兼容变量

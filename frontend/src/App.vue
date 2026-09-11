@@ -1,4 +1,7 @@
 <template>
+  <LoginView v-if="!loading && !identity" @logged-in="identity = $event" />
+  <div v-else-if="loading" class="auth-loading">正在加载…</div>
+  <template v-else>
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">A</span><div><strong>AGENT EVAL</strong><small>MODEL × SKILL LAB</small></div></div>
     <el-menu :default-active="activeMenu" router class="navigation">
@@ -11,7 +14,7 @@
       <el-menu-item index="/runtimes"><el-icon><Cpu /></el-icon><span>模型与 Agent</span></el-menu-item>
       <el-menu-item index="/settings"><el-icon><Setting /></el-icon><span>设置</span></el-menu-item>
     </el-menu>
-    <div class="side-foot"><span class="dot ok"></span><div>服务运行状态<small>本地评测服务已连接</small></div></div>
+    <div class="side-foot"><span class="dot ok"></span><div><b>{{ identity.employee_no }}</b><small>已登录 · 声明身份</small></div><el-button link @click="signOut">退出</el-button></div>
   </aside>
   <main class="app-main">
     <header class="page-header">
@@ -20,13 +23,22 @@
     </header>
     <router-view />
   </main>
+  </template>
 </template>
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import LoginView from './views/LoginView.vue'
+import { fetchCurrentUser, logout } from './api'
 const route = useRoute()
+const identity = ref(null)
+const loading = ref(true)
 const activeMenu = computed(() => route.path.startsWith('/results/') ? '/results' : route.path)
+onMounted(async () => {
+  try { identity.value = await fetchCurrentUser() } catch { identity.value = null } finally { loading.value = false }
+})
+async function signOut() { try { await logout() } finally { identity.value = null } }
 </script>
 <style scoped>
-.sidebar{position:fixed;z-index:10;inset:0 auto 0 0;width:218px;background:var(--nav);border-right:1px solid var(--line);padding:25px 14px 18px;display:flex;flex-direction:column}.brand{display:flex;gap:11px;align-items:center;padding:0 10px 25px}.brand-mark{display:grid;place-items:center;width:34px;height:34px;background:var(--primary);color:var(--panel);border-radius:9px;font:700 18px Georgia}.brand strong{display:block;font-size:13px;letter-spacing:1.5px}.brand small,.side-foot small{display:block;color:var(--muted);font-size:9px;letter-spacing:1.2px}.navigation{display:grid;gap:3px;border:0;background:transparent}.navigation :deep(.el-menu-item){height:40px;margin:0;padding:0 12px!important;border-radius:8px;background:transparent;color:#61666d;font-size:13px}.navigation :deep(.el-menu-item:hover){background:rgba(255,255,255,.7);color:var(--ink)}.navigation :deep(.el-menu-item.is-active){background:var(--panel);color:var(--ink);font-weight:650;box-shadow:0 1px 4px rgba(20,24,31,.07)}.side-foot{margin-top:auto;border-top:1px solid var(--line);padding:16px 10px 0;display:flex;align-items:center;gap:9px;font-size:12px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#abb0b6;flex:0 0 auto}.dot.ok{background:#36a474}.app-main{margin-left:218px;min-height:100vh;padding:27px 34px 46px;max-width:1800px}.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}.page-header h1{font-size:24px;line-height:1.2;margin:3px 0 2px;letter-spacing:-.4px}.page-header p{margin:0;color:var(--muted);font-size:12px}@media(max-width:780px){.sidebar{position:static;width:auto;padding:12px}.brand,.side-foot{display:none}.navigation{display:flex;overflow:auto}.navigation :deep(.el-menu-item){min-width:max-content}.app-main{margin:0;padding:20px}.page-header{align-items:flex-start;flex-direction:column;gap:14px}}
+.sidebar{position:fixed;z-index:10;inset:0 auto 0 0;width:218px;background:var(--nav);border-right:1px solid var(--line);padding:25px 14px 18px;display:flex;flex-direction:column}.brand{display:flex;gap:11px;align-items:center;padding:0 10px 25px}.brand-mark{display:grid;place-items:center;width:34px;height:34px;background:var(--primary);color:var(--panel);border-radius:9px;font:700 18px Georgia}.brand strong{display:block;font-size:13px;letter-spacing:1.5px}.brand small,.side-foot small{display:block;color:var(--muted);font-size:9px;letter-spacing:1.2px}.navigation{display:grid;gap:3px;border:0;background:transparent}.navigation :deep(.el-menu-item){height:40px;margin:0;padding:0 12px!important;border-radius:8px;background:transparent;color:#61666d;font-size:13px}.navigation :deep(.el-menu-item:hover){background:rgba(255,255,255,.7);color:var(--ink)}.navigation :deep(.el-menu-item.is-active){background:var(--panel);color:var(--ink);font-weight:650;box-shadow:0 1px 4px rgba(20,24,31,.07)}.side-foot{margin-top:auto;border-top:1px solid var(--line);padding:16px 10px 0;display:flex;align-items:center;gap:9px;font-size:12px}.side-foot>div{min-width:0;flex:1}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#abb0b6;flex:0 0 auto}.dot.ok{background:#36a474}.app-main{margin-left:218px;min-height:100vh;padding:27px 34px 46px;max-width:1800px}.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}.page-header h1{font-size:24px;line-height:1.2;margin:3px 0 2px;letter-spacing:-.4px}.page-header p{margin:0;color:var(--muted);font-size:12px}.auth-loading{min-height:100vh;display:grid;place-items:center;color:var(--muted)}@media(max-width:780px){.sidebar{position:static;width:auto;padding:12px}.brand,.side-foot{display:none}.navigation{display:flex;overflow:auto}.navigation :deep(.el-menu-item){min-width:max-content}.app-main{margin:0;padding:20px}.page-header{align-items:flex-start;flex-direction:column;gap:14px}}
 </style>

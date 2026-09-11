@@ -12,7 +12,8 @@ database:
     enabled: true
     include_content: true
     lookaround_seconds: 10
-    limit: 500
+    # 每页读取数量；系统会继续翻页直到本次任务的记录全部抓完。
+    page_size: 500
   privacy:
     retention_days: 30
     max_content_chars: 20000
