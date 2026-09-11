@@ -184,6 +184,31 @@ def test_run_interactions_and_open_folder_are_scoped_to_result_dir(tmp_path, mon
     assert opened == [str(run_dir.resolve())]
 
 
+def test_run_interactions_can_filter_main_and_subagent_calls(tmp_path, monkeypatch):
+    run_dir = tmp_path / "local" / "schematic" / "20260908-120000__run-actors"
+    run_dir.mkdir(parents=True)
+    trace = run_dir / "model-interactions.json"
+    trace.write_text(
+        '[{"request_id":"main","proxy_server_request":{"messages":[{"role":"user","content":"主任务"}]}},'
+        '{"request_id":"child","proxy_server_request":{"messages":[{"role":"user","content":"[Subagent Context] child\\n[Subagent Task]\\n处理 slice_id=LIGHT_SENSE"}]}}]',
+        encoding="utf-8",
+    )
+    (run_dir / "evaluation-report.json").write_text(
+        '{"run_id":"run-actors","database_trace_file":"' + str(trace).replace("\\", "\\\\") + '"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.api.routes_runs.RUNS_ROOT", tmp_path)
+
+    main = client.get("/api/runs/run-actors/interactions", params={"scope": "main_agent"}).json()
+    child = client.get("/api/runs/run-actors/interactions", params={"scope": "subagent"}).json()
+
+    assert [item["request_id"] for item in main["items"]] == ["main"]
+    assert [item["request_id"] for item in child["items"]] == ["child"]
+    assert child["items"][0]["subagent_name"] == "LIGHT_SENSE"
+    assert child["subagents"][0]["name"] == "LIGHT_SENSE"
+    assert child["scope_counts"] == {"all": 2, "main_agent": 1, "subagent": 1}
+
+
 def test_batch_rejects_duplicate_combinations_before_queueing():
     response = client.post(
         "/api/batches",

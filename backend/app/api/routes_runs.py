@@ -6,10 +6,16 @@ import subprocess
 import sys
 import re
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
-from agent_eval.database import enrich_interaction_rows, group_interaction_sessions, summarize_interaction_rows
+from agent_eval.database import (
+    enrich_interaction_rows,
+    group_interaction_sessions,
+    group_subagent_interactions,
+    summarize_interaction_rows,
+)
 
 from app.config import RUNS_ROOT
 
@@ -99,6 +105,8 @@ def get_run_interactions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = Query(None, max_length=300),
+    scope: Literal["all", "main_agent", "subagent"] = Query("all"),
+    subagent: str | None = Query(None, max_length=120),
 ) -> dict[str, object]:
     """Return the durable, full LiteLLM request/response records for a run."""
     found = _find_run(run_id)
@@ -110,7 +118,7 @@ def get_run_interactions(
     if trace != run_dir / "model-interactions.json" and run_dir not in trace.parents:
         raise HTTPException(status_code=400, detail="Unsafe interaction trace path")
     if not trace.is_file():
-        return {"run_id": run_id, "items": [], "trace_file": None, "total": 0, "page": page, "page_size": page_size, "summary": summarize_interaction_rows([]), "sessions": []}
+        return {"run_id": run_id, "items": [], "trace_file": None, "total": 0, "page": page, "page_size": page_size, "summary": summarize_interaction_rows([]), "filtered_summary": summarize_interaction_rows([]), "sessions": [], "subagents": [], "scope_counts": {"all": 0, "main_agent": 0, "subagent": 0}}
     try:
         items = json.loads(trace.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -120,9 +128,12 @@ def get_run_interactions(
     enrich_interaction_rows(all_items)
     summary = summarize_interaction_rows(all_items)
     term = (search or "").strip().casefold()
+    selected_subagent = (subagent or "").strip().casefold()
     filtered = [
         item for item in all_items
-        if not term or term in json.dumps(item, ensure_ascii=False, default=str).casefold()
+        if (scope == "all" or item.get("interaction_scope") == scope)
+        and (not selected_subagent or str(item.get("subagent_name") or "").casefold() == selected_subagent)
+        and (not term or term in json.dumps(item, ensure_ascii=False, default=str).casefold())
     ]
     start = (page - 1) * page_size
     return {
@@ -134,7 +145,14 @@ def get_run_interactions(
         "page": page,
         "page_size": page_size,
         "summary": summary,
+        "filtered_summary": summarize_interaction_rows(filtered),
         "sessions": group_interaction_sessions(all_items),
+        "subagents": group_subagent_interactions(all_items),
+        "scope_counts": {
+            "all": len(all_items),
+            "main_agent": sum(item.get("interaction_scope") == "main_agent" for item in all_items),
+            "subagent": sum(item.get("interaction_scope") == "subagent" for item in all_items),
+        },
     }
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -506,6 +507,64 @@ def _is_subagent_tool(name: str, arguments: Any = None) -> bool:
     )
 
 
+def _request_messages(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return normalized request messages without duplicating large content fields."""
+    raw = _as_json(row.get("proxy_server_request"))
+    request = raw if isinstance(raw, dict) else {}
+    body = _as_json(request.get("body"))
+    if isinstance(body, dict):
+        request = body
+    messages = _as_json(request.get("messages") or row.get("messages") or request.get("input"))
+    if not isinstance(messages, list):
+        return [{"role": "user", "content": messages}] if isinstance(messages, str) else []
+    return [
+        message if isinstance(message, dict) else {"role": "user", "content": str(message)}
+        for message in messages
+    ]
+
+
+def _message_text(value: Any) -> str:
+    value = _as_json(value)
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "\n".join(
+            _message_text(item.get("text") or item.get("content") or item)
+            if isinstance(item, dict) else _message_text(item)
+            for item in value
+        )
+    if isinstance(value, dict):
+        return str(value.get("text") or value.get("content") or json.dumps(value, ensure_ascii=False, default=str))
+    return "" if value is None else str(value)
+
+
+def _interaction_actor(row: Mapping[str, Any]) -> tuple[str, str | None]:
+    """Classify main/child model calls from durable OpenClaw/Codex request evidence."""
+    session_id = str(row.get("session_id") or "")
+    candidate = "\n".join(
+        _message_text(message.get("content"))
+        for message in _request_messages(row)
+        if str(message.get("role") or "").lower() in {"system", "developer", "user"}
+    )
+    lowered = candidate.casefold()
+    is_subagent = (
+        ":subagent:" in session_id.casefold()
+        or "[subagent context]" in lowered
+        or "[subagent task]" in lowered
+        or "you are running as a subagent" in lowered
+    )
+    if not is_subagent:
+        return "main_agent", None
+    slice_match = re.search(r"\bslice_id\s*=\s*([A-Za-z0-9_.-]+)", candidate, flags=re.I)
+    if slice_match:
+        return "subagent", slice_match.group(1)
+    task_match = re.search(r"\[Subagent Task\]\s*\n+\s*([^\r\n]+)", candidate, flags=re.I)
+    if task_match:
+        label = re.sub(r"\s+", " ", task_match.group(1)).strip()
+        return "subagent", label[:80] or "未命名子任务"
+    return "subagent", "未命名子任务"
+
+
 def _elapsed_ms(start: Any, end: Any) -> int | None:
     def parse(value: Any) -> datetime | None:
         if isinstance(value, datetime):
@@ -535,6 +594,9 @@ def enrich_interaction_rows(rows: list[dict[str, Any]], *, start_index: int = 1)
         row["subagent_start_count"] = sum(
             _is_subagent_tool(name, arguments) for name, arguments in tool_calls
         )
+        scope, subagent_name = _interaction_actor(row)
+        row["interaction_scope"] = scope
+        row["subagent_name"] = subagent_name
     return rows
 
 
@@ -569,6 +631,21 @@ def group_interaction_sessions(rows: list[dict[str, Any]]) -> list[dict[str, Any
         })
         sessions.append(summary)
     return sorted(sessions, key=lambda item: str(item.get("started_at") or ""))
+
+
+def group_subagent_interactions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Summarize every independently detected child task for result-page filtering."""
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        if row.get("interaction_scope") != "subagent":
+            continue
+        grouped.setdefault(str(row.get("subagent_name") or "未命名子任务"), []).append(row)
+    result: list[dict[str, Any]] = []
+    for name, items in grouped.items():
+        summary = summarize_interaction_rows(items)
+        summary.update({"name": name, "interaction_scope": "subagent"})
+        result.append(summary)
+    return sorted(result, key=lambda item: str(item.get("started_at") or ""))
 
 
 def conversation_filter_options(project_root: Path) -> dict[str, Any]:

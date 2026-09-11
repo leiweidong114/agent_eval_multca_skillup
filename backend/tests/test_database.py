@@ -207,3 +207,30 @@ def test_interaction_metrics_recognize_all_certified_subagent_tool_shapes():
 
     assert rows[0]["tool_call_count"] == 5
     assert rows[0]["subagent_start_count"] == 4
+
+
+def test_interaction_rows_distinguish_main_agent_and_named_subagent():
+    rows = [
+        {
+            "proxy_server_request": {
+                "messages": [{"role": "user", "content": "普通主任务"}]
+            },
+            "response": {},
+        },
+        {
+            "proxy_server_request": {
+                "messages": [{
+                    "role": "user",
+                    "content": "[Subagent Context] child\n\n[Subagent Task]\n处理 slice_id=POWER",
+                }]
+            },
+            "response": {},
+        },
+    ]
+
+    enrich_interaction_rows(rows)
+
+    assert rows[0]["interaction_scope"] == "main_agent"
+    assert rows[0]["subagent_name"] is None
+    assert rows[1]["interaction_scope"] == "subagent"
+    assert rows[1]["subagent_name"] == "POWER"
