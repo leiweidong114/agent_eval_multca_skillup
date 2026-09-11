@@ -16,6 +16,11 @@ class DefaultEvaluator:
 
     api_version = EVALUATOR_API_VERSION
     version = "1"
+    schematic_task_types = (
+        "block_to_schematic",
+        "block_to_signal_list",
+        "signal_list_to_schematic",
+    )
 
     def __init__(self, evaluator_id: str, evaluation_types: tuple[str, ...]) -> None:
         self.id = evaluator_id
@@ -42,6 +47,7 @@ class DefaultEvaluator:
                 "skill": context.skill_name,
                 "skills": list(context.selected_skills),
                 "evaluation_type": context.evaluation_type,
+                "schematic_task_type": context.schematic_task_type,
             },
             "deterministic_scores": evidence.deterministic_scores,
             "process_metrics": evidence.process_metrics,

@@ -40,6 +40,8 @@ from agent_eval.runtime import (
 from agent_eval.scoring import load_scoring_config
 from agent_eval.cli_catalog import SCHEMATIC_PIPELINE_SKILLS
 from agent_eval.skill_sources import list_external_skills
+from agent_eval.evaluators import resolve_evaluator
+from agent_eval.schematic_tasks import normalize_schematic_task_profiles
 from app.config import BACKEND_ROOT, SKILLS_ROOT
 from app.skill_registry import (
     delete_skill,
@@ -75,12 +77,18 @@ class AgentPathRequest(BaseModel):
     path: str = Field(default="", max_length=4096)
 
 
+class SchematicTaskProfileRequest(BaseModel):
+    skills: list[str] = Field(min_length=1, max_length=8)
+    evaluator_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
+
+
 class RuntimeSettingsRequest(BaseModel):
     judge_model: str = Field(min_length=1, max_length=300)
     agent_test_model: str = Field(min_length=1, max_length=300)
     schematic_skills: list[str] = Field(
         default_factory=lambda: list(SCHEMATIC_PIPELINE_SKILLS), min_length=1, max_length=8
     )
+    schematic_task_profiles: dict[str, SchematicTaskProfileRequest] = Field(default_factory=dict)
 
 
 class ModelProfileRequest(BaseModel):
@@ -320,16 +328,30 @@ def get_runtime_settings() -> dict[str, object]:
         ),
         "agent_test_model": configured.get("agent_test_model") or default_model,
         "schematic_skills": configured.get("schematic_skills") or list(SCHEMATIC_PIPELINE_SKILLS),
+        "schematic_task_profiles": configured.get("schematic_task_profiles") or {},
     }
 
 
 @router.put("/settings")
 def put_runtime_settings(request: RuntimeSettingsRequest) -> dict[str, object]:
     try:
-        missing = [name for name in request.schematic_skills if resolve_skill(name) is None]
-        if missing:
-            raise ValueError(f"Skill not found: {', '.join(missing)}")
-        return save_runtime_settings(BACKEND_ROOT, request.model_dump())
+        payload = request.model_dump()
+        profiles = normalize_schematic_task_profiles(
+            payload.get("schematic_task_profiles"),
+            legacy_skills=request.schematic_skills,
+        )
+        for task_type, profile in profiles.items():
+            missing = [name for name in profile["skills"] if resolve_skill(name) is None]
+            if missing:
+                raise ValueError(f"Skill not found for {task_type}: {', '.join(missing)}")
+            resolve_evaluator(
+                BACKEND_ROOT,
+                evaluation_type="schematic",
+                evaluator_id=profile["evaluator_id"],
+                schematic_task_type=task_type,
+            )
+        payload["schematic_task_profiles"] = profiles
+        return save_runtime_settings(BACKEND_ROOT, payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

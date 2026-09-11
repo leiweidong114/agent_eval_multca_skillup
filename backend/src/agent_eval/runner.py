@@ -404,6 +404,7 @@ def run_evaluation(
     evaluation_type: str = "skill",
     selected_skills: list[str] | None = None,
     evaluator_id: str | None = None,
+    schematic_task_type: str | None = None,
 ) -> dict[str, Any]:
     def progress(phase: str, percent: int, message: str) -> None:
         if cancel_event is not None and cancel_event.is_set():
@@ -429,6 +430,7 @@ def run_evaluation(
         project_root,
         evaluation_type=evaluation_type,
         evaluator_id=evaluator_id,
+        schematic_task_type=schematic_task_type,
     )
     requested_agent = normalize_agent(agent)
     validate_evaluation_capabilities(
@@ -591,6 +593,7 @@ def run_evaluation(
                 "evaluator_id": evaluator.id,
                 "evaluator_version": str(evaluator.version),
                 "api_version": evaluator.api_version,
+                "schematic_task_type": schematic_task_type,
             },
             "result_dir": str(result_root),
             "validated": True,
@@ -893,6 +896,7 @@ def run_evaluation(
             skill_name=source_skill.name,
             selected_skills=tuple(selected_skills),
             skill_md=(source_skill / "SKILL.md").read_text(encoding="utf-8")[:30000],
+            schematic_task_type=schematic_task_type,
         ),
         evidence=EvaluationEvidence(
             deterministic_scores=scores,
@@ -964,6 +968,7 @@ def run_evaluation(
             "evaluator_id": evaluator.id,
             "evaluator_version": str(evaluator.version),
             "api_version": evaluator.api_version,
+            "schematic_task_type": schematic_task_type,
         },
         "result_dir": str(result_root),
         "skill_up_exit_code": completed.returncode,

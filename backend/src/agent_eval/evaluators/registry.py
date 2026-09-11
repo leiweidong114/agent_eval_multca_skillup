@@ -12,6 +12,7 @@ from typing import Any
 from agent_eval.env_config import effective_environment, repository_root
 from agent_eval.evaluators.default import GENERIC_EVALUATOR, SCHEMATIC_DEFAULT_EVALUATOR
 from agent_eval.evaluators.protocol import EVALUATOR_API_VERSION, EvaluationPlugin
+from agent_eval.schematic_tasks import SCHEMATIC_TASK_TYPES
 
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
@@ -19,9 +20,16 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 
 def _external_roots(project_root: Path) -> list[Path]:
     environment = effective_environment(project_root)
+    resolved_project = project_root.resolve()
+    backend_root = (
+        resolved_project
+        if resolved_project.name.lower() == "backend"
+        else resolved_project / "backend"
+    )
+    result: list[Path] = [(backend_root / "extensions" / "evaluators").resolve()]
     raw = str(environment.get("EVALUATOR_PLUGIN_PATHS_JSON") or "").strip()
     if not raw:
-        return []
+        return result
     try:
         values = json.loads(raw)
     except ValueError as exc:
@@ -29,12 +37,13 @@ def _external_roots(project_root: Path) -> list[Path]:
     if not isinstance(values, list):
         raise ValueError("EVALUATOR_PLUGIN_PATHS_JSON must be a JSON array")
     root = repository_root(project_root)
-    result: list[Path] = []
     for value in values:
         path = Path(str(value).strip())
         if not path.is_absolute():
             path = root / path
-        result.append(path.resolve())
+        resolved = path.resolve()
+        if resolved not in result:
+            result.append(resolved)
     return result
 
 
@@ -69,6 +78,9 @@ def _validate(plugin: Any, *, source: str) -> EvaluationPlugin:
     evaluation_types = tuple(plugin.evaluation_types)
     if not evaluation_types or any(value not in {"skill", "schematic"} for value in evaluation_types):
         raise ValueError(f"Evaluator {plugin.id} has invalid evaluation_types")
+    task_types = tuple(getattr(plugin, "schematic_task_types", ()))
+    if task_types and any(value not in SCHEMATIC_TASK_TYPES for value in task_types):
+        raise ValueError(f"Evaluator {plugin.id} has invalid schematic_task_types")
     if not callable(plugin.evaluate):
         raise ValueError(f"Evaluator {plugin.id} has no callable evaluate method")
     return plugin
@@ -102,6 +114,7 @@ def list_evaluators(project_root: Path) -> list[dict[str, Any]]:
             "version": str(plugin.version),
             "api_version": plugin.api_version,
             "evaluation_types": list(plugin.evaluation_types),
+            "schematic_task_types": list(getattr(plugin, "schematic_task_types", ())),
             "source": source,
         })
     return sorted(result, key=lambda item: item["id"])
@@ -112,6 +125,7 @@ def resolve_evaluator(
     *,
     evaluation_type: str,
     evaluator_id: str | None = None,
+    schematic_task_type: str | None = None,
 ) -> EvaluationPlugin:
     if evaluation_type not in {"skill", "schematic"}:
         raise ValueError(f"Unsupported evaluation_type: {evaluation_type}")
@@ -125,4 +139,9 @@ def resolve_evaluator(
     plugin = plugins[selected][0]
     if evaluation_type not in plugin.evaluation_types:
         raise ValueError(f"Evaluator {selected} does not support {evaluation_type}")
+    supported_tasks = tuple(getattr(plugin, "schematic_task_types", ()))
+    if schematic_task_type and supported_tasks and schematic_task_type not in supported_tasks:
+        raise ValueError(
+            f"Evaluator {selected} does not support schematic task {schematic_task_type}"
+        )
     return plugin

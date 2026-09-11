@@ -11,6 +11,10 @@ from agent_eval.model_config import load_runtime_settings
 from agent_eval.cli_catalog import SCHEMATIC_PIPELINE_SKILLS
 from agent_eval.evaluators import list_evaluators as installed_evaluators
 from agent_eval.evaluators import resolve_evaluator
+from agent_eval.schematic_tasks import (
+    DEFAULT_SCHEMATIC_TASK_TYPE,
+    list_schematic_task_types,
+)
 from app.config import BACKEND_ROOT, RUNS_ROOT
 from app.job_manager import job_manager
 from app.skill_registry import compose_skills, resolve_skill
@@ -23,6 +27,10 @@ class RunRequest(BaseModel):
     task_name: str | None = Field(default=None, max_length=200)
     client_task_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$")
     evaluation_type: str = Field(default="skill", pattern=r"^(skill|schematic)$")
+    schematic_task_type: str | None = Field(
+        default=None,
+        pattern=r"^(block_to_schematic|block_to_signal_list|signal_list_to_schematic)$",
+    )
     evaluator_id: str | None = Field(
         default=None,
         pattern=r"^[a-z0-9][a-z0-9-]{0,62}$",
@@ -53,6 +61,10 @@ class RunRequest(BaseModel):
 
     @model_validator(mode="after")
     def normalize_skills(self) -> "RunRequest":
+        if self.evaluation_type == "schematic":
+            self.schematic_task_type = self.schematic_task_type or DEFAULT_SCHEMATIC_TASK_TYPE
+        elif self.schematic_task_type is not None:
+            raise ValueError("schematic_task_type is only valid for schematic evaluations")
         selected = list(dict.fromkeys(self.skills or ([self.skill] if self.skill else [])))
         if self.evaluation_type == "schematic" and not selected:
             return self
@@ -66,13 +78,21 @@ class RunRequest(BaseModel):
 
 
 def _apply_schematic_skill_settings(request: RunRequest) -> RunRequest:
-    """Resolve a schematic run's Skill pipeline from local settings when omitted."""
-    if request.evaluation_type != "schematic" or request.skills:
+    """Resolve a schematic task's Skill pipeline and evaluator from local settings."""
+    if request.evaluation_type != "schematic":
         return request
-    configured = load_runtime_settings(BACKEND_ROOT).get("schematic_skills")
-    selected = list(configured) if isinstance(configured, list) else list(SCHEMATIC_PIPELINE_SKILLS)
-    request.skills = selected
-    request.skill = selected[0]
+    task_type = request.schematic_task_type or DEFAULT_SCHEMATIC_TASK_TYPE
+    configured = load_runtime_settings(BACKEND_ROOT)
+    profiles = configured.get("schematic_task_profiles") or {}
+    profile = profiles.get(task_type) if isinstance(profiles, dict) else None
+    profile = profile if isinstance(profile, dict) else {}
+    if not request.skills:
+        selected = profile.get("skills") or configured.get("schematic_skills")
+        selected = list(selected) if isinstance(selected, list) else list(SCHEMATIC_PIPELINE_SKILLS)
+        request.skills = selected
+        request.skill = selected[0]
+    if request.evaluator_id is None:
+        request.evaluator_id = str(profile.get("evaluator_id") or "schematic-default")
     return request
 
 
@@ -135,6 +155,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         evaluation_type=request.evaluation_type,
         selected_skills=request.skills,
         evaluator_id=request.evaluator_id,
+        schematic_task_type=request.schematic_task_type,
     )
     return result
 
@@ -148,6 +169,7 @@ def create_run(request: RunRequest) -> dict[str, object]:
             BACKEND_ROOT,
             evaluation_type=request.evaluation_type,
             evaluator_id=request.evaluator_id,
+            schematic_task_type=request.schematic_task_type,
         )
         skill_dir = _resolve_request_skill(request)
         validate_evaluation_capabilities(
@@ -172,6 +194,11 @@ def list_jobs(user_id: str | None = None) -> list[dict[str, object]]:
 def list_evaluators() -> list[dict[str, object]]:
     """List built-in and .env-configured external evaluators."""
     return installed_evaluators(BACKEND_ROOT)
+
+
+@router.get("/schematic-task-types")
+def get_schematic_task_types() -> list[dict[str, str]]:
+    return list_schematic_task_types()
 
 
 @router.get("/capacity")
@@ -201,6 +228,12 @@ def create_batch(request: BatchRunRequest) -> dict[str, object]:
             seen.add(key)
             run = RunRequest(**request.base_request, **target.model_dump())
             run = _apply_schematic_skill_settings(run)
+            resolve_evaluator(
+                BACKEND_ROOT,
+                evaluation_type=run.evaluation_type,
+                evaluator_id=run.evaluator_id,
+                schematic_task_type=run.schematic_task_type,
+            )
             validate_evaluation_capabilities(
                 run.agent,
                 require_model_selection=run.require_model_verification,

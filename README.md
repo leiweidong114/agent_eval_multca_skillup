@@ -136,6 +136,20 @@ SCHEMATIC_SKILLS_JSON=["schematic-large-pipeline"]
 任意 Python 路径。统一报告继续保留三维分数字段，插件专用指标写入
 `scoring.extensions`，因此新增内网规则不需要修改公共 API 或前端。
 
+设置页会自动扫描 `backend/extensions/skills/` 和
+`backend/extensions/evaluators/`，并为以下三个任务分别保存 Skill 顺序和评测器：
+
+| 任务类型 | 输入 | 输出 |
+|---|---|---|
+| `block_to_schematic` | 框图 | 原理图工程 |
+| `block_to_signal_list` | 框图 | 信号接口列表 |
+| `signal_list_to_schematic` | 信号接口列表 | 原理图工程 |
+
+这些配置写入根目录 `.env` 的 `SCHEMATIC_TASK_PROFILES_JSON`。旧的
+`SCHEMATIC_SKILLS_JSON` 和 `DEFAULT_SCHEMATIC_EVALUATOR` 自动迁移为
+`block_to_schematic` 配置。`POST /api/run` 可传 `schematic_task_type`；不传时保持
+原行为，默认执行“框图生成原理图”。
+
 ### 统一评测前端
 
 网页提供首页、新建评测、题库管理、Skill 管理、评测结果、模型与 Agent 六个一级页面。新建评测可选择原理图评测、题库评测或 Skill 评测；Skill 评测支持一次选择 1–8 个 Skill，并通过 Prompt 组织联合任务。评测结果按三种类型进入各自的详情子页。

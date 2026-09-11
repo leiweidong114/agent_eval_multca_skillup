@@ -3,7 +3,7 @@ import os
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.api.routes_eval import RunRequest
+from app.api.routes_eval import RunRequest, _apply_schematic_skill_settings
 
 
 client = TestClient(app)
@@ -32,6 +32,11 @@ def test_health_and_discovery_endpoints(monkeypatch):
     evaluators = client.get("/api/evaluators")
     assert evaluators.status_code == 200
     assert {item["id"] for item in evaluators.json()} >= {"generic", "schematic-default"}
+    task_types = client.get("/api/schematic-task-types")
+    assert task_types.status_code == 200
+    assert {item["id"] for item in task_types.json()} == {
+        "block_to_schematic", "block_to_signal_list", "signal_list_to_schematic",
+    }
 
 
 def test_agent_path_endpoint_persists_shared_executable(tmp_path, monkeypatch):
@@ -139,6 +144,34 @@ def test_run_request_accepts_a_stable_evaluator_id():
         evaluator_id="private-evaluator-v2",
     )
     assert request.evaluator_id == "private-evaluator-v2"
+
+
+def test_schematic_run_request_defaults_to_block_to_schematic():
+    request = RunRequest(agent="codex", evaluation_type="schematic", prompt="test")
+    assert request.schematic_task_type == "block_to_schematic"
+
+
+def test_schematic_task_resolves_its_own_skills_and_evaluator(monkeypatch):
+    monkeypatch.setattr(
+        "app.api.routes_eval.load_runtime_settings",
+        lambda root: {"schematic_task_profiles": {
+            "block_to_signal_list": {
+                "skills": ["signal-interface-generation"],
+                "evaluator_id": "signal-list-evaluator",
+            },
+        }},
+    )
+    request = RunRequest(
+        agent="codex",
+        evaluation_type="schematic",
+        schematic_task_type="block_to_signal_list",
+        prompt="test",
+    )
+
+    resolved = _apply_schematic_skill_settings(request)
+
+    assert resolved.skills == ["signal-interface-generation"]
+    assert resolved.evaluator_id == "signal-list-evaluator"
 
 
 def test_run_rejects_an_uninstalled_evaluator_before_queueing():

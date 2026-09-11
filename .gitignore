@@ -14,6 +14,8 @@ backend/config/runtime-settings.json
 backend/config/agent-paths.json
 backend/schematic_projects/
 backend/skills/.registry/
+backend/extensions/skills/
+backend/extensions/evaluators/
 backend/model_eval_data/
 frontend/vite.stdout.log
 frontend/vite.stderr.log

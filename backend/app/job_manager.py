@@ -74,6 +74,7 @@ class EvaluationJobManager:
             "message": "Waiting for a worker", "created_at": now, "updated_at": now,
             "skill": skill_dir.name, "skills": request.get("skills") or [skill_dir.name],
             "evaluation_type": request.get("evaluation_type", "skill"),
+            "schematic_task_type": request.get("schematic_task_type"),
             "evaluator_id": request.get("evaluator_id"), "agent": request.get("agent"),
             "user_id": request.get("user_id", "local"),
             "task_name": request.get("task_name") or skill_dir.name,
@@ -106,6 +107,7 @@ class EvaluationJobManager:
             "updated_at": now,
             "job_ids": [job["job_id"] for job in jobs],
             "evaluation_type": requests[0].get("evaluation_type", "skill"),
+            "schematic_task_type": requests[0].get("schematic_task_type"),
             "evaluator_id": requests[0].get("evaluator_id"),
             "skills": requests[0].get("skills") or [skill_dir.name],
             "user_id": requests[0].get("user_id", "local"),
@@ -236,6 +238,7 @@ class EvaluationJobManager:
                 evaluation_type=request.get("evaluation_type", "skill"),
                 selected_skills=request.get("skills") or [skill_dir.name],
                 evaluator_id=request.get("evaluator_id"),
+                schematic_task_type=request.get("schematic_task_type"),
             )
             status = "completed" if result.get("status", "completed") == "completed" else "failed"
             failure = result.get("failure") if status == "failed" else None

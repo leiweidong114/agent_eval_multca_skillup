@@ -94,7 +94,7 @@
         </el-card>
         <el-card v-if="detail.evaluation" shadow="never" class="panel">
           <template #header><div class="section-head"><div><b>评测方案</b><span>统一接口加载的规则、Judge 标准和领域指标</span></div><el-tag effect="plain">{{detail.evaluation.evaluator_id}}</el-tag></div></template>
-          <el-descriptions :column="3" border><el-descriptions-item label="评测器">{{detail.evaluation.evaluator_id||'—'}}</el-descriptions-item><el-descriptions-item label="评测器版本">{{detail.evaluation.evaluator_version||'—'}}</el-descriptions-item><el-descriptions-item label="接口版本">{{detail.evaluation.api_version||'—'}}</el-descriptions-item></el-descriptions>
+          <el-descriptions :column="4" border><el-descriptions-item label="任务类型">{{schematicTaskLabel(detail.evaluation.schematic_task_type)}}</el-descriptions-item><el-descriptions-item label="评测器">{{detail.evaluation.evaluator_id||'—'}}</el-descriptions-item><el-descriptions-item label="评测器版本">{{detail.evaluation.evaluator_version||'—'}}</el-descriptions-item><el-descriptions-item label="接口版本">{{detail.evaluation.api_version||'—'}}</el-descriptions-item></el-descriptions>
           <div v-if="evaluatorExtensions.length" class="extension-grid"><article v-for="item in evaluatorExtensions" :key="item.name"><b>{{item.name}}</b><pre>{{pretty(item.value)}}</pre></article></div>
         </el-card>
         <el-alert v-if="detail.evaluation_type==='schematic'&&skillUsage.status" :type="skillUsage.all_selected_skills_read?'success':'warning'" show-icon :closable="false" :title="skillUsage.all_selected_skills_read?'已验证所有选定 Skill 的显式读取':'未验证全部选定 Skill 的显式读取'" :description="`已读取：${skillUsage.observed_skills?.join('、')||'无'}；缺少证据：${skillUsage.missing_skills?.join('、')||'无'}。判定依据为数据库轨迹中的 SKILL.md 读取工具调用。`"/>
@@ -233,6 +233,7 @@ const failureDescription=(value,fallback='')=>{if(!value)return fallback;const p
 const evidenceLabel=s=>({insufficient:'样本不足',exploratory:'探索性',adequate:'充分'}[s]||s||'—')
 const qualityLabel=k=>({skill_md:'SKILL.md 完整性',name:'名称定义',description:'能力描述',workflow:'工作流程',constraints:'约束条件',output_contract:'输出契约',error_handling:'异常处理',verification:'验证方法'}[k]||k)
 const qualityDescription=item=>({skill_md:'Skill 主说明文件存在且非空',name:'元数据中定义了明确名称',description:'元数据中描述了适用场景',workflow:'包含清晰的执行步骤',constraints:'明确说明边界与约束',output_contract:'定义输出或产物格式',error_handling:'说明失败与异常处理方式',verification:'说明如何验证执行结果'}[item.check]||item.description)
+const schematicTaskLabel=value=>({block_to_schematic:'框图生成原理图',block_to_signal_list:'框图生成信号接口列表',signal_list_to_schematic:'信号接口列表生成原理图'}[value]||value||'通用评测')
 const formatTime=value=>value?new Date(value).toLocaleString():'时间未记录'
 onMounted(()=>load());onBeforeUnmount(()=>clearTimeout(refreshTimer))
 </script>

@@ -18,6 +18,7 @@ import httpx
 from agent_eval.agent_adapters import AGENT_MODEL_ADAPTERS, model_adapter
 from agent_eval.env_config import effective_environment, load_root_env, update_root_env
 from agent_eval.failure import describe_evaluation_failure
+from agent_eval.schematic_tasks import normalize_schematic_task_profiles
 
 
 PROFILE_PROTOCOLS = frozenset(
@@ -124,21 +125,33 @@ def load_runtime_settings(project_root: Path) -> dict[str, Any]:
         if value:
             settings[setting] = value
     raw_skills = str(environment.get("SCHEMATIC_SKILLS_JSON") or "").strip()
+    legacy_skills: list[str] | None = None
     if raw_skills:
         try:
             skills = json.loads(raw_skills)
         except ValueError:
             skills = None
         if isinstance(skills, list):
-            settings["schematic_skills"] = [
+            legacy_skills = [
                 str(item).strip() for item in skills if str(item).strip()
             ][:8]
+            settings["schematic_skills"] = legacy_skills
+    raw_profiles = str(environment.get("SCHEMATIC_TASK_PROFILES_JSON") or "").strip()
+    try:
+        configured_profiles = json.loads(raw_profiles) if raw_profiles else {}
+    except ValueError:
+        configured_profiles = {}
+    settings["schematic_task_profiles"] = normalize_schematic_task_profiles(
+        configured_profiles,
+        legacy_skills=legacy_skills,
+        legacy_evaluator=str(environment.get("DEFAULT_SCHEMATIC_EVALUATOR") or "").strip() or None,
+    )
     return settings
 
 
 def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> dict[str, Any]:
     """Persist model choices without changing credentials or provider routing."""
-    settings: dict[str, str] = {}
+    settings: dict[str, Any] = {}
     for name in ("judge_model", "agent_test_model"):
         value = str(values.get(name) or "").strip()
         if not value:
@@ -146,12 +159,27 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
         if len(value) > 300 or any(char in value for char in "\r\n\0"):
             raise ValueError(f"Invalid {name}")
         settings[name] = value
-    raw_skills = values.get("schematic_skills") or [
-        "schematic-pipeline",
-        "signal-interface-generation",
-        "schematic-layout-codegen",
-        "schematic-web-apply",
-    ]
+    profiles = normalize_schematic_task_profiles(
+        values.get("schematic_task_profiles"),
+        legacy_skills=(
+            values.get("schematic_skills")
+            if isinstance(values.get("schematic_skills"), list)
+            else None
+        ),
+    )
+    for task_type, task_profile in profiles.items():
+        profile_skills = task_profile["skills"]
+        if not profile_skills or len(profile_skills) > 8:
+            raise ValueError(f"{task_type}.skills must contain 1 to 8 Skill identifiers")
+        if any(
+            len(item) > 300 or any(char in item for char in "\r\n\0")
+            for item in profile_skills
+        ):
+            raise ValueError(f"Invalid Skill identifier in {task_type}")
+        evaluator_id = str(task_profile["evaluator_id"])
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", evaluator_id):
+            raise ValueError(f"Invalid evaluator_id in {task_type}")
+    raw_skills = profiles["block_to_schematic"]["skills"]
     if not isinstance(raw_skills, list) or not raw_skills:
         raise ValueError("schematic_skills is required")
     schematic_skills = list(dict.fromkeys(str(item).strip() for item in raw_skills if str(item).strip()))
@@ -160,10 +188,15 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
     if any(len(item) > 300 or any(char in item for char in "\r\n\0") for item in schematic_skills):
         raise ValueError("Invalid schematic_skills")
     settings["schematic_skills"] = schematic_skills
+    settings["schematic_task_profiles"] = profiles
     update_root_env(project_root, {
         "LITELLM_JUDGE_MODEL": settings["judge_model"],
         "AGENT_TEST_MODEL": settings["agent_test_model"],
         "SCHEMATIC_SKILLS_JSON": json.dumps(schematic_skills, ensure_ascii=False),
+        "DEFAULT_SCHEMATIC_EVALUATOR": profiles["block_to_schematic"]["evaluator_id"],
+        "SCHEMATIC_TASK_PROFILES_JSON": json.dumps(
+            profiles, ensure_ascii=False, separators=(",", ":")
+        ),
     })
     return settings
 

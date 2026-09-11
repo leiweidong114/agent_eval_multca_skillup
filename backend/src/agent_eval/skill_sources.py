@@ -12,9 +12,16 @@ SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$")
 
 
 def external_skill_roots(project_root: Path) -> list[Path]:
+    resolved_project = project_root.resolve()
+    backend_root = (
+        resolved_project
+        if resolved_project.name.lower() == "backend"
+        else resolved_project / "backend"
+    )
+    roots: list[Path] = [(backend_root / "extensions" / "skills").resolve()]
     raw = str(effective_environment(project_root).get("EXTERNAL_SKILL_PATHS_JSON") or "").strip()
     if not raw:
-        return []
+        return roots
     try:
         values = json.loads(raw)
     except ValueError as exc:
@@ -22,12 +29,13 @@ def external_skill_roots(project_root: Path) -> list[Path]:
     if not isinstance(values, list):
         raise ValueError("EXTERNAL_SKILL_PATHS_JSON must be a JSON array")
     repository = repository_root(project_root)
-    roots: list[Path] = []
     for value in values:
         path = Path(str(value).strip())
         if not path.is_absolute():
             path = repository / path
-        roots.append(path.resolve())
+        resolved = path.resolve()
+        if resolved not in roots:
+            roots.append(resolved)
     return roots
 
 

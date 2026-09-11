@@ -53,6 +53,7 @@ from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 from agent_eval.failure import describe_evaluation_failure
 from agent_eval.env_config import apply_root_env
 from agent_eval.skill_sources import resolve_external_skill
+from agent_eval.schematic_tasks import DEFAULT_SCHEMATIC_TASK_TYPE
 
 
 # backend/src/agent_eval/cli.py -> parents[2] = backend
@@ -851,6 +852,7 @@ def _evaluation_batch(
     skill_dir: Path,
     selected_skills: list[str],
     evaluation_type: str,
+    schematic_task_type: str | None = None,
 ) -> dict[str, object]:
     agents = _unique_agents(args.agent, args.workers)
     rows: list[dict[str, object]] = []
@@ -893,6 +895,7 @@ def _evaluation_batch(
                 evaluation_type=evaluation_type,
                 selected_skills=selected_skills,
                 evaluator_id=getattr(args, "evaluator_id", None),
+                schematic_task_type=schematic_task_type,
             )
             scores = result.get("scores") or {}
             passed = evaluation_passed(result)
@@ -1053,7 +1056,11 @@ def main() -> None:
         raise SystemExit(0 if result["status"] == "completed" else 1)
     if args.command in {"run-multi", "pipeline-eval"}:
         if args.command == "pipeline-eval":
-            configured = load_runtime_settings(PROJECT_ROOT).get("schematic_skills")
+            runtime_settings = load_runtime_settings(PROJECT_ROOT)
+            task_profile = (runtime_settings.get("schematic_task_profiles") or {}).get(
+                DEFAULT_SCHEMATIC_TASK_TYPE, {}
+            )
+            configured = task_profile.get("skills") or runtime_settings.get("schematic_skills")
             selected_skills = (
                 list(configured)
                 if isinstance(configured, list) and configured
@@ -1061,15 +1068,20 @@ def main() -> None:
             )
             skill_dir = compose_skill_bundle(PROJECT_ROOT, tuple(selected_skills))
             evaluation_type = "schematic"
+            schematic_task_type = DEFAULT_SCHEMATIC_TASK_TYPE
+            if not args.evaluator_id:
+                args.evaluator_id = task_profile.get("evaluator_id")
         else:
             skill_dir = _resolve_cli_skill(args.skill)
             selected_skills = [skill_dir.name]
             evaluation_type = "skill"
+            schematic_task_type = None
         result = _evaluation_batch(
             args,
             skill_dir=skill_dir,
             selected_skills=selected_skills,
             evaluation_type=evaluation_type,
+            schematic_task_type=schematic_task_type,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         raise SystemExit(0 if result["status"] == "completed" else 1)

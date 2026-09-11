@@ -16,5 +16,13 @@ DEFAULT_SCHEMATIC_EVALUATOR=schematic-large
 标准化的上下文和证据，不应自行读取数据库、修改运行目录或管理 LiteLLM 密钥。
 API 版本不兼容、ID 重复或评测类型不匹配时，系统会在执行前拒绝运行。
 
+插件还可以用 `schematic_task_types` 限定兼容任务：
+
+```python
+schematic_task_types = ("block_to_signal_list",)
+```
+
+未声明该字段的旧插件可用于全部三种原理图任务。
+
 可通过 `GET /api/evaluators` 或 `agent-eval ... --evaluator schematic-large`
 确认选择结果。

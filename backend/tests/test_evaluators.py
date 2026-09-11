@@ -73,3 +73,36 @@ def test_unknown_evaluator_is_rejected_before_execution(tmp_path):
     backend.mkdir()
     with pytest.raises(ValueError, match="not installed"):
         resolve_evaluator(backend, evaluation_type="skill", evaluator_id="private-missing")
+
+
+def test_project_extension_evaluator_is_discovered_without_env_path(tmp_path):
+    backend = tmp_path / "backend"
+    plugin_dir = backend / "extensions" / "evaluators" / "block-list"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "evaluator.py").write_text(
+        "from agent_eval.evaluators.protocol import EVALUATOR_API_VERSION, PluginEvaluation\n"
+        "class Evaluator:\n"
+        "    id='block-list'\n"
+        "    version='1'\n"
+        "    api_version=EVALUATOR_API_VERSION\n"
+        "    evaluation_types=('schematic',)\n"
+        "    schematic_task_types=('block_to_signal_list',)\n"
+        "    def evaluate(self, *, context, evidence, scoring_config):\n"
+        "        return PluginEvaluation({}, {})\n"
+        "PLUGIN=Evaluator()\n",
+        encoding="utf-8",
+    )
+
+    assert resolve_evaluator(
+        backend,
+        evaluation_type="schematic",
+        evaluator_id="block-list",
+        schematic_task_type="block_to_signal_list",
+    ).id == "block-list"
+    with pytest.raises(ValueError, match="does not support schematic task"):
+        resolve_evaluator(
+            backend,
+            evaluation_type="schematic",
+            evaluator_id="block-list",
+            schematic_task_type="block_to_schematic",
+        )

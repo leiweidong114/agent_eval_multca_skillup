@@ -17,6 +17,7 @@ class EvaluationContext:
     skill_name: str
     selected_skills: tuple[str, ...]
     skill_md: str
+    schematic_task_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ class EvaluationPlugin(Protocol):
     version: str
     api_version: str
     evaluation_types: tuple[str, ...]
+    schematic_task_types: tuple[str, ...]
 
     def evaluate(
         self,

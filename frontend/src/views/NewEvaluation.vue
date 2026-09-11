@@ -78,11 +78,16 @@
 
         <template v-else-if="form.type === 'schematic'">
           <el-divider content-position="left">原理图任务</el-divider>
-          <el-form-item label="原理图需求 Prompt">
-            <el-input v-model="form.prompt" type="textarea" :rows="6" placeholder="例如：设计一套 24V 转 5V/3A 的降压电源，包含输入保护、状态指示和测试点……" />
-            <div class="prompt-example"><span>可直接使用内置 STM32 示例，验证四个 Skill、subagent、布局服务和网页应用全链路。</span><el-button link type="primary" @click="form.prompt=schematicExamplePrompt">填入示例 Prompt</el-button></div>
+          <el-form-item label="任务类型">
+            <el-select v-model="form.schematicTaskType" @change="onSchematicTaskChange">
+              <el-option v-for="task in schematicTaskTypes" :key="task.id" :value="task.id" :label="`${task.name}（${contractLabel(task.input_contract)} → ${contractLabel(task.output_contract)}）`"/>
+            </el-select>
           </el-form-item>
-          <el-alert type="info" :closable="false" show-icon title="使用设置页选定的 Skill pipeline，调用指定 Agent 和模型执行生成与评测。" />
+          <el-form-item :label="`${currentSchematicTask?.name||'原理图任务'}需求 Prompt`">
+            <el-input v-model="form.prompt" type="textarea" :rows="6" placeholder="例如：设计一套 24V 转 5V/3A 的降压电源，包含输入保护、状态指示和测试点……" />
+            <div v-if="form.schematicTaskType==='block_to_schematic'" class="prompt-example"><span>可直接使用内置 STM32 示例，验证完整原理图链路。</span><el-button link type="primary" @click="form.prompt=schematicExamplePrompt">填入示例 Prompt</el-button></div>
+          </el-form-item>
+          <el-alert type="info" :closable="false" show-icon :title="`本次使用评测插件：${schematicEvaluator||'未配置'}`" />
           <div class="pipeline-skills"><span>本次 Skill 顺序</span><el-tag v-for="(skill,index) in schematicSkills" :key="skill" effect="plain">{{index+1}}. {{skill}}</el-tag><el-button link type="primary" @click="router.push('/settings')">修改设置</el-button></div>
         </template>
 
@@ -143,7 +148,7 @@ import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } f
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Cpu, DataAnalysis, MagicStick } from '@element-plus/icons-vue'
-import { fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModelConfig, fetchModels, fetchSettings, fetchSkillCases, fetchSkills, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun } from '../api'
+import { fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModelConfig, fetchModels, fetchSettings, fetchSkillCases, fetchSkills, fetchSchematicTaskTypes, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -153,15 +158,24 @@ const types = [
   { id: 'skill', name: 'Skill 评测', description: '单 Skill 或多 Skill 联合任务评测', icon: markRaw(MagicStick) },
 ]
 const normalizeType = (value) => ['schematic', 'question', 'skill'].includes(value) ? value : ''
-const form = reactive({ type: normalizeType(route.query.type), name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, baseline: true })
+const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, baseline: true })
 const agents = ref([])
 const models = ref([])
 const skills = ref([])
 const benchmarks = ref([])
 const modelConfig = ref({})
 const runtimeSettings = ref({})
+const defaultSchematicTaskTypes = [
+  { id: 'block_to_schematic', name: '框图生成原理图', input_contract: 'block_diagram', output_contract: 'schematic_project' },
+  { id: 'block_to_signal_list', name: '框图生成信号接口列表', input_contract: 'block_diagram', output_contract: 'signal_interface_v1' },
+  { id: 'signal_list_to_schematic', name: '信号接口列表生成原理图', input_contract: 'signal_interface_v1', output_contract: 'schematic_project' },
+]
+const schematicTaskTypes = ref(defaultSchematicTaskTypes)
 const cases = ref([])
-const schematicSkills = computed(() => runtimeSettings.value.schematic_skills || ['schematic-pipeline','signal-interface-generation','schematic-layout-codegen','schematic-web-apply'])
+const currentSchematicTask = computed(() => schematicTaskTypes.value.find(item => item.id === form.schematicTaskType))
+const currentSchematicProfile = computed(() => runtimeSettings.value.schematic_task_profiles?.[form.schematicTaskType] || {})
+const schematicSkills = computed(() => currentSchematicProfile.value.skills || runtimeSettings.value.schematic_skills || ['schematic-pipeline','signal-interface-generation','schematic-layout-codegen','schematic-web-apply'])
+const schematicEvaluator = computed(() => currentSchematicProfile.value.evaluator_id || 'schematic-default')
 const schematicExamplePrompt = `设计一块基于 STM32F103C8T6 的最小控制板原理图。要求包含：5V 输入与 3.3V 稳压、电源指示灯、SWD 下载接口、8MHz 晶振与负载电容、复位按键，以及由 GPIO 驱动的红色 LED（串联 470Ω 电阻）。请严格执行已安装的四阶段原理图 pipeline，使用器件目录中的器件；生成并校验 out/sheets.json，按每批 2 个 subagent 完成切片代码和自动布局，确保 overlap=0、unrouted=0，最后生成多图页网页并在结论中列出 URL、全部中间产物路径和每页指标。`
 const running = ref(false)
 const job = ref(null)
@@ -195,6 +209,8 @@ function agentDisabled(agent) { return (form.type === 'question' && selectedBenc
 function modelLabel(model) { return `${model.id} · ${model.source === 'litellm' ? 'LiteLLM' : model.source}` }
 function modelAvailable(model) { return model.source === 'litellm' || model.source === 'native' }
 function onModelChange() {}
+const contractLabel=value=>({block_diagram:'框图',signal_interface_v1:'信号接口列表',schematic_project:'原理图工程'}[value]||value)
+function onSchematicTaskChange(){form.name=currentSchematicTask.value?.name?`${currentSchematicTask.value.name}评测`:'原理图生成评测';form.prompt=''}
 function onBenchmarkChange() {
   if (selectedBenchmark.value) form.sampleLimit = Math.min(20, selectedBenchmark.value.item_count)
   if (selectedBenchmark.value?.task_type === 'repository_agent') form.agent = 'codex'
@@ -217,7 +233,7 @@ function setDefaults() {
   form.modelKeys = form.modelKeys.filter(key => availableModels.value.some(item => modelKey(item) === key))
   if (form.batchMode && !form.agents.length) form.agents = possibleAgents.slice(0, 2).map(item => item.agent)
   if (form.batchMode && !form.modelKeys.length) form.modelKeys = preferredModel ? [modelKey(preferredModel)] : availableModels.value.slice(0, 2).map(modelKey)
-  if (form.type === 'schematic') form.name ||= '原理图生成评测'
+  if (form.type === 'schematic') form.name ||= currentSchematicTask.value?.name ? `${currentSchematicTask.value.name}评测` : '原理图生成评测'
   if (form.type === 'skill') form.name ||= 'Skill 能力评测'
   if (form.type === 'question') form.name ||= '题库能力评测'
 }
@@ -247,7 +263,7 @@ async function submit() {
 }
 async function submitAgentRun() {
   const selectedSkills = form.type === 'schematic' ? schematicSkills.value : form.skills
-  const base = { evaluation_type: form.type, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: 12, benchmark: form.baseline, collect_database_trace: true, require_model_verification: true, llm_judge: true }
+  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: 12, benchmark: form.baseline, collect_database_trace: true, require_model_verification: true, llm_judge: true }
   if (form.batchMode) {
     const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })
     resultId.value = response.batch_id; resultRouteType.value = 'batch'; job.value = response; pollBatch(response.batch_id)
@@ -273,13 +289,14 @@ function openResult() { router.push(`/results/${resultRouteType.value||form.type
 function resetRun() { job.value = null; resultId.value = null; running.value = false }
 
 onMounted(async () => {
-  const results = await Promise.allSettled([fetchAgents(), fetchModels(), fetchSkills(), fetchBenchmarks(), fetchModelConfig(), fetchSettings()])
+  const results = await Promise.allSettled([fetchAgents(), fetchModels(), fetchSkills(), fetchBenchmarks(), fetchModelConfig(), fetchSettings(), fetchSchematicTaskTypes()])
   agents.value = results[0].status === 'fulfilled' ? results[0].value : []
   models.value = results[1].status === 'fulfilled' ? results[1].value.models || [] : []
   skills.value = results[2].status === 'fulfilled' ? results[2].value.skills || [] : []
   benchmarks.value = results[3].status === 'fulfilled' ? results[3].value : []
   modelConfig.value = results[4].status === 'fulfilled' ? results[4].value : {}
   runtimeSettings.value = results[5].status === 'fulfilled' ? results[5].value : {}
+  schematicTaskTypes.value = results[6].status === 'fulfilled' ? results[6].value : defaultSchematicTaskTypes
   form.benchmarkId = installedBenchmarks.value[0]?.id || ''
   setDefaults()
 })

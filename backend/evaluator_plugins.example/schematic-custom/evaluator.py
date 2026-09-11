@@ -20,6 +20,11 @@ class SchematicCustomEvaluator:
     version = "1"
     api_version = EVALUATOR_API_VERSION
     evaluation_types = ("schematic",)
+    schematic_task_types = (
+        "block_to_schematic",
+        "block_to_signal_list",
+        "signal_list_to_schematic",
+    )
 
     def evaluate(
         self,
