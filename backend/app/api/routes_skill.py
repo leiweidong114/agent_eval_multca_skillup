@@ -21,6 +21,7 @@ from agent_eval.model_config import (
     describe_model_config,
     delete_model_profile,
     discover_available_models,
+    gateway_request_headers,
     load_litellm_model_catalog,
     load_runtime_settings,
     list_model_profiles,
@@ -43,6 +44,7 @@ from agent_eval.skill_sources import list_external_skills
 from agent_eval.evaluators import resolve_evaluator
 from agent_eval.schematic_tasks import normalize_schematic_task_profiles
 from app.config import BACKEND_ROOT, SKILLS_ROOT
+from app.auth import employee_from_request
 from app.skill_registry import (
     delete_skill,
     delete_skill_version,
@@ -281,7 +283,9 @@ def remove_model_profile(profile_name: str) -> dict[str, object]:
 @router.get("/models")
 def list_models(request: Request) -> dict[str, object]:
     """Return models discovered from LiteLLM plus configured native fallbacks."""
-    result = discover_available_models(BACKEND_ROOT)
+    result = discover_available_models(
+        BACKEND_ROOT, employee_no=employee_from_request(request)
+    )
     try:
         catalog = load_litellm_model_catalog(BACKEND_ROOT)
     except (OSError, ValueError):
@@ -305,12 +309,13 @@ def list_models(request: Request) -> dict[str, object]:
 
 
 @router.post("/models/test-batch")
-def test_models_batch(request: BatchModelTestRequest) -> dict[str, object]:
+def test_models_batch(payload: BatchModelTestRequest, request: Request) -> dict[str, object]:
     """Probe every LiteLLM-visible model with a real HI inference request."""
     return refresh_litellm_model_catalog(
         BACKEND_ROOT,
-        probe_timeout=request.timeout_seconds,
-        probe_workers=request.workers,
+        employee_no=employee_from_request(request),
+        probe_timeout=payload.timeout_seconds,
+        probe_workers=payload.workers,
     )
 
 
@@ -378,26 +383,35 @@ def test_model(payload: ModelTestRequest, request: Request) -> dict[str, object]
         if profile.protocol == "anthropic_messages":
             endpoint = f"{profile.environment['ANTHROPIC_BASE_URL'].rstrip('/')}/v1/messages"
             headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
-            payload = {
-                "model": request.model,
+            request_body = {
+                "model": payload.model,
                 "messages": [{"role": "user", "content": "Reply with OK."}],
                 "max_tokens": 4,
             }
         elif profile.protocol == "openai_responses":
             endpoint = f"{profile.environment['OPENAI_BASE_URL'].rstrip('/')}/responses"
             headers = {"Authorization": f"Bearer {key}"}
-            payload = {"model": request.model, "input": "Reply with OK.", "max_output_tokens": 4}
+            request_body = {"model": payload.model, "input": "Reply with OK.", "max_output_tokens": 4}
         else:
             endpoint = f"{profile.environment['OPENAI_BASE_URL'].rstrip('/')}/chat/completions"
             headers = {"Authorization": f"Bearer {key}"}
-            payload = {
-                "model": request.model,
+            request_body = {
+                "model": payload.model,
                 "messages": [{"role": "user", "content": "Reply with OK."}],
                 "max_tokens": 4,
                 "temperature": 0,
                 "stream": False,
             }
-        response = httpx.post(endpoint, headers=headers, json=payload, timeout=30.0)
+        headers.update(gateway_request_headers(
+            BACKEND_ROOT, profile, employee_from_request(request)
+        ))
+        response = httpx.post(
+            endpoint,
+            headers=headers,
+            json=request_body,
+            timeout=30.0,
+            trust_env=False,
+        )
         response.raise_for_status()
         response_payload = response.json()
         actual_model = (

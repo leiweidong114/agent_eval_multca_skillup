@@ -47,6 +47,7 @@ class ResolvedModelProfile:
     api_key_env: str = "LITELLM_API_KEY"
     context_window: int = 200000
     max_output_tokens: int = 32000
+    internal_gateway: bool = False
 
     def model_for_agent(self, agent: str) -> str:
         configured = self.agent_models.get(agent)
@@ -330,7 +331,7 @@ def resolve_model_profile(
                     raise ValueError(f"{variable} must be a JSON object")
                 profile[field_name] = parsed_mapping
 
-    default_model = source_environment.get("LITELLM_MODEL") if selected == "litellm" else None
+    default_model = source_environment.get("LITELLM_MODEL")
     model = (model_override or default_model or str(profile.get("model") or "")).strip()
     if not model:
         raise ValueError(f"Model profile has no model: {selected}")
@@ -363,7 +364,7 @@ def resolve_model_profile(
                 f"Model profile {selected!r} exposes {protocol}, but Agent {agent!r} "
                 f"requires {adapter_protocol}; use an openai_compatible gateway profile"
             )
-    env_api_base = source_environment.get("LITELLM_API_BASE") if selected == "litellm" else None
+    env_api_base = source_environment.get("LITELLM_API_BASE")
     api_base = str(env_api_base or profile.get("api_base") or "").strip()
     openai_base, anthropic_base = _normalized_base_url(api_base)
 
@@ -530,7 +531,27 @@ def resolve_model_profile(
         api_key_env=key_name,
         context_window=context_window,
         max_output_tokens=max_output_tokens,
+        internal_gateway=internal_gateway,
     )
+
+
+def gateway_request_headers(
+    project_root: Path,
+    profile: ResolvedModelProfile,
+    employee_no: str | None,
+) -> dict[str, str]:
+    """Return intranet-only identity headers; external profiles receive none."""
+    if not getattr(profile, "internal_gateway", False):
+        return {}
+    account = (employee_no or "").strip()
+    if not account or any(char in account for char in "\r\n"):
+        raise ValueError("A valid employee number is required for the internal gateway")
+    source = effective_environment(project_root)
+    return {
+        "User-Agent": source.get("LITELLM_USER_AGENT", "OpenAI/Python"),
+        "x-cookie": source.get("LITELLM_X_COOKIE", "11"),
+        "x-user-account": account,
+    }
 
 
 def load_env_secrets(project_root: Path) -> dict[str, str]:
@@ -821,6 +842,13 @@ def discover_available_models(
     if isinstance(config.get("litellm"), dict):
         resolved = resolve_model_profile(project_root)
         profiles = {"litellm": {**config["litellm"], "api_base": resolved.api_base}}
+    if not isinstance(profiles, dict):
+        profiles = {}
+    selected_profile = str(
+        source_environment.get("LITELLM_PROFILE")
+        or config.get("default_profile")
+        or ("litellm" if isinstance(config.get("litellm"), dict) else "")
+    ).strip()
     for name, value in profiles.items():
         if not isinstance(value, dict):
             continue

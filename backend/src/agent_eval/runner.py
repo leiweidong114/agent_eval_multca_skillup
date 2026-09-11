@@ -27,6 +27,7 @@ from agent_eval.database import (
 )
 from agent_eval.model_config import (
     CREDENTIAL_ENV_NAMES,
+    gateway_request_headers,
     resolve_config_secret,
     resolve_model_profile,
     write_openclaw_profile_config,

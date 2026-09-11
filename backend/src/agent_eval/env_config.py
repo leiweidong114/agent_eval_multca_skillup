@@ -62,13 +62,14 @@ def effective_environment(
     # The repository .env is the deployment source of truth. System variables
     # remain available for OS facilities (PATH, APPDATA, TEMP), but a same-name
     # application setting in .env wins.
-    result = {
-        key: value
-        for key, value in os.environ.items()
-        if _APPLIED_ROOT_VALUES.get(key) != value
-    }
-    result.update(load_root_env(project_root))
-    if environ is not None:
+    result = load_root_env(project_root)
+    if environ is None:
+        result.update({
+            key: value
+            for key, value in os.environ.items()
+            if _APPLIED_ROOT_VALUES.get(key) != value
+        })
+    else:
         result.update(dict(environ))
     return result
 

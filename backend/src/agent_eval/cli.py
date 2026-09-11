@@ -33,6 +33,7 @@ from agent_eval.database import (
 from agent_eval.model_config import (
     describe_model_config,
     discover_available_models,
+    gateway_request_headers,
     load_litellm_model_catalog,
     load_runtime_settings,
     refresh_litellm_model_catalog,
@@ -300,7 +301,8 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
     runtime = find_multica_runtime(PROJECT_ROOT)
     env = os.environ.copy()
     env.update(profile.environment)
-    internal_headers = gateway_request_headers(PROJECT_ROOT, profile, args.user_id)
+    user_id = getattr(args, "user_id", "local")
+    internal_headers = gateway_request_headers(PROJECT_ROOT, profile, user_id)
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = detected
     env["AGENT_EVAL_REQUESTED_AGENT"] = args.agent.strip().lower()
     env["AGENT_EVAL_SUBAGENT_MODEL"] = profile.model
@@ -325,7 +327,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 f"connectivity-{uuid.uuid4().hex}",
                 master_key=resolve_config_secret(PROJECT_ROOT, "LITELLM_MASTER_KEY"),
                 request_headers=internal_headers,
-                metadata={"agent_eval_user_id": args.user_id, "agent_eval_agent": args.agent},
+                metadata={"agent_eval_user_id": user_id, "agent_eval_agent": args.agent},
             )
         except Exception as exc:
             return {
@@ -529,7 +531,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                     model=profile.model,
                     key_alias=trace_key.alias if trace_key else None,
                     task_id=probe_id,
-                    user_id=args.user_id,
+                    user_id=user_id,
                     agent=args.agent,
                     requested_model=profile.model,
                 )

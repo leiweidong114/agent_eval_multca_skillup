@@ -9,6 +9,7 @@ import uuid
 from collections import Counter
 from email.utils import parsedate_to_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Mapping
 from urllib.parse import urlsplit
 from agent_eval.protocol_adapter import to_chat, from_chat
 
@@ -100,6 +101,8 @@ class CodeBuddyCompatibilityProxy:
         forced_model: str | None = None,
         strip_tools_after_result: bool = False,
         translate_protocols: bool = False,
+        upstream_headers: Mapping[str, str] | None = None,
+        request_metadata: Mapping[str, str] | None = None,
     ) -> None:
         self.upstream_url = upstream_url.rstrip("/")
         self.timeout = timeout
@@ -108,6 +111,8 @@ class CodeBuddyCompatibilityProxy:
         self.forced_model = forced_model
         self.strip_tools_after_result = strip_tools_after_result
         self.translate_protocols = translate_protocols
+        self.upstream_headers = dict(upstream_headers or {})
+        self.request_metadata = dict(request_metadata or {})
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -212,6 +217,16 @@ class CodeBuddyCompatibilityProxy:
                         payload.pop("tool_choice", None)
                     if translate:
                         payload = to_chat(payload, protocol)
+                    path = urlsplit(self.path).path
+                    if (
+                        owner.request_metadata
+                        and isinstance(payload, dict)
+                        and (path.endswith("/chat/completions") or path.endswith("/responses"))
+                    ):
+                        metadata = payload.get("metadata")
+                        if not isinstance(metadata, dict):
+                            metadata = {}
+                        payload["metadata"] = {**owner.request_metadata, **metadata}
                     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 except ValueError as exc:
                     self.send_error(422, str(exc))
@@ -235,6 +250,11 @@ class CodeBuddyCompatibilityProxy:
                 }
                 headers["Content-Length"] = str(len(body))
                 headers["Accept-Encoding"] = "identity"
+                for required_key, required_value in owner.upstream_headers.items():
+                    for existing_key in list(headers):
+                        if existing_key.lower() == required_key.lower():
+                            headers.pop(existing_key)
+                    headers[required_key] = required_value
                 if translate and not any(k.lower() == "authorization" for k in headers) and self.headers.get("x-api-key"):
                     headers["Authorization"] = "Bearer " + self.headers["x-api-key"]
                 headers.setdefault("Idempotency-Key", f"agent-eval-{uuid.uuid4().hex}")

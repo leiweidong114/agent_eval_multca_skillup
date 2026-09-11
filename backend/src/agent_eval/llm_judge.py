@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from agent_eval.model_config import (
+    gateway_request_headers,
     load_runtime_settings,
     resolve_model_profile,
     resolve_config_secret,

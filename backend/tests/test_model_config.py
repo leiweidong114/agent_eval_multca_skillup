@@ -8,6 +8,7 @@ from agent_eval.model_config import (
     delete_model_profile,
     describe_model_config,
     discover_available_models,
+    gateway_request_headers,
     load_litellm_model_catalog,
     list_model_profiles,
     refresh_litellm_model_catalog,
@@ -214,11 +215,11 @@ def test_root_env_overrides_model_without_committing_a_key(tmp_path):
     description = describe_model_config(tmp_path)
 
     assert profile.model == "MiniMax-M3-test"
-    assert profile.api_base == "http://gateway.example:4100"
-    assert profile.environment["OPENAI_BASE_URL"] == "http://gateway.example:4100/v1"
+    assert profile.api_base == "http://127.0.0.1:4000/v1"
+    assert profile.environment["OPENAI_BASE_URL"] == "http://127.0.0.1:4000/v1"
     assert profile.environment["LITELLM_API_KEY"] == "local-key"
     assert description["default_model"] == "MiniMax-M3-test"
-    assert description["api_base"] == "http://gateway.example:4100"
+    assert description["api_base"] == "http://127.0.0.1:4000/v1"
     assert description["api_key_configured"] is True
 
 

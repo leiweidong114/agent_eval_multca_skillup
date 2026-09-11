@@ -44,5 +44,6 @@ def test_schematic_api_returns_openable_project_url(tmp_path, monkeypatch):
 
 def test_schematic_interaction_search_rejects_negative_offset():
     client = TestClient(app)
+    client.post("/api/auth/login", json={"employee_no": "schematic-user", "password": "x"})
     response = client.get("/api/schematic/interactions?offset=-1")
     assert response.status_code == 422
