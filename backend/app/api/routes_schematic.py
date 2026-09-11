@@ -7,10 +7,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from agent_eval.database import search_conversation_interactions
+from app.auth import employee_from_request
 from app.config import BACKEND_ROOT
 
 
@@ -32,14 +33,14 @@ class JudgeRequest(BaseModel):
 
 @router.get("/interactions")
 def search_interactions(
-    user_id: str | None = None,
+    request: Request,
     session_id: str | None = None,
     limit: int = 500,
 ) -> dict[str, Any]:
     try:
         return search_conversation_interactions(
             BACKEND_ROOT,
-            user_id=user_id,
+            user_id=employee_from_request(request),
             session_id=session_id,
             limit=limit,
         )

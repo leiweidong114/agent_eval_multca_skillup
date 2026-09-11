@@ -25,6 +25,7 @@ from agent_eval.database import (
     verify_requested_model,
 )
 from agent_eval.model_config import (
+    gateway_request_headers,
     resolve_config_secret,
     resolve_model_profile,
     write_openclaw_profile_config,
@@ -473,6 +474,7 @@ def run_evaluation(
     env["AGENT_EVAL_TASK_ID"] = canonical_task_id
     env["AGENT_EVAL_USER_ID"] = user_id
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = agent_executable
+    env["AGENT_EVAL_ARTIFACT_DIR"] = str(result_root / "agent-artifacts")
 
     progress("validating", 15, "Validating Skill-Up configuration")
     validation = _execute_process(
@@ -521,11 +523,19 @@ def run_evaluation(
     trace_key_error: str | None = None
     if collect_database_trace and resolved_profile.api_base:
         try:
+            internal_headers = gateway_request_headers(project_root, resolved_profile, user_id)
             trace_key = create_trace_key(
                 resolved_profile.api_base,
                 gateway_model,
                 operation_id,
                 master_key=resolve_config_secret(project_root, "LITELLM_MASTER_KEY"),
+                request_headers=internal_headers,
+                metadata={
+                    "agent_eval_user_id": user_id,
+                    "agent_eval_task_id": canonical_task_id,
+                    "agent_eval_agent": requested_agent,
+                    "agent_eval_model": provider_model,
+                },
             )
             if trace_key is not None:
                 for key_name in (
@@ -566,12 +576,20 @@ def run_evaluation(
     progress("running", 25, "Agent evaluation is running")
     resilience_proxy = None
     gateway_resilience: dict[str, Any] = {"status": "not_used"}
-    if resolved_profile.api_base and agent in {"claude", "codebuddy", "openclaw"}:
+    if resolved_profile.api_base:
         resilience_proxy = CodeBuddyCompatibilityProxy(
             resolved_profile.api_base,
             timeout=timeout_seconds,
             forced_model=gateway_model,
             strip_tools_after_result=agent == "codebuddy",
+            upstream_headers=gateway_request_headers(project_root, resolved_profile, user_id),
+            request_metadata={
+                "agent_eval_run_id": operation_id,
+                "agent_eval_task_id": canonical_task_id,
+                "agent_eval_user_id": user_id,
+                "agent_eval_agent": requested_agent,
+                "agent_eval_model": provider_model,
+            },
         )
         try:
             resilience_proxy.start()
@@ -582,8 +600,16 @@ def run_evaluation(
                 pass
             raise
         gateway_resilience = {"status": "active"}
+        env["OPENAI_BASE_URL"] = resilience_proxy.openai_base_url
+        env["MINIMAX_BASE_URL"] = resilience_proxy.openai_base_url
+        env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+        env["AGENT_EVAL_PROVIDER_BASE_URL"] = resilience_proxy.openai_base_url
+        if env.get("OPENCODE_CONFIG_CONTENT"):
+            opencode_config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
+            opencode_config["provider"]["litellm"]["options"]["baseURL"] = resilience_proxy.openai_base_url
+            env["OPENCODE_CONFIG_CONTENT"] = json.dumps(opencode_config, ensure_ascii=False)
         if agent == "claude":
-            env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+            pass
         elif agent == "codebuddy":
             codebuddy_config = Path(env["CODEBUDDY_CONFIG_DIR"])
             write_codebuddy_profile_config(
@@ -595,6 +621,24 @@ def run_evaluation(
                 resolved_profile,
                 workspace=openclaw_workspace,
                 api_base_override=resilience_proxy.openai_base_url,
+            )
+        elif agent == "codex":
+            runtime_args = [
+                (
+                    f'model_providers.litellm.base_url="{resilience_proxy.openai_base_url}"'
+                    if item.startswith("model_providers.litellm.base_url=") else item
+                )
+                for item in resolved_profile.agent_args
+            ]
+            eval_config = build_eval_config(
+                agent=agent, model=model, executable=agent_executable,
+                runtime_binary=runtime_binary, skill_name=_slug(source_skill.name),
+                case_paths=staged_cases, parallelism=parallelism,
+                timeout_seconds=timeout_seconds, max_turns=max_turns,
+                benchmark=benchmark, extra_args=[*runtime_args, *(extra_args or [])],
+            )
+            eval_path.write_text(
+                yaml.safe_dump(eval_config, allow_unicode=True, sort_keys=False), encoding="utf-8"
             )
     try:
         completed = _execute_process(
@@ -646,6 +690,10 @@ def run_evaluation(
                     finished_at=evaluation_finished_at,
                     model=provider_model,
                     key_alias=trace_key.alias if trace_key else None,
+                    task_id=canonical_task_id,
+                    user_id=user_id,
+                    agent=requested_agent,
+                    requested_model=provider_model,
                 )
                 if interactions or attempt == 7:
                     break
@@ -753,6 +801,7 @@ def run_evaluation(
             project_root=project_root,
             scoring_config=scoring_config,
             evidence=llm_evidence,
+            employee_no=user_id,
         )
     scoring = combine_dimensions(
         rule_dimensions=rule_dimensions,

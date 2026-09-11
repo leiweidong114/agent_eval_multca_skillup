@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -10,7 +9,7 @@ from typing import Any, Mapping
 
 import yaml
 from urllib.parse import unquote, urlsplit
-from agent_eval.model_config import load_env_secrets
+from agent_eval.env_config import effective_environment
 
 
 class DatabaseConfigurationError(ValueError):
@@ -71,10 +70,7 @@ def resolve_database_config(
     environ: Mapping[str, str] | None = None,
 ) -> DatabaseConfig:
     config_dir = project_root / "config"
-    data = _merge(
-        _read_yaml(config_dir / "database.yaml"),
-        _read_yaml(config_dir / "local.yaml"),
-    )
+    data = _read_yaml(config_dir / "database.yaml")
     database = data.get("database") or {}
     if not isinstance(database, dict):
         raise DatabaseConfigurationError("database configuration must be a mapping")
@@ -84,24 +80,21 @@ def resolve_database_config(
     privacy = database.get("privacy") or {}
     if not isinstance(privacy, dict):
         raise DatabaseConfigurationError("database.privacy must be a mapping")
-    source_environment = environ if environ is not None else os.environ
-    secrets = data.get("secrets") or {}
-    env_secrets = load_env_secrets(project_root)
+    source_environment = effective_environment(project_root, environ)
     url_env = str(database.get("url_env") or "DATABASE_URL")
     database_url = str(
-        source_environment.get(url_env) or secrets.get(url_env) or env_secrets.get(url_env) or ""
+        source_environment.get(url_env) or ""
     ).strip()
     password_env = str(database.get("password_env") or "LITELLM_DATABASE_PASSWORD")
     password = str(
         source_environment.get(password_env)
-        or secrets.get(password_env)
-        or env_secrets.get(password_env)
+        or source_environment.get("DATABASE_PASSWORD")
         or ""
     )
-    host = str(database.get("host") or "127.0.0.1")
-    port = int(database.get("port") or 5432)
-    name = str(database.get("name") or "litellm")
-    user = str(database.get("user") or "litellm")
+    host = str(source_environment.get("DATABASE_HOST") or database.get("host") or "127.0.0.1")
+    port = int(source_environment.get("DATABASE_PORT") or database.get("port") or 5432)
+    name = str(source_environment.get("DATABASE_NAME") or database.get("name") or "litellm")
+    user = str(source_environment.get("DATABASE_USER") or database.get("user") or "litellm")
     if database_url:
         parsed = urlsplit(database_url)
         if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname:
@@ -111,11 +104,16 @@ def resolve_database_config(
         name = parsed.path.lstrip("/") or name
         user = unquote(parsed.username or user)
         password = unquote(parsed.password or password)
-    enabled = bool(database.get("enabled", False))
+    enabled_value = source_environment.get("DATABASE_ENABLED")
+    enabled = (
+        enabled_value.strip().lower() in {"1", "true", "yes", "on"}
+        if enabled_value is not None
+        else bool(database_url or database.get("enabled", False))
+    )
     if enabled and not password:
         raise DatabaseConfigurationError(
-            f"Database is enabled but {password_env} is missing; set the environment "
-            "variable or add it to ignored config/local.yaml"
+            f"Database is enabled but {password_env} is missing; set DATABASE_URL or "
+            "the database credentials in the repository-root .env"
         )
     return DatabaseConfig(
         enabled=enabled,
@@ -129,7 +127,9 @@ def resolve_database_config(
         trace_enabled=bool(trace.get("enabled", True)),
         include_content=bool(trace.get("include_content", False)),
         lookaround_seconds=max(0, int(trace.get("lookaround_seconds") or 0)),
-        limit=max(1, min(5000, int(trace.get("limit") or 500))),
+        # This is a page size, not a total-result cap. SpendLogs are fetched
+        # page by page until the run-scoped key has no more rows.
+        limit=max(1, min(1000, int(trace.get("page_size") or trace.get("limit") or 500))),
         retention_days=max(1, int(privacy.get("retention_days") or 30)),
         max_content_chars=max(100, int(privacy.get("max_content_chars") or 20000)),
     )
@@ -242,6 +242,10 @@ def fetch_model_interactions(
     finished_at: datetime,
     model: str,
     key_alias: str | None = None,
+    task_id: str | None = None,
+    user_id: str | None = None,
+    agent: str | None = None,
+    requested_model: str | None = None,
 ) -> list[dict[str, Any]]:
     config = resolve_database_config(project_root)
     if not config.enabled or not config.trace_enabled:
@@ -261,21 +265,67 @@ def fetch_model_interactions(
     query = f'''select request_id, call_type, spend, total_tokens, prompt_tokens,
         completion_tokens, "startTime" as start_time, "endTime" as end_time,
         model, model_id, model_group, custom_llm_provider, session_id, status,
-        agent_id, request_duration_ms{content_columns}
+        agent_id, request_duration_ms, "user" as user_id, end_user,
+        metadata, proxy_server_request{content_columns}
         from "LiteLLM_SpendLogs"
         where {match_sql}
         order by "startTime" asc
-        limit %s'''
+        limit %s offset %s'''
     def fetch() -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
         with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
             with connection.cursor() as cursor:
-                cursor.execute(query, (*parameters, config.limit))
-                return cursor.fetchall()
+                offset = 0
+                while True:
+                    cursor.execute(query, (*parameters, config.limit, offset))
+                    page = list(cursor.fetchall())
+                    rows.extend(page)
+                    if len(page) < config.limit:
+                        break
+                    offset += len(page)
+        return rows
     rows = _database_retry(fetch)
-    return [
+    interactions = [
         _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=config.max_content_chars)
         for row in rows
     ]
+    for row in interactions:
+        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        proxy_request = row.get("proxy_server_request")
+        proxy_metadata = (
+            proxy_request.get("metadata", {}) if isinstance(proxy_request, dict) else {}
+        )
+        nested = metadata.get("spend_logs_metadata", {}) if isinstance(metadata, dict) else {}
+        sources = [proxy_metadata, metadata, nested]
+        def first(name: str) -> Any:
+            return next(
+                (source.get(name) for source in sources if isinstance(source, dict) and source.get(name) is not None),
+                None,
+            )
+        session = row.get("session_id") or first("session_id")
+        parent = first("parent_session_id") or first("parent_session_key") or first("spawned_by")
+        session_key = first("session_key")
+        structurally_subagent = bool(
+            parent or (isinstance(session_key, str) and ":subagent:" in session_key.lower())
+        )
+        row.update({
+            "evaluation_task_id": task_id or first("agent_eval_task_id"),
+            "evaluation_run_id": first("agent_eval_run_id"),
+            "employee_no": user_id or first("agent_eval_user_id") or row.get("user_id"),
+            "key_alias": key_alias or first("user_api_key_alias"),
+            "top_level_agent": agent or first("agent_eval_agent"),
+            "requested_model": requested_model or first("agent_eval_model"),
+            "session_id": session,
+            "session_key": session_key,
+            "parent_session_id": parent,
+            "request_purpose": first("request_purpose"),
+            "agent_role": "subagent" if structurally_subagent else "main",
+            "agent_role_detection": (
+                "structural_parent" if structurally_subagent
+                else ("structural_session" if session else "evaluator_default")
+            ),
+        })
+    return interactions
 
 
 def search_conversation_interactions(
@@ -300,8 +350,10 @@ def search_conversation_interactions(
             "user" = %s or end_user = %s
             or metadata->>'user_api_key_user_id' = %s
             or metadata->'spend_logs_metadata'->>'user_api_key_user_id' = %s
+            or metadata->>'agent_eval_user_id' = %s
+            or proxy_server_request->'metadata'->>'agent_eval_user_id' = %s
         )''')
-        parameters.extend([user_id, user_id, user_id, user_id])
+        parameters.extend([user_id, user_id, user_id, user_id, user_id, user_id])
     if session_id:
         clauses.append('''(
             session_id = %s
@@ -319,7 +371,7 @@ def search_conversation_interactions(
         where {' and '.join(clauses)}
         order by "startTime" asc
         limit %s'''
-    safe_limit = max(1, min(int(limit), config.limit, 1000))
+    safe_limit = max(1, min(int(limit), 100000))
     psycopg, dict_row = _driver()
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:

@@ -283,9 +283,21 @@ func main() {
 			continue
 		}
 		if message.Type == agent.MessageToolResult {
+			status := message.Status
+			if status == "" {
+				var structured struct {
+					Status string `json:"status"`
+				}
+				if json.Unmarshal([]byte(message.Output), &structured) == nil {
+					status = structured.Status
+				}
+			}
+			if status == "" {
+				status = "completed"
+			}
 			transcript = append(transcript, transcriptMessage{
 				Role: "tool_result", Turn: 1,
-				ToolResult: &toolResultInfo{CallID: message.CallID, Status: message.Status, Content: message.Output},
+				ToolResult: &toolResultInfo{CallID: message.CallID, Status: status, Content: message.Output},
 			})
 			continue
 		}

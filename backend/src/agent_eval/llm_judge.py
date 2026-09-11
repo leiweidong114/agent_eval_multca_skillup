@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from agent_eval.model_config import resolve_model_profile
+from agent_eval.model_config import gateway_request_headers, resolve_model_profile
 from agent_eval.failure import describe_evaluation_failure
 
 
@@ -26,7 +26,9 @@ def _judge_request(endpoint: str, *, headers: dict[str, str], body: dict[str, An
     last_response: httpx.Response | None = None
     for attempt in range(4):
         try:
-            response = httpx.post(endpoint, headers=headers, json=body, timeout=timeout)
+            response = httpx.post(
+                endpoint, headers=headers, json=body, timeout=timeout, trust_env=False
+            )
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             last_error = exc
         else:
@@ -88,7 +90,8 @@ def _json_object(text: str) -> dict[str, Any]:
 
 
 def run_llm_judge(
-    *, project_root: Path, scoring_config: dict[str, Any], evidence: dict[str, Any]
+    *, project_root: Path, scoring_config: dict[str, Any], evidence: dict[str, Any],
+    employee_no: str | None = None,
 ) -> dict[str, Any]:
     config = scoring_config.get("llm_judge") or {}
     if not config.get("enabled", False):
@@ -116,7 +119,10 @@ def run_llm_judge(
                 {"role": "user", "content": "Evaluate this evidence:\n" + evidence_text},
             ],
         }
-        headers = {"Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}"}
+        headers = {
+            "Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}",
+            **gateway_request_headers(project_root, profile, employee_no),
+        }
         timeout = float(config.get("timeout_seconds") or 120)
         response = _judge_request(
             endpoint, headers=headers, body=request_body, timeout=timeout

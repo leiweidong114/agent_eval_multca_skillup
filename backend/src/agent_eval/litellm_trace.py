@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
+from typing import Mapping
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
@@ -28,7 +29,9 @@ def _post_with_retry(
     last_error: Exception | None = None
     for attempt in range(max_attempts):
         try:
-            response = httpx.post(url, headers=headers, json=payload, timeout=15)
+            response = httpx.post(
+                url, headers=headers, json=payload, timeout=15, trust_env=False
+            )
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             last_error = exc
             if attempt + 1 == max_attempts:
@@ -70,6 +73,7 @@ class TraceKey:
     alias: str
     api_root: str
     master_key: str
+    request_headers: dict[str, str]
 
 
 def create_trace_key(
@@ -78,6 +82,8 @@ def create_trace_key(
     run_id: str,
     *,
     master_key: str | None = None,
+    request_headers: Mapping[str, str] | None = None,
+    metadata: Mapping[str, str] | None = None,
 ) -> TraceKey | None:
     master_key = (master_key or os.environ.get("LITELLM_MASTER_KEY", "")).strip()
     if not master_key or not api_base:
@@ -88,18 +94,21 @@ def create_trace_key(
     alias = f"agent-eval-{run_id}"
     response = _post_with_retry(
         f"{api_root}/key/generate",
-        headers={"Authorization": f"Bearer {master_key}"},
+        headers={"Authorization": f"Bearer {master_key}", **dict(request_headers or {})},
         payload={
             "key_alias": alias,
             "duration": "1h",
             "models": [model],
-            "metadata": {"agent_eval_run_id": run_id},
+            "metadata": {"agent_eval_run_id": run_id, **dict(metadata or {})},
         },
     )
     key = str(response.json().get("key") or "")
     if not key:
         raise RuntimeError("LiteLLM key generation returned no key")
-    return TraceKey(key=key, alias=alias, api_root=api_root, master_key=master_key)
+    return TraceKey(
+        key=key, alias=alias, api_root=api_root, master_key=master_key,
+        request_headers=dict(request_headers or {}),
+    )
 
 
 def delete_trace_key(trace_key: TraceKey | None) -> None:
@@ -107,6 +116,6 @@ def delete_trace_key(trace_key: TraceKey | None) -> None:
         return
     _post_with_retry(
         f"{trace_key.api_root}/key/delete",
-        headers={"Authorization": f"Bearer {trace_key.master_key}"},
+        headers={"Authorization": f"Bearer {trace_key.master_key}", **trace_key.request_headers},
         payload={"keys": [trace_key.key]},
     )

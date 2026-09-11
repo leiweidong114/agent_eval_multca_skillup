@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from app.auth import employee_from_request
 from app.config import RUNS_ROOT
 
 router = APIRouter(prefix="/api", tags=["runs"])
@@ -21,7 +22,7 @@ def _load_report(run_dir: Path) -> dict[str, object] | None:
 
 
 @router.get("/runs")
-def list_runs(user_id: str | None = None) -> list[dict[str, object]]:
+def list_runs(request: Request) -> list[dict[str, object]]:
     """List evaluation run directories with a report, newest first."""
     if not RUNS_ROOT.is_dir():
         return []
@@ -36,7 +37,7 @@ def list_runs(user_id: str | None = None) -> list[dict[str, object]]:
         report = _load_report(run_dir)
         if report is None:
             continue
-        if user_id is not None and report.get("user_id") != user_id:
+        if report.get("user_id") != employee_from_request(request):
             continue
         entries.append(
             {
@@ -52,7 +53,7 @@ def list_runs(user_id: str | None = None) -> list[dict[str, object]]:
 
 
 @router.get("/runs/{run_id}")
-def get_run(run_id: str) -> dict[str, object]:
+def get_run(run_id: str, request: Request) -> dict[str, object]:
     """Return a single evaluation report by run_id."""
     root = RUNS_ROOT.resolve()
     for report_file in root.rglob("evaluation-report.json") if root.is_dir() else []:
@@ -60,6 +61,10 @@ def get_run(run_id: str) -> dict[str, object]:
         if root not in run_dir.parents:
             continue
         report = _load_report(run_dir)
-        if report is not None and str(report.get("run_id")) == run_id:
+        if (
+            report is not None
+            and str(report.get("run_id")) == run_id
+            and report.get("user_id") == employee_from_request(request)
+        ):
             return report
     raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")

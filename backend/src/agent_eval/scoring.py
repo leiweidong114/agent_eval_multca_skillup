@@ -6,6 +6,8 @@ from typing import Any, Iterable
 
 import yaml
 
+from agent_eval.env_config import effective_environment
+
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "dimensions": {
@@ -37,10 +39,16 @@ def load_scoring_config(project_root: Path) -> dict[str, Any]:
     path = project_root / "config" / "scoring.yaml"
     configured = yaml.safe_load(path.read_text(encoding="utf-8")) if path.is_file() else {}
     configured = configured if isinstance(configured, dict) else {}
-    local_path = project_root / "config" / "local.yaml"
-    local = yaml.safe_load(local_path.read_text(encoding="utf-8")) if local_path.is_file() else {}
-    local_scoring = (local or {}).get("scoring") if isinstance(local, dict) else {}
-    return _merge(_merge(DEFAULT_CONFIG, configured), local_scoring or {})
+    result = _merge(DEFAULT_CONFIG, configured)
+    environment = effective_environment(project_root)
+    judge = result.setdefault("llm_judge", {})
+    if "LITELLM_JUDGE_PROFILE" in environment:
+        judge["profile"] = environment["LITELLM_JUDGE_PROFILE"]
+    if "LITELLM_JUDGE_MODEL" in environment:
+        judge["model"] = environment["LITELLM_JUDGE_MODEL"]
+    if "LITELLM_JUDGE_ENABLED" in environment:
+        judge["enabled"] = environment["LITELLM_JUDGE_ENABLED"].lower() in {"1", "true", "yes", "on"}
+    return result
 
 
 def _walk(value: Any) -> Iterable[Any]:
@@ -119,7 +127,11 @@ def collect_process_metrics(
                 if event_type in {"tool-use", "tool_call"}:
                     tool_calls += 1
                     tool = str(event.get("tool") or "").lower()
-                    if "subagent" in tool or "spawn_agent" in tool:
+                    if (
+                        "subagent" in tool
+                        or "spawn_agent" in tool
+                        or "sessions_spawn" in tool
+                    ):
                         subagent_calls += 1
                 elif event_type in {"tool-result", "tool_result"}:
                     tool_results += 1

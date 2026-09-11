@@ -22,6 +22,7 @@ from agent_eval.database import (
 )
 from agent_eval.model_config import (
     describe_model_config,
+    gateway_request_headers,
     resolve_config_secret,
     resolve_model_profile,
     write_codebuddy_profile_config,
@@ -36,6 +37,7 @@ from agent_eval.runtime import (
     find_skill_up,
 )
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
+from agent_eval.env_config import apply_root_env
 
 
 # backend/src/agent_eval/cli.py -> parents[2] = backend
@@ -97,6 +99,11 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--agent-executable")
     check.add_argument("--timeout", type=int, default=120)
     check.add_argument(
+        "--user", "--user-id", dest="user_id",
+        default=os.environ.get("AGENT_EVAL_USER_ID", "local"),
+        help="Employee number sent to an internal LiteLLM gateway",
+    )
+    check.add_argument(
         "--database-verify",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -140,6 +147,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
     runtime = find_multica_runtime(PROJECT_ROOT)
     env = os.environ.copy()
     env.update(profile.environment)
+    internal_headers = gateway_request_headers(PROJECT_ROOT, profile, args.user_id)
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = detected
     trace_key = None
     if args.database_verify and profile.api_base:
@@ -161,6 +169,8 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 profile.gateway_model_for_agent(runtime_agent),
                 f"connectivity-{uuid.uuid4().hex}",
                 master_key=resolve_config_secret(PROJECT_ROOT, "LITELLM_MASTER_KEY"),
+                request_headers=internal_headers,
+                metadata={"agent_eval_user_id": args.user_id, "agent_eval_agent": args.agent},
             )
         except Exception as exc:
             return {
@@ -218,16 +228,30 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         for value in profile.agent_args:
             command.extend(["--extra-arg", value])
         resilience_proxy = None
-        if profile.api_base and runtime_agent in {"claude", "codebuddy", "openclaw"}:
+        if profile.api_base:
             resilience_proxy = CodeBuddyCompatibilityProxy(
                 profile.api_base,
                 timeout=args.timeout,
                 forced_model=profile.gateway_model_for_agent(runtime_agent),
                 strip_tools_after_result=runtime_agent == "codebuddy",
+                upstream_headers=internal_headers,
+                request_metadata={
+                    "agent_eval_user_id": args.user_id,
+                    "agent_eval_agent": args.agent,
+                    "agent_eval_task_id": probe_id,
+                },
             )
             resilience_proxy.start()
+            env["OPENAI_BASE_URL"] = resilience_proxy.openai_base_url
+            env["MINIMAX_BASE_URL"] = resilience_proxy.openai_base_url
+            env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+            env["AGENT_EVAL_PROVIDER_BASE_URL"] = resilience_proxy.openai_base_url
+            if env.get("OPENCODE_CONFIG_CONTENT"):
+                opencode_config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
+                opencode_config["provider"]["litellm"]["options"]["baseURL"] = resilience_proxy.openai_base_url
+                env["OPENCODE_CONFIG_CONTENT"] = json.dumps(opencode_config, ensure_ascii=False)
             if runtime_agent == "claude":
-                env["ANTHROPIC_BASE_URL"] = resilience_proxy.anthropic_base_url
+                pass
             elif runtime_agent == "codebuddy":
                 write_codebuddy_profile_config(
                     Path(env["CODEBUDDY_CONFIG_DIR"]) / "models.json",
@@ -235,12 +259,17 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                     endpoint=resilience_proxy.url,
                 )
             else:
-                write_openclaw_profile_config(
-                    Path(env["OPENCLAW_CONFIG_PATH"]),
-                    profile,
-                    workspace=root,
-                    api_base_override=resilience_proxy.openai_base_url,
-                )
+                if runtime_agent == "openclaw":
+                    write_openclaw_profile_config(
+                        Path(env["OPENCLAW_CONFIG_PATH"]), profile, workspace=root,
+                        api_base_override=resilience_proxy.openai_base_url,
+                    )
+                elif runtime_agent == "codex":
+                    command = [
+                        f'model_providers.litellm.base_url="{resilience_proxy.openai_base_url}"'
+                        if item.startswith("model_providers.litellm.base_url=") else item
+                        for item in command
+                    ]
         started_at = datetime.now(timezone.utc).replace(tzinfo=None)
         try:
             try:
@@ -280,6 +309,10 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                     finished_at=finished_at,
                     model=profile.model,
                     key_alias=trace_key.alias if trace_key else None,
+                    task_id=probe_id,
+                    user_id=args.user_id,
+                    agent=args.agent,
+                    requested_model=profile.model,
                 )
                 if rows or attempt == 5:
                     break
@@ -321,6 +354,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
 
 
 def main() -> None:
+    apply_root_env(PROJECT_ROOT)
     args = _parser().parse_args()
     if args.command == "agents":
         result = []

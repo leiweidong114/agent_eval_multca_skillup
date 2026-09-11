@@ -53,7 +53,15 @@ def describe_evaluation_failure(
     inferred_status = status_code
     if inferred_status is None:
         for code in (429, 401, 403, 500, 502, 503, 504):
-            if re.search(rf"(?<!\d){code}(?!\d)", text):
+            # Do not mistake domain values such as "500mA" or "503 components"
+            # for HTTP status codes. Only infer a status when it is labelled as
+            # an HTTP/status/error code in process or gateway output.
+            if re.search(
+                rf"(?:http(?:/\d(?:\.\d)?)?\s*[:=]?\s*|status(?:_code)?\s*[:=]?\s*|"
+                rf"code\s*[:=]\s*|returned\s+)(?<!\d){code}(?!\d)",
+                text,
+                flags=re.I,
+            ):
                 inferred_status = code
                 break
 

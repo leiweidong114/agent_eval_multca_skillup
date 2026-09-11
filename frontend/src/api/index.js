@@ -4,6 +4,10 @@ const http = axios.create({ baseURL: '/api', timeout: 100000 })
 const prism = axios.create({ baseURL: '/prism/api', timeout: 100000 })
 const data = (request) => request.then((response) => response.data)
 
+export const login = (payload) => data(http.post('/auth/login', payload))
+export const fetchCurrentUser = () => data(http.get('/auth/me'))
+export const logout = () => data(http.post('/auth/logout'))
+
 export const fetchHealth = () => data(http.get('/health'))
 export const fetchAgents = () => data(http.get('/agents'))
 export const fetchModels = () => data(http.get('/models'))

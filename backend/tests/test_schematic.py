@@ -27,6 +27,7 @@ def test_schematic_pipeline_and_judge(tmp_path):
 
 def test_schematic_api_returns_openable_project_url():
     client = TestClient(app)
+    client.post("/api/auth/login", json={"employee_no": "schematic-user", "password": "x"})
     diagram = client.get("/api/schematic/example").json()
     response = client.post("/api/schematic/generate", json=diagram)
     assert response.status_code == 200, response.text
@@ -40,8 +41,15 @@ def test_schematic_api_returns_openable_project_url():
     assert judged.json()["score"] == 100
 
 
-def test_schematic_interaction_search_requires_an_identifier():
+def test_schematic_interaction_search_uses_logged_in_employee(monkeypatch):
     client = TestClient(app)
+    assert client.get("/api/schematic/interactions").status_code == 401
+    client.post("/api/auth/login", json={"employee_no": "E20002", "password": "x"})
+    captured = {}
+    def fake_search(_root, **kwargs):
+        captured.update(kwargs)
+        return {"status": "ok", "interactions": [], "sessions": []}
+    monkeypatch.setattr("app.api.routes_schematic.search_conversation_interactions", fake_search)
     response = client.get("/api/schematic/interactions")
-    assert response.status_code == 400
-    assert "user_id or session_id" in response.json()["detail"]
+    assert response.status_code == 200
+    assert captured["user_id"] == "E20002"

@@ -4,13 +4,57 @@ from pathlib import Path
 import pytest
 
 from agent_eval.database import (
+    DatabaseConfig,
     DatabaseConfigurationError,
     _database_retry,
     _sanitize,
     resolve_database_config,
     summarize_model_interactions,
     verify_requested_model,
+    fetch_model_interactions,
 )
+
+
+def test_fetch_interactions_paginates_past_500(monkeypatch, tmp_path):
+    config = DatabaseConfig(
+        enabled=True, host="db", port=5432, name="litellm", user="reader", password="x",
+        sslmode="prefer", connect_timeout_seconds=1, trace_enabled=True,
+        include_content=True, lookaround_seconds=0, limit=500, retention_days=30,
+        max_content_chars=20000,
+    )
+    source_rows = [
+        {"request_id": f"r{i}", "status": "success", "session_id": "main"}
+        for i in range(1201)
+    ]
+    offsets = []
+
+    class Cursor:
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+        def execute(self, _query, params):
+            self.limit, self.offset = params[-2:]
+            offsets.append(self.offset)
+        def fetchall(self):
+            return source_rows[self.offset:self.offset + self.limit]
+
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+        def cursor(self): return Cursor()
+
+    class Psycopg:
+        @staticmethod
+        def connect(**_kwargs): return Connection()
+
+    monkeypatch.setattr("agent_eval.database.resolve_database_config", lambda _root: config)
+    monkeypatch.setattr("agent_eval.database._driver", lambda: (Psycopg, object()))
+    rows = fetch_model_interactions(
+        tmp_path, started_at=datetime(2026, 1, 1), finished_at=datetime(2026, 1, 1),
+        model="m", key_alias="agent-eval-run", task_id="task", user_id="E1", agent="justdo",
+    )
+    assert len(rows) == 1201
+    assert offsets == [0, 500, 1000]
+    assert rows[-1]["evaluation_task_id"] == "task"
 
 
 def _write_database_config(root: Path) -> None:
@@ -47,6 +91,45 @@ def test_database_config_rejects_missing_password(tmp_path):
     _write_database_config(tmp_path)
     with pytest.raises(DatabaseConfigurationError, match="TEST_DB_PASSWORD"):
         resolve_database_config(tmp_path, environ={})
+
+
+def test_database_config_uses_repository_root_env_url(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    _write_database_config(backend)
+    (tmp_path / ".env").write_text(
+        "DATABASE_URL=postgresql://env_reader:env_secret@db.internal:5544/eval_db\n",
+        encoding="utf-8",
+    )
+
+    config = resolve_database_config(backend, environ={})
+
+    assert config.enabled is True
+    assert config.host == "db.internal"
+    assert config.port == 5544
+    assert config.name == "eval_db"
+    assert config.user == "env_reader"
+    assert config.password == "env_secret"
+
+
+def test_database_config_uses_repository_root_env_fields(tmp_path):
+    _write_database_config(tmp_path)
+    (tmp_path / ".env").write_text(
+        """\
+DATABASE_HOST=db.fields
+DATABASE_PORT=6432
+DATABASE_NAME=field_db
+DATABASE_USER=field_reader
+DATABASE_PASSWORD=field_secret
+DATABASE_ENABLED=true
+""",
+        encoding="utf-8",
+    )
+
+    config = resolve_database_config(tmp_path, environ={})
+
+    assert (config.host, config.port, config.name) == ("db.fields", 6432, "field_db")
+    assert (config.user, config.password) == ("field_reader", "field_secret")
 
 
 def test_model_interaction_summary_is_deterministic():

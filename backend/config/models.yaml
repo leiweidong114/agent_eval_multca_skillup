@@ -5,14 +5,17 @@ profiles:
     type: native
     model: gpt-5.4
   litellm_deepseek_flash:
+    internal_gateway: true
     model: deepseek-v4-flash
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
   litellm_deepseek_pro:
+    internal_gateway: true
     model: deepseek-v4-pro
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
   litellm_minimax:
+    internal_gateway: true
     model: MiniMax-M3
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
@@ -21,6 +24,7 @@ profiles:
       codebuddy: custom-local:MiniMax-M3
       openclaw: main
   litellm_glm_4_7:
+    internal_gateway: true
     model: glm-4.7
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
@@ -32,6 +36,7 @@ profiles:
       claude: glm-4.7-anthropic
       opencode: glm-4.7-no-thinking
   litellm_opencode_go:
+    internal_gateway: true
     model: opencode-go/minimax-m3
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
@@ -40,6 +45,7 @@ profiles:
       codebuddy: custom-local:MiniMax-M3
       openclaw: main
   litellm_opencode_go_minimax_2_7:
+    internal_gateway: true
     model: opencode-go/minimax-m2.7
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
@@ -48,10 +54,12 @@ profiles:
       codebuddy: custom-local:MiniMax-M2.7
       openclaw: main
   litellm_opencode_go_grok:
+    internal_gateway: true
     model: opencode-go/grok-4.6
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY
   litellm_opencode_go_chat:
+    internal_gateway: true
     model: opencode-go/longcat-2.0
     api_base: http://8.137.196.46/v1
     api_key_env: LITELLM_API_KEY

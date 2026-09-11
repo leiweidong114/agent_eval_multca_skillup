@@ -1,6 +1,7 @@
 # 运行时产物（后端 backend/ 及根目录均忽略）
 .runtime/
 .tools/
+.env
 runs/
 evaluation_results/
 backend/evaluation_results/

@@ -145,3 +145,54 @@ def test_proxy_restores_client_model_in_anthropic_response():
 
     assert received[0]["model"] == "glm-4.7-anthropic"
     assert payload["model"] == "sonnet"
+
+
+def test_proxy_adds_internal_headers_and_preserves_agent_metadata():
+    received: list[tuple[dict[str, str], dict[str, object]]] = []
+
+    class Upstream(BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+        def do_POST(self) -> None:
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            received.append(({key.lower(): value for key, value in self.headers.items()}, body))
+            response = b'{"ok":true}'
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+    upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+    thread.start()
+    host, port = upstream.server_address[:2]
+    try:
+        with CodeBuddyCompatibilityProxy(
+            f"http://{host}:{port}/v1",
+            upstream_headers={
+                "User-Agent": "OpenAI/Python", "x-cookie": "11", "x-user-account": "E123"
+            },
+            request_metadata={"agent_eval_task_id": "task-1"},
+        ) as proxy:
+            request = Request(
+                proxy.url,
+                data=json.dumps({
+                    "model": "m", "messages": [],
+                    "metadata": {"session_id": "child", "parent_session_id": "parent"},
+                }).encode(),
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            with urlopen(request) as response:
+                assert response.status == 200
+    finally:
+        upstream.shutdown()
+        upstream.server_close()
+        thread.join(timeout=5)
+
+    headers, body = received[0]
+    assert headers["user-agent"] == "OpenAI/Python"
+    assert headers["x-user-account"] == "E123"
+    assert body["metadata"] == {
+        "agent_eval_task_id": "task-1", "session_id": "child", "parent_session_id": "parent"
+    }

@@ -1,5 +1,8 @@
 # agent_eval_multca_skillup
 
+新电脑部署、内网 LiteLLM Header、数据库权限及 JustDo 子 Agent 适配见
+[docs/new-computer-setup.md](docs/new-computer-setup.md)。
+
 一个本地、无 Multica 登录的 Agent Skill 评测工具。支持 Agent 原生模型认证或远程 LiteLLM，并可直接读取 LiteLLM PostgreSQL 交互数据参与过程评测：
 
 - Skill-Up 负责隔离 Skill、执行用例、断言、基准对照和生成 JSON/HTML/JUnit 报告。
@@ -154,13 +157,21 @@ profiles:
     api_key_env: LITELLM_API_KEY
 ```
 
-虚拟 Key 使用环境变量 `LITELLM_API_KEY`，或写入被 Git 忽略的
-`backend/config/local.yaml`：
+部署者只需要复制仓库根目录的 `.env.example` 为 `.env`，然后在这一个文件中填写
+LiteLLM、模型和 PostgreSQL 配置：
 
-```yaml
-secrets:
-  LITELLM_API_KEY: sk-your-virtual-key
+```dotenv
+LITELLM_PROFILE=litellm_glm_4_7
+LITELLM_API_BASE=http://8.137.196.46:4000/v1
+LITELLM_MODEL=glm-4.7
+LITELLM_API_KEY=sk-your-evaluation-key
+LITELLM_MASTER_KEY=sk-your-litellm-master-key
+DATABASE_URL=postgresql://agent_eval_reader:password@8.137.196.46:5432/litellm
 ```
+
+`.env` 被 Git 忽略；`backend/config/models.yaml`、`database.yaml` 和 `scoring.yaml`
+只保存程序内置的 profile、Agent 路由和默认策略，不再作为部署者的配置入口。
+进程环境变量可临时覆盖 `.env` 中的同名值。
 
 运行时会为不同 Agent CLI 同时提供 OpenAI 兼容变量
 `OPENAI_BASE_URL`/`OPENAI_API_KEY` 和 Anthropic 兼容变量
@@ -206,19 +217,22 @@ OpenClaw 同时使用隔离的 `OPENCLAW_CONFIG_PATH`、`OPENCLAW_STATE_DIR` 和
 
 ## PostgreSQL 配置
 
-非敏感连接参数位于 `backend/config/database.yaml`。密码通过环境变量提供：
+PostgreSQL 连接也统一写在仓库根目录 `.env`。推荐使用完整 URL：
 
-```powershell
-$env:LITELLM_DATABASE_PASSWORD = "数据库密码"
+```dotenv
+DATABASE_URL=postgresql://agent_eval_reader:password@8.137.196.46:5432/litellm
+DATABASE_ENABLED=true
 ```
 
-也可在被 Git 忽略的 `backend/config/local.yaml` 中配置：
+如果不希望使用 URL，也可以使用分项配置：
 
-```yaml
-secrets:
-  LITELLM_API_KEY: sk-your-virtual-key
-  LITELLM_DATABASE_PASSWORD: your-database-password
-  LITELLM_MASTER_KEY: sk-your-litellm-master-key
+```dotenv
+DATABASE_HOST=8.137.196.46
+DATABASE_PORT=5432
+DATABASE_NAME=litellm
+DATABASE_USER=agent_eval_reader
+DATABASE_PASSWORD=your-database-password
+DATABASE_ENABLED=true
 ```
 
 如果运行环境已经提供完整 `DATABASE_URL`，它优先于分项配置。数据库用户只需对 `LiteLLM_SpendLogs` 具有只读权限。健康检查：
@@ -227,18 +241,8 @@ secrets:
 Invoke-RestMethod http://127.0.0.1:8000/api/database/health
 ```
 
-部署脚本也可以生成被 Git 忽略的 `backend/config/secrets.env`：
-
-```dotenv
-LITELLM_DATABASE_PASSWORD=your-database-password
-LITELLM_MASTER_KEY=sk-your-litellm-master-key
-```
-
-如需把一次运行和数据库记录严格一一对应，额外在后端进程环境设置 LiteLLM Master Key：
-
-```powershell
-$env:LITELLM_MASTER_KEY = "你的 LiteLLM Master Key"
-```
+如需把一次运行和数据库记录严格一一对应，必须在同一个 `.env` 中设置
+`LITELLM_MASTER_KEY`。
 
 后端优先为每个任务创建一小时有效的临时虚拟 Key，并按 `key_alias` 精确读取 SpendLogs，运行结束后删除。仅当显式关闭模型硬校验时，网关禁止管理接口才允许退化为任务时间窗口匹配，并在报告中标记较弱的 Agent 归因。默认开启模型硬校验：没有成功调用或实际模型不匹配都会令任务失败。只有显式使用 `--no-require-model-verification` 才允许保留“未确认”的诊断结果。默认不读取 messages/response。
 

@@ -13,8 +13,11 @@ from pathlib import Path
 BACKEND_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_ROOT / "src"))
 
+from agent_eval.env_config import apply_root_env
+
 
 def main() -> None:
+    apply_root_env(BACKEND_ROOT)
     parser = argparse.ArgumentParser(description="Start Agent Eval backend")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)

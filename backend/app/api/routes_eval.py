@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
 from agent_eval.runner import run_evaluation
 from agent_eval.runtime import validate_evaluation_capabilities
 from app.config import BACKEND_ROOT, RUNS_ROOT
+from app.auth import employee_from_request
 from app.job_manager import job_manager
 from app.skill_registry import compose_skills, resolve_skill
 
@@ -116,7 +117,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
 
 
 @router.post("/run")
-def create_run(request: RunRequest) -> dict[str, object]:
+def create_run(request: RunRequest, http_request: Request) -> dict[str, object]:
     """Queue an evaluation and return immediately with a job id."""
     try:
         skill_dir = _resolve_request_skill(request)
@@ -124,7 +125,9 @@ def create_run(request: RunRequest) -> dict[str, object]:
             request.agent,
             require_model_selection=request.require_model_verification,
         )
-        return job_manager.submit(request.model_dump(), skill_dir)
+        payload = request.model_dump()
+        payload["user_id"] = employee_from_request(http_request)
+        return job_manager.submit(payload, skill_dir)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
@@ -134,8 +137,8 @@ def create_run(request: RunRequest) -> dict[str, object]:
 
 
 @router.get("/jobs")
-def list_jobs(user_id: str | None = None) -> list[dict[str, object]]:
-    return job_manager.list(user_id=user_id)
+def list_jobs(request: Request) -> list[dict[str, object]]:
+    return job_manager.list(user_id=employee_from_request(request))
 
 
 @router.get("/capacity")
@@ -145,15 +148,15 @@ def get_capacity() -> dict[str, object]:
 
 
 @router.get("/jobs/{job_id}")
-def get_job(job_id: str) -> dict[str, object]:
+def get_job(job_id: str, request: Request) -> dict[str, object]:
     job = job_manager.get(job_id)
-    if job is None:
+    if job is None or job.get("user_id") != employee_from_request(request):
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 
 @router.post("/batches")
-def create_batch(request: BatchRunRequest) -> dict[str, object]:
+def create_batch(request: BatchRunRequest, http_request: Request) -> dict[str, object]:
     """Queue the Cartesian Agent/model combinations as one comparison batch."""
     try:
         normalized: list[RunRequest] = []
@@ -164,6 +167,7 @@ def create_batch(request: BatchRunRequest) -> dict[str, object]:
                 continue
             seen.add(key)
             run = RunRequest(**request.base_request, **target.model_dump())
+            run.user_id = employee_from_request(http_request)
             validate_evaluation_capabilities(
                 run.agent,
                 require_model_selection=run.require_model_verification,
@@ -182,20 +186,23 @@ def create_batch(request: BatchRunRequest) -> dict[str, object]:
 
 
 @router.get("/batches")
-def list_batches(user_id: str | None = None) -> list[dict[str, object]]:
-    return job_manager.list_batches(user_id=user_id)
+def list_batches(request: Request) -> list[dict[str, object]]:
+    return job_manager.list_batches(user_id=employee_from_request(request))
 
 
 @router.get("/batches/{batch_id}")
-def get_batch(batch_id: str) -> dict[str, object]:
+def get_batch(batch_id: str, request: Request) -> dict[str, object]:
     batch = job_manager.get_batch(batch_id)
-    if batch is None:
+    if batch is None or batch.get("user_id") != employee_from_request(request):
         raise HTTPException(status_code=404, detail="Batch not found")
     return batch
 
 
 @router.post("/jobs/{job_id}/cancel")
-def cancel_job(job_id: str) -> dict[str, object]:
+def cancel_job(job_id: str, request: Request) -> dict[str, object]:
+    existing = job_manager.get(job_id)
+    if existing is None or existing.get("user_id") != employee_from_request(request):
+        raise HTTPException(status_code=404, detail="Job not found")
     job = job_manager.cancel(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -203,9 +210,10 @@ def cancel_job(job_id: str) -> dict[str, object]:
 
 
 @router.post("/validate")
-def validate_run(request: RunRequest) -> dict[str, object]:
+def validate_run(request: RunRequest, http_request: Request) -> dict[str, object]:
     """Validate a Skill/eval config without executing the full run."""
     try:
+        request.user_id = employee_from_request(http_request)
         return _run(request=request, validate_only=True)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

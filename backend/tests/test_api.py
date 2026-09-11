@@ -5,6 +5,21 @@ from app.api.routes_eval import RunRequest
 
 
 client = TestClient(app)
+assert client.post(
+    "/api/auth/login", json={"employee_no": "test-worker", "password": "ignored"}
+).status_code == 200
+
+
+def test_login_is_required_and_password_is_not_returned():
+    anonymous = TestClient(app)
+    assert anonymous.get("/api/agents").status_code == 401
+    response = anonymous.post(
+        "/api/auth/login", json={"employee_no": "E10001", "password": "not-validated"}
+    )
+    assert response.status_code == 200
+    assert response.json()["employee_no"] == "E10001"
+    assert "password" not in response.text.lower()
+    assert anonymous.get("/api/auth/me").json()["employee_no"] == "E10001"
 
 
 def test_health_and_discovery_endpoints():
@@ -21,8 +36,8 @@ def test_health_and_discovery_endpoints():
     assert skills.status_code == 200
     model_config = client.get("/api/model-config")
     assert model_config.status_code == 200
-    assert model_config.json()["llm_judge"]["profile"] == "litellm_glm_4_7"
-    assert model_config.json()["llm_judge"]["model"] == "glm-4.7"
+    assert model_config.json()["llm_judge"]["profile"] == "litellm_deepseek_flash"
+    assert model_config.json()["llm_judge"]["model"] == "deepseek-v4-flash-0731-free-3"
 
 
 def test_database_health_never_exposes_credentials_or_crashes():
@@ -111,3 +126,4 @@ def test_batch_queues_unique_agent_model_combinations(monkeypatch):
     assert response.json() == {"batch_id": "batch-test", "total_jobs": 2}
     assert captured["name"] == "matrix"
     assert [item["model"] for item in captured["requests"]] == ["gpt-5.4", "gpt-5.5"]
+    assert {item["user_id"] for item in captured["requests"]} == {"test-worker"}
