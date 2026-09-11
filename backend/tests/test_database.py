@@ -8,6 +8,7 @@ from agent_eval.database import (
     DatabaseConfigurationError,
     _database_retry,
     _sanitize,
+    build_conversation_groups,
     enrich_interaction_rows,
     resolve_database_config,
     summarize_interaction_rows,
@@ -15,6 +16,48 @@ from agent_eval.database import (
     verify_requested_model,
     fetch_model_interactions,
 )
+
+
+def test_conversation_groups_attach_subagents_to_root_session():
+    rows = [
+        {
+            "request_id": "main-1", "session_id": "root", "model": "glm-4.5-air",
+            "start_time": "2026-09-09T10:00:00+08:00", "end_time": "2026-09-09T10:00:01+08:00",
+            "total_tokens": 10, "metadata": {"agent_eval_task_id": "task-1", "agent_eval_agent": "justdo"},
+        },
+        {
+            "request_id": "child-1", "session_id": "child", "model": "glm-4.5-air",
+            "start_time": "2026-09-09T10:00:02+08:00", "end_time": "2026-09-09T10:00:03+08:00",
+            "total_tokens": 20, "proxy_server_request": {"metadata": {"parent_session_id": "root", "agent_eval_task_id": "task-1"}},
+        },
+        {
+            "request_id": "grandchild-1", "session_id": "grandchild", "model": "glm-4.5-air",
+            "start_time": "2026-09-09T10:00:04+08:00", "end_time": "2026-09-09T10:00:05+08:00",
+            "total_tokens": 30, "metadata": {"parent_session_id": "child", "agent_eval_task_id": "task-1"},
+        },
+    ]
+
+    conversations = build_conversation_groups(rows)
+
+    assert len(conversations) == 1
+    conversation = conversations[0]
+    assert conversation["root_session_id"] == "root"
+    assert conversation["interaction_count"] == 3
+    assert conversation["subagent_count"] == 2
+    assert conversation["total_tokens"] == 60
+    assert [node["depth"] for node in conversation["sessions"]] == [0, 1, 2]
+    assert conversation["source_kind"] == "evaluation"
+
+
+def test_conversation_groups_do_not_merge_missing_session_ids():
+    conversations = build_conversation_groups([
+        {"request_id": "one", "model": "m"},
+        {"request_id": "two", "model": "m"},
+    ])
+
+    assert {item["root_session_id"] for item in conversations} == {
+        "unattributed:one", "unattributed:two",
+    }
 
 
 def test_fetch_interactions_paginates_past_500(monkeypatch, tmp_path):

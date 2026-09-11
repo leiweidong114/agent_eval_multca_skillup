@@ -392,7 +392,7 @@ def search_conversation_interactions(
             or metadata->>'agent_eval_user_id' = %s
             or proxy_server_request->'metadata'->>'agent_eval_user_id' = %s
         )''')
-        parameters.extend([user_id, user_id, user_id, user_id])
+        parameters.extend([user_id] * 6)
     if end_user:
         clauses.append("end_user = %s")
         parameters.append(end_user)
@@ -700,20 +700,328 @@ def group_subagent_interactions(rows: list[dict[str, Any]]) -> list[dict[str, An
     return sorted(result, key=lambda item: str(item.get("started_at") or ""))
 
 
-def conversation_filter_options(project_root: Path) -> dict[str, Any]:
+def _conversation_user_filter(user_id: str | None) -> tuple[str, list[Any]]:
+    normalized = (user_id or "").strip()
+    if not normalized:
+        return "true", []
+    return '''(
+        "user" = %s or end_user = %s
+        or metadata->>'user_api_key_user_id' = %s
+        or metadata->'spend_logs_metadata'->>'user_api_key_user_id' = %s
+        or metadata->>'agent_eval_user_id' = %s
+        or proxy_server_request->'metadata'->>'agent_eval_user_id' = %s
+    )''', [normalized] * 6
+
+
+def _interaction_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize the session lineage LiteLLM records in its JSON columns."""
+    metadata = _as_json(row.get("metadata"))
+    metadata = metadata if isinstance(metadata, dict) else {}
+    proxy_request = _as_json(row.get("proxy_server_request"))
+    proxy_request = proxy_request if isinstance(proxy_request, dict) else {}
+    proxy_metadata = _as_json(proxy_request.get("metadata"))
+    proxy_metadata = proxy_metadata if isinstance(proxy_metadata, dict) else {}
+    nested = _as_json(metadata.get("spend_logs_metadata"))
+    nested = nested if isinstance(nested, dict) else {}
+    sources = (proxy_metadata, metadata, nested)
+
+    def first(*names: str) -> Any:
+        for source in sources:
+            for name in names:
+                value = source.get(name)
+                if value not in (None, ""):
+                    return value
+        return None
+
+    session_id = row.get("session_id") or first("session_id")
+    request_id = str(row.get("request_id") or "unknown")
+    session_id = str(session_id) if session_id else f"unattributed:{request_id}"
+    task_id = row.get("evaluation_task_id") or first("agent_eval_task_id")
+    run_id = row.get("evaluation_run_id") or first("agent_eval_run_id")
+    key_alias = row.get("key_alias") or first("user_api_key_alias")
+    is_evaluation = bool(
+        task_id
+        or run_id
+        or (isinstance(key_alias, str) and "agent-eval" in key_alias.casefold())
+    )
+    return {
+        "session_id": session_id,
+        "session_key": row.get("session_key") or first("session_key"),
+        "parent_session_id": row.get("parent_session_id") or first("parent_session_id"),
+        "parent_session_key": row.get("parent_session_key") or first("parent_session_key"),
+        "spawned_by": row.get("spawned_by") or first("spawned_by", "spawnedBy"),
+        "evaluation_task_id": task_id,
+        "evaluation_run_id": run_id,
+        "top_level_agent": row.get("top_level_agent") or first("agent_eval_agent") or row.get("agent_id"),
+        "requested_model": row.get("requested_model") or first("agent_eval_model"),
+        "request_purpose": row.get("request_purpose") or first("request_purpose"),
+        "key_alias": key_alias,
+        "source_kind": "evaluation" if is_evaluation else "non_evaluation",
+    }
+
+
+def build_conversation_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build root conversations from main-agent and descendant session records."""
+    normalized: list[dict[str, Any]] = []
+    key_to_session: dict[str, str] = {}
+    for source_row in rows:
+        row = dict(source_row)
+        if "tool_call_count" not in row:
+            tool_calls = _response_tool_calls(row.get("response"))
+            row["tool_call_count"] = len(tool_calls)
+            row["subagent_start_count"] = sum(
+                _is_subagent_tool(name, arguments) for name, arguments in tool_calls
+            )
+        row.update(_interaction_metadata(row))
+        if row.get("session_key"):
+            key_to_session[str(row["session_key"])] = str(row["session_id"])
+        normalized.append(row)
+
+    parents: dict[str, str] = {}
+    for row in normalized:
+        child = str(row["session_id"])
+        parent = row.get("parent_session_id")
+        if not parent:
+            parent_key = row.get("parent_session_key") or row.get("spawned_by")
+            parent = key_to_session.get(str(parent_key)) if parent_key else None
+        if parent and str(parent) != child:
+            parents.setdefault(child, str(parent))
+
+    def lineage(session_id: str) -> tuple[str, int, bool]:
+        current, depth, seen = session_id, 0, {session_id}
+        while current in parents and depth < 32:
+            parent = parents[current]
+            if parent in seen:
+                return session_id, depth, True
+            seen.add(parent)
+            current, depth = parent, depth + 1
+        return current, depth, depth >= 32
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in normalized:
+        root, depth, invalid_lineage = lineage(str(row["session_id"]))
+        row.update({
+            "root_session_id": root,
+            "depth": depth,
+            "agent_role": "subagent" if depth else "main",
+            "lineage_invalid": invalid_lineage,
+        })
+        grouped.setdefault(root, []).append(row)
+
+    conversations: list[dict[str, Any]] = []
+    for root, items in grouped.items():
+        items.sort(key=lambda item: (str(item.get("start_time") or ""), str(item.get("request_id") or "")))
+        by_session: dict[str, list[dict[str, Any]]] = {}
+        for item in items:
+            by_session.setdefault(str(item["session_id"]), []).append(item)
+        nodes: list[dict[str, Any]] = []
+        for session, session_items in by_session.items():
+            first = session_items[0]
+            node_summary = summarize_interaction_rows(session_items)
+            node_summary.update({
+                "session_id": session,
+                "parent_session_id": parents.get(session),
+                "depth": first["depth"],
+                "agent_role": first["agent_role"],
+                "models": sorted({
+                    str(item.get("model_group") or item.get("model"))
+                    for item in session_items if item.get("model_group") or item.get("model")
+                }),
+            })
+            nodes.append(node_summary)
+        nodes.sort(key=lambda node: (int(node["depth"]), str(node.get("started_at") or "")))
+        summary = summarize_interaction_rows(items)
+        source_kinds = {str(item["source_kind"]) for item in items}
+        summary.update({
+            "root_session_id": root,
+            "session_id": root,
+            "source_kind": next(iter(source_kinds)) if len(source_kinds) == 1 else "mixed",
+            "user_id": next((item.get("user_id") for item in items if item.get("user_id")), None),
+            "end_user": next((item.get("end_user") for item in items if item.get("end_user")), None),
+            "agent": next((item.get("top_level_agent") for item in items if item.get("top_level_agent")), None),
+            "models": sorted({
+                str(item.get("model_group") or item.get("model"))
+                for item in items if item.get("model_group") or item.get("model")
+            }),
+            "evaluation_task_ids": sorted({str(item["evaluation_task_id"]) for item in items if item.get("evaluation_task_id")}),
+            "evaluation_run_ids": sorted({str(item["evaluation_run_id"]) for item in items if item.get("evaluation_run_id")}),
+            "subagent_count": sum(node["agent_role"] == "subagent" for node in nodes),
+            "sessions": nodes,
+            "interactions": items,
+        })
+        conversations.append(summary)
+    return sorted(
+        conversations,
+        key=lambda item: (str(item.get("finished_at") or item.get("started_at") or ""), item["root_session_id"]),
+        reverse=True,
+    )
+
+
+def search_conversations(
+    project_root: Path,
+    *,
+    user_id: str | None = None,
+    end_user: str | None = None,
+    session_id: str | None = None,
+    model: str | None = None,
+    source: str = "all",
+    limit: int = 30,
+    offset: int = 0,
+    include_interactions: bool = False,
+) -> dict[str, Any]:
+    """Return complete root conversations; pagination is applied after grouping."""
+    if offset < 0:
+        raise ValueError("offset must be non-negative")
+    if source not in {"all", "evaluation", "non_evaluation"}:
+        raise ValueError("source must be all, evaluation or non_evaluation")
+    config = resolve_database_config(project_root)
+    if not config.enabled:
+        return {"status": "disabled", "conversations": [], "total": 0}
+    user_clause, parameters = _conversation_user_filter(user_id)
+    scan_limit = min(50000, max(10000, (offset + max(1, limit)) * 100))
+    query = f'''select request_id, call_type, "user" as user_id, end_user,
+        "startTime" as start_time, "endTime" as end_time, model, model_group,
+        custom_llm_provider,
+        coalesce(session_id, proxy_server_request->'metadata'->>'session_id',
+            metadata->>'session_id', metadata->'spend_logs_metadata'->>'session_id') as session_id,
+        coalesce(proxy_server_request->'metadata'->>'parent_session_id', metadata->>'parent_session_id',
+            metadata->'spend_logs_metadata'->>'parent_session_id') as parent_session_id,
+        coalesce(proxy_server_request->'metadata'->>'session_key', metadata->>'session_key',
+            metadata->'spend_logs_metadata'->>'session_key') as session_key,
+        coalesce(proxy_server_request->'metadata'->>'parent_session_key', metadata->>'parent_session_key',
+            metadata->'spend_logs_metadata'->>'parent_session_key') as parent_session_key,
+        coalesce(proxy_server_request->'metadata'->>'spawned_by', proxy_server_request->'metadata'->>'spawnedBy',
+            metadata->>'spawned_by', metadata->>'spawnedBy') as spawned_by,
+        coalesce(proxy_server_request->'metadata'->>'agent_eval_task_id', metadata->>'agent_eval_task_id',
+            metadata->'spend_logs_metadata'->>'agent_eval_task_id') as evaluation_task_id,
+        coalesce(proxy_server_request->'metadata'->>'agent_eval_run_id', metadata->>'agent_eval_run_id',
+            metadata->'spend_logs_metadata'->>'agent_eval_run_id') as evaluation_run_id,
+        coalesce(proxy_server_request->'metadata'->>'agent_eval_agent', metadata->>'agent_eval_agent',
+            metadata->'spend_logs_metadata'->>'agent_eval_agent') as top_level_agent,
+        coalesce(proxy_server_request->'metadata'->>'agent_eval_model', metadata->>'agent_eval_model',
+            metadata->'spend_logs_metadata'->>'agent_eval_model') as requested_model,
+        coalesce(proxy_server_request->'metadata'->>'request_purpose', metadata->>'request_purpose',
+            metadata->'spend_logs_metadata'->>'request_purpose') as request_purpose,
+        coalesce(proxy_server_request->'metadata'->>'user_api_key_alias', metadata->>'user_api_key_alias',
+            metadata->'spend_logs_metadata'->>'user_api_key_alias') as key_alias,
+        status, agent_id, request_duration_ms,
+        prompt_tokens, completion_tokens, total_tokens, spend
+        from "LiteLLM_SpendLogs" where {user_clause}
+        order by "startTime" desc, request_id limit %s'''
+    psycopg, dict_row = _driver()
+    with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query, (*parameters, scan_limit + 1))
+            database_rows = cursor.fetchall()
+    scan_truncated = len(database_rows) > scan_limit
+    database_rows = database_rows[:scan_limit]
+    rows = [
+        _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=None)
+        for row in database_rows
+    ]
+    enrich_interaction_rows(rows)
+    conversations = build_conversation_groups(rows)
+
+    end_user = (end_user or "").strip()
+    session_id = (session_id or "").strip()
+    model = (model or "").strip()
+    filtered = []
+    for conversation in conversations:
+        if source != "all" and conversation["source_kind"] not in {source, "mixed"}:
+            continue
+        if end_user and not any(str(item.get("end_user") or "") == end_user for item in conversation["interactions"]):
+            continue
+        if session_id and not any(str(item.get("session_id") or "") == session_id for item in conversation["interactions"]):
+            continue
+        if model and model not in conversation["models"]:
+            continue
+        filtered.append(conversation)
+    total = len(filtered)
+    page = filtered[offset:offset + max(1, limit)]
+    if not include_interactions:
+        for conversation in page:
+            conversation.pop("interactions", None)
+    next_offset = offset + len(page)
+    return {
+        "status": "ok",
+        "query": {"end_user": end_user or None, "session_id": session_id or None, "model": model or None, "source": source},
+        "total": total,
+        "count": len(page),
+        "conversations": page,
+        "has_more": next_offset < total,
+        "next_offset": next_offset if next_offset < total else None,
+        "scan_truncated": scan_truncated,
+        "scanned_interactions": len(rows),
+    }
+
+
+def get_conversation(project_root: Path, *, root_session_id: str, user_id: str | None = None) -> dict[str, Any] | None:
+    """Fetch one root and all descendants without rebuilding the entire overview."""
+    config = resolve_database_config(project_root)
+    if not config.enabled:
+        return None
+    user_clause, parameters = _conversation_user_filter(user_id)
+    psycopg, dict_row = _driver()
+    with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(f'''with recursive session_edges as materialized (
+                    select distinct
+                        coalesce(session_id, proxy_server_request->'metadata'->>'session_id',
+                            metadata->>'session_id', metadata->'spend_logs_metadata'->>'session_id') as child_id,
+                        coalesce(proxy_server_request->'metadata'->>'parent_session_id',
+                            metadata->>'parent_session_id', metadata->'spend_logs_metadata'->>'parent_session_id') as parent_id
+                    from "LiteLLM_SpendLogs" where {user_clause}
+                ), descendants(session_id) as (
+                    select %s::text
+                    union
+                    select edge.child_id from session_edges edge
+                    join descendants parent on edge.parent_id = parent.session_id
+                    where edge.child_id is not null
+                )
+                select logs.request_id, logs.call_type, logs."user" as user_id, logs.end_user,
+                    logs."startTime" as start_time, logs."endTime" as end_time,
+                    logs.model, logs.model_group, logs.custom_llm_provider, logs.session_id,
+                    logs.status, logs.agent_id, logs.request_duration_ms, logs.prompt_tokens,
+                    logs.completion_tokens, logs.total_tokens, logs.spend, logs.messages,
+                    logs.response, logs.proxy_server_request, logs.metadata
+                from "LiteLLM_SpendLogs" logs join descendants found on
+                    coalesce(logs.session_id, logs.proxy_server_request->'metadata'->>'session_id',
+                        logs.metadata->>'session_id', logs.metadata->'spend_logs_metadata'->>'session_id') = found.session_id
+                where {user_clause}
+                order by logs."startTime" asc, logs.request_id''',
+                (*parameters, root_session_id, *parameters))
+            full_rows = cursor.fetchall()
+    if not full_rows:
+        return None
+    interactions = [
+        _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=None)
+        for row in full_rows
+    ]
+    enrich_interaction_rows(interactions)
+    rebuilt = build_conversation_groups(interactions)
+    conversation = next((item for item in rebuilt if item["root_session_id"] == root_session_id), None)
+    if conversation is None:
+        return None
+    conversation["timeline"] = conversation.pop("interactions")
+    return conversation
+
+
+def conversation_filter_options(project_root: Path, *, user_id: str | None = None) -> dict[str, Any]:
     """Return LiteLLM End User and model values for overview dropdowns."""
     config = resolve_database_config(project_root)
     if not config.enabled:
         return {"status": "disabled", "end_users": [], "models": []}
     psycopg, dict_row = _driver()
+    user_clause, parameters = _conversation_user_filter(user_id)
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
-            cursor.execute('''select distinct end_user from "LiteLLM_SpendLogs"
-                where end_user is not null and end_user <> '' order by end_user limit 500''')
+            cursor.execute(f'''select distinct end_user from "LiteLLM_SpendLogs"
+                where {user_clause} and end_user is not null and end_user <> '' order by end_user limit 500''', parameters)
             end_users = [str(row["end_user"]) for row in cursor.fetchall()]
-            cursor.execute('''select distinct coalesce(nullif(model_group, ''), model) as model
-                from "LiteLLM_SpendLogs" where coalesce(nullif(model_group, ''), model) is not null
-                order by model limit 500''')
+            cursor.execute(f'''select distinct coalesce(nullif(model_group, ''), model) as model
+                from "LiteLLM_SpendLogs" where {user_clause}
+                and coalesce(nullif(model_group, ''), model) is not null
+                order by model limit 500''', parameters)
             models = [str(row["model"]) for row in cursor.fetchall()]
     return {"status": "ok", "end_users": end_users, "models": models}
 

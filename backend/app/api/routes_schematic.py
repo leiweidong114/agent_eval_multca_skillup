@@ -10,7 +10,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from agent_eval.database import conversation_filter_options, search_conversation_interactions
+from agent_eval.database import (
+    conversation_filter_options,
+    get_conversation,
+    search_conversation_interactions,
+    search_conversations,
+)
 from app.auth import employee_from_request
 from app.config import BACKEND_ROOT
 
@@ -60,11 +65,55 @@ def search_interactions(
 
 
 @router.get("/interaction-filters")
-def interaction_filters() -> dict[str, Any]:
+def interaction_filters(request: Request) -> dict[str, Any]:
     try:
+        employee_from_request(request)
         return conversation_filter_options(BACKEND_ROOT)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="数据库查询失败，请运行 agent-eval check-database 检查连接") from exc
+
+
+@router.get("/conversations")
+def conversation_list(
+    request: Request,
+    end_user: str | None = None,
+    session_id: str | None = None,
+    model: str | None = None,
+    source: str = Query("all", pattern="^(all|evaluation|non_evaluation)$"),
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    try:
+        return search_conversations(
+            BACKEND_ROOT,
+            user_id=None,
+            end_user=end_user,
+            session_id=session_id,
+            model=model,
+            source=source,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="数据库查询失败，请运行 agent-eval check-database 检查连接") from exc
+
+
+@router.get("/conversations/{root_session_id}")
+def conversation_detail(request: Request, root_session_id: str) -> dict[str, Any]:
+    try:
+        employee_from_request(request)
+        result = get_conversation(
+            BACKEND_ROOT,
+            root_session_id=root_session_id,
+            user_id=None,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="数据库查询失败，请运行 agent-eval check-database 检查连接") from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="会话不存在或无权查看")
+    return result
 
 
 def _project(project_id: str) -> Path:
