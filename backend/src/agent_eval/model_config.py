@@ -19,6 +19,7 @@ from agent_eval.agent_adapters import AGENT_MODEL_ADAPTERS, model_adapter
 from agent_eval.env_config import effective_environment, load_root_env, update_root_env
 from agent_eval.failure import describe_evaluation_failure
 from agent_eval.schematic_tasks import normalize_schematic_task_profiles
+from agent_eval.skill_sources import MAX_SELECTED_SKILLS
 
 
 PROFILE_PROTOCOLS = frozenset(
@@ -135,7 +136,7 @@ def load_runtime_settings(project_root: Path) -> dict[str, Any]:
         if isinstance(skills, list):
             legacy_skills = [
                 str(item).strip() for item in skills if str(item).strip()
-            ][:8]
+            ][:MAX_SELECTED_SKILLS]
             settings["schematic_skills"] = legacy_skills
     raw_profiles = str(environment.get("SCHEMATIC_TASK_PROFILES_JSON") or "").strip()
     try:

@@ -9,6 +9,7 @@ from agent_eval.env_config import effective_environment, repository_root
 
 
 SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$")
+MAX_SELECTED_SKILLS = 30
 
 
 def external_skill_roots(project_root: Path) -> list[Path]:

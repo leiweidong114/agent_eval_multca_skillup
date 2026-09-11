@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import SKILLS_ROOT
-from agent_eval.skill_sources import resolve_external_skill
+from agent_eval.skill_sources import MAX_SELECTED_SKILLS, resolve_external_skill
 
 
 REGISTRY_ROOT = SKILLS_ROOT / ".registry"
@@ -135,8 +135,10 @@ def resolve_skill(identifier: str) -> Path | None:
 
 def compose_skills(identifiers: list[str]) -> Path:
     """Build a deterministic Skill bundle that delegates to multiple Skills."""
-    if not 2 <= len(identifiers) <= 8:
-        raise ValueError("Combined evaluation requires between 2 and 8 Skills")
+    if not 2 <= len(identifiers) <= MAX_SELECTED_SKILLS:
+        raise ValueError(
+            f"Combined evaluation requires between 2 and {MAX_SELECTED_SKILLS} Skills"
+        )
     resolved: list[tuple[str, Path]] = []
     hasher = hashlib.sha256()
     hasher.update(b"ordered-compose-v2\0")

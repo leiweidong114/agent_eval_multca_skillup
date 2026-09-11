@@ -14,7 +14,7 @@ def evidence_for(root: Path) -> EvaluationEvidence:
         skill_quality={},
         results=[],
         interactions=[],
-        artifact_root=root,
+        artifact_root=str(root),
         artifact_manifest=build_artifact_manifest(root),
     )
 

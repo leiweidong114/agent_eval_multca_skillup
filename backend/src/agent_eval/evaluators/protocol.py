@@ -29,7 +29,7 @@ class EvaluationEvidence:
     skill_quality: dict[str, Any]
     results: list[dict[str, Any]]
     interactions: list[dict[str, Any]]
-    artifact_root: Path | None = None
+    artifact_root: str | None = None
     artifact_manifest: tuple[dict[str, Any], ...] = ()
 
     def resolve_artifact(self, relative_path: str) -> Path:
@@ -39,7 +39,7 @@ class EvaluationEvidence:
         relative = Path(relative_path)
         if relative.is_absolute():
             raise ValueError("Artifact paths must be relative to artifact_root")
-        root = self.artifact_root.resolve()
+        root = Path(self.artifact_root).resolve()
         candidate = (root / relative).resolve()
         try:
             candidate.relative_to(root)

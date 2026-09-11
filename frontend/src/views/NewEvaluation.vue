@@ -56,7 +56,7 @@
 
         <template v-if="form.type === 'skill'">
           <el-divider content-position="left">Skill 组合</el-divider>
-          <el-form-item label="参与评测的 Skill（最多 8 个）">
+          <el-form-item label="参与评测的 Skill（最多 30 个）">
             <el-select v-model="form.skills" multiple filterable collapse-tags :max-collapse-tags="3" placeholder="选择一个或多个 Skill" @change="onSkillsChange">
               <el-option v-for="skill in skills" :key="skill.identifier||skill.skill_id||skill.name" :value="skill.identifier||skill.skill_id||skill.name" :label="skill.version?`${skill.name}@${skill.version}`:skill.name" />
             </el-select>

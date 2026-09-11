@@ -20,7 +20,7 @@
           <el-card v-for="task in taskTypes" :key="task.id" shadow="never" class="task-profile">
             <template #header><div class="task-title"><div><b>{{task.name}}</b><span>{{contractLabel(task.input_contract)}} → {{contractLabel(task.output_contract)}}</span></div><el-tag effect="plain">{{task.id}}</el-tag></div></template>
             <el-form-item label="Skill 流水线（按选择顺序执行）">
-              <el-select v-model="profile(task.id).skills" multiple filterable collapse-tags :max-collapse-tags="4" placeholder="选择 1 至 8 个已扫描 Skill">
+              <el-select v-model="profile(task.id).skills" multiple filterable collapse-tags :max-collapse-tags="4" placeholder="选择 1 至 30 个已扫描 Skill">
                 <el-option v-for="skill in skills" :key="skill.identifier||skill.name" :label="`${skill.name} · ${sourceLabel(skill.source)}`" :value="skill.identifier||skill.name"/>
               </el-select>
               <div class="help">当前顺序：{{profile(task.id).skills.join(' → ')||'未选择'}}</div>

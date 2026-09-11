@@ -46,3 +46,18 @@ def test_compose_skills_builds_a_deterministic_joint_bundle(tmp_path, monkeypatc
     assert (first / "SKILL.md").is_file()
     assert (first / "skills" / "01-alpha" / "SKILL.md").read_text(encoding="utf-8") == "# alpha\n"
     assert "02-beta/SKILL.md" in (first / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_compose_skills_accepts_thirty_and_rejects_thirty_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(registry, "SKILLS_ROOT", tmp_path / "skills")
+    monkeypatch.setattr(registry, "COMPOSED_ROOT", tmp_path / ".runtime" / "composed")
+    identifiers = [f"skill-{index:02d}" for index in range(30)]
+    for name in identifiers:
+        skill = registry.SKILLS_ROOT / name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+
+    assert registry.compose_skills(identifiers).is_dir()
+
+    with pytest.raises(ValueError, match="between 2 and 30"):
+        registry.compose_skills([*identifiers, "skill-30"])

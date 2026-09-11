@@ -927,8 +927,8 @@ def run_evaluation(
             skill_quality=skill_quality,
             results=results,
             interactions=interactions,
-            artifact_root=output.resolve(),
-            artifact_manifest=build_artifact_manifest(output),
+            artifact_root=str(result_root),
+            artifact_manifest=build_artifact_manifest(result_root),
         ),
         scoring_config=scoring_config,
     )

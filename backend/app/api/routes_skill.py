@@ -40,7 +40,7 @@ from agent_eval.runtime import (
 )
 from agent_eval.scoring import load_scoring_config
 from agent_eval.cli_catalog import SCHEMATIC_PIPELINE_SKILLS
-from agent_eval.skill_sources import list_external_skills
+from agent_eval.skill_sources import MAX_SELECTED_SKILLS, list_external_skills
 from agent_eval.evaluators import resolve_evaluator
 from agent_eval.schematic_tasks import normalize_schematic_task_profiles
 from app.config import BACKEND_ROOT, SKILLS_ROOT
@@ -80,7 +80,7 @@ class AgentPathRequest(BaseModel):
 
 
 class SchematicTaskProfileRequest(BaseModel):
-    skills: list[str] = Field(min_length=1, max_length=8)
+    skills: list[str] = Field(min_length=1, max_length=MAX_SELECTED_SKILLS)
     evaluator_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
 
 
@@ -88,7 +88,9 @@ class RuntimeSettingsRequest(BaseModel):
     judge_model: str = Field(min_length=1, max_length=300)
     agent_test_model: str = Field(min_length=1, max_length=300)
     schematic_skills: list[str] = Field(
-        default_factory=lambda: list(SCHEMATIC_PIPELINE_SKILLS), min_length=1, max_length=8
+        default_factory=lambda: list(SCHEMATIC_PIPELINE_SKILLS),
+        min_length=1,
+        max_length=MAX_SELECTED_SKILLS,
     )
     schematic_task_profiles: dict[str, SchematicTaskProfileRequest] = Field(default_factory=dict)
 

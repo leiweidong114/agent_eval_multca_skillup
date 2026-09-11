@@ -15,6 +15,7 @@ from agent_eval.schematic_tasks import (
     DEFAULT_SCHEMATIC_TASK_TYPE,
     list_schematic_task_types,
 )
+from agent_eval.skill_sources import MAX_SELECTED_SKILLS
 from app.config import BACKEND_ROOT, RUNS_ROOT
 from app.auth import employee_from_request
 from app.job_manager import job_manager
@@ -38,7 +39,7 @@ class RunRequest(BaseModel):
         description="Installed evaluator id; omitted uses the .env default",
     )
     skill: str | None = Field(default=None, description="Backward-compatible primary Skill")
-    skills: list[str] = Field(default_factory=list, max_length=8)
+    skills: list[str] = Field(default_factory=list, max_length=MAX_SELECTED_SKILLS)
     agent: str = Field(..., description="Multica Agent backend name")
     model: str | None = Field(default=None, description="Optional profile model override")
     profile: str | None = Field(default=None, description="Profile from config/models.yaml")
@@ -71,8 +72,10 @@ class RunRequest(BaseModel):
             return self
         if not selected:
             raise ValueError("Select at least one Skill")
-        if len(selected) > 8:
-            raise ValueError("At most 8 Skills can be evaluated together")
+        if len(selected) > MAX_SELECTED_SKILLS:
+            raise ValueError(
+                f"At most {MAX_SELECTED_SKILLS} Skills can be evaluated together"
+            )
         self.skills = selected
         self.skill = selected[0]
         return self
