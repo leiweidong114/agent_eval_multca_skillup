@@ -310,14 +310,21 @@ class CodeBuddyCompatibilityProxy:
                             if delay:
                                 time.sleep(delay)
                             continue
-                        self.send_response(response.status)
-                        for key, value in response_headers:
-                            if key.lower() not in HOP_BY_HOP_HEADERS:
-                                self.send_header(key, value)
-                        self.send_header("Content-Length", str(len(response_body)))
-                        self.send_header("X-Agent-Eval-Attempts", str(attempt + 1))
-                        self.end_headers()
-                        self.wfile.write(response_body)
+                        try:
+                            self.send_response(response.status)
+                            for key, value in response_headers:
+                                if key.lower() not in HOP_BY_HOP_HEADERS:
+                                    self.send_header(key, value)
+                            self.send_header("Content-Length", str(len(response_body)))
+                            self.send_header("X-Agent-Eval-Attempts", str(attempt + 1))
+                            self.end_headers()
+                            self.wfile.write(response_body)
+                        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                            # The Agent process may be terminated by its evaluation timeout
+                            # while an upstream request is still completing.  The upstream
+                            # outcome has already been recorded, so a closed client socket is
+                            # normal teardown rather than a proxy transport failure.
+                            return
                         return
                     except (OSError, http.client.HTTPException) as exc:
                         last_error = exc
@@ -334,12 +341,15 @@ class CodeBuddyCompatibilityProxy:
                 response_body = json.dumps(
                     {"error": {"type": "gateway_transport_error", "message": str(last_error)}}
                 ).encode("utf-8")
-                self.send_response(502)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(response_body)))
-                self.send_header("X-Agent-Eval-Attempts", str(owner.max_attempts))
-                self.end_headers()
-                self.wfile.write(response_body)
+                try:
+                    self.send_response(502)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(response_body)))
+                    self.send_header("X-Agent-Eval-Attempts", str(owner.max_attempts))
+                    self.end_headers()
+                    self.wfile.write(response_body)
+                except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                    return
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self._server.daemon_threads = True

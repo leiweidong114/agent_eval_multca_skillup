@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from agent_eval.database import (
     enrich_interaction_rows,

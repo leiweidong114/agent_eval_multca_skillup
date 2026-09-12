@@ -1,0 +1,83 @@
+diff --git a/pkg/agent/openclaw.go b/pkg/agent/openclaw.go
+index 7f6ad8d..d902dc5 100644
+--- a/pkg/agent/openclaw.go
++++ b/pkg/agent/openclaw.go
+@@ -8,6 +8,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"log/slog"
++	"os"
+ 	"os/exec"
+ 	"regexp"
+ 	"strconv"
+@@ -73,6 +73,9 @@ func (b *openclawBackend) Execute(ctx context.Context, prompt string, opts ExecO
+ 		sessionID = fmt.Sprintf("multica-%d", time.Now().UnixNano())
+ 	}
+ 	args := buildOpenclawArgs(prompt, sessionID, opts, b.cfg.Logger)
++	if os.Getenv("AGENT_EVAL_OPENCLAW_AGENT_EXEC") == "1" {
++		args = buildOpenclawAgentExecArgs(prompt, opts)
++	}
+ 
+ 	cmd := b.cfg.commandAt(execPath).exec(runCtx, args...)
+ 	hideAgentWindow(cmd)
+@@ -270,6 +273,33 @@ func buildOpenclawArgs(prompt, sessionID string, opts ExecOptions, logger *slog.
+ 	return args
+ }
+ 
++// buildOpenclawAgentExecArgs uses the stable, isolated one-shot protocol
++// introduced by OpenClaw 2026.8. Unlike `openclaw agent --local`, agent-exec
++// exits after emitting its JSON envelope, so evaluation workers cannot remain
++// parked after the model has already returned a complete answer.
++func buildOpenclawAgentExecArgs(prompt string, opts ExecOptions) []string {
++	args := []string{"agent", "exec", "--json"}
++	if config := strings.TrimSpace(os.Getenv("OPENCLAW_CONFIG_PATH")); config != "" {
++		args = append(args, "--config", config)
++	}
++	if state := strings.TrimSpace(os.Getenv("OPENCLAW_STATE_DIR")); state != "" {
++		args = append(args, "--state-dir", state)
++	}
++	if opts.Cwd != "" {
++		args = append(args, "--cwd", opts.Cwd)
++	}
++	if model := strings.TrimSpace(os.Getenv("AGENT_EVAL_OPENCLAW_EXEC_MODEL")); model != "" {
++		args = append(args, "--model", model)
++	}
++	if opts.Timeout > 0 {
++		args = append(args, "--timeout", fmt.Sprintf("%d", int(opts.Timeout.Seconds())))
++	}
++	if opts.SystemPrompt != "" {
++		prompt = opts.SystemPrompt + "\n\n" + prompt
++	}
++	return append(args, prompt)
++}
++
+ // customArgsContains reports whether args contains the given flag
+ // (either as a standalone token "--flag" or in "--flag=value" form).
+ func customArgsContains(args []string, flag string) bool {
+@@ -659,6 +689,16 @@ func (b *openclawBackend) buildOpenclawEventResult(result openclawResult, ch cha
+ 			usage = parseOpenclawUsage(u)
+ 		}
+ 	}
++	// OpenClaw agent-exec exposes the same values at the envelope root.
++	if sessionID == "" {
++		sessionID = strings.TrimSpace(result.SessionID)
++	}
++	if model == "" {
++		model = strings.TrimSpace(result.Model)
++	}
++	if result.Usage != nil {
++		usage = parseOpenclawUsage(result.Usage)
++	}
+ 
+ 	return openclawEventResult{
+ 		status:    "completed",
+@@ -785,6 +825,9 @@ type openclawErrorData struct {
+ type openclawResult struct {
+ 	Payloads []openclawPayload `json:"payloads"`
+ 	Meta     openclawMeta      `json:"meta"`
++	Usage    map[string]any    `json:"usage"`
++	Model    string            `json:"model"`
++	SessionID string           `json:"sessionId"`
+ }
+ 
+ type openclawPayload struct {

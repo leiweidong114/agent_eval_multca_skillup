@@ -97,6 +97,25 @@ def test_codex_additional_tools_requires_a_list():
         }, 'responses')
 
 
+def test_codex_system_messages_are_collapsed_at_the_beginning():
+    chat = to_chat({
+        'model': 'qwen',
+        'instructions': 'base instructions',
+        'input': [
+            {'role': 'user', 'content': 'first question'},
+            {'role': 'assistant', 'content': 'first answer'},
+            {'role': 'system', 'content': 'turn-scoped instructions'},
+            {'role': 'user', 'content': 'next question'},
+        ],
+    }, 'responses')
+    assert chat['messages'] == [
+        {'role': 'system', 'content': 'base instructions\n\nturn-scoped instructions'},
+        {'role': 'user', 'content': 'first question'},
+        {'role': 'assistant', 'content': 'first answer'},
+        {'role': 'user', 'content': 'next question'},
+    ]
+
+
 def test_codex_recovers_known_tagged_tool_call_from_chat_text():
     request = {
         'model': 'glm',

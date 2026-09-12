@@ -341,6 +341,8 @@ class EvaluationJobManager:
                 "result_score": scores.get("result_dimension_score"),
                 "process_score": scores.get("process_dimension_score"),
                 "skill_quality_score": scores.get("skill_quality_dimension_score"),
+                "valid_for_ranking": (result.get("scoring") or {}).get("valid_for_ranking"),
+                "diagnostic_only": (result.get("scoring") or {}).get("diagnostic_only"),
                 "duration_ms": scores.get("total_duration_ms"),
                 "total_tokens": scores.get("total_tokens"),
                 "failure": job.get("failure") or result.get("failure"),
@@ -352,6 +354,10 @@ class EvaluationJobManager:
                 for row in rows
                 if row.get("status") == "completed"
                 and row.get("overall_score") is not None
+                # Legacy reports predate the ranking flag. Explicitly
+                # diagnostic reports are excluded; legacy completed reports
+                # remain visible for backward compatibility.
+                and row.get("valid_for_ranking") is not False
             ),
             key=lambda row: float(row["overall_score"]),
             reverse=True,

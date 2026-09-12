@@ -58,6 +58,7 @@ from agent_eval.runtime import (
     skill_target,
     validate_evaluation_capabilities,
 )
+from agent_eval.run_lock import agent_run_lock
 
 
 def _slug(value: str) -> str:
@@ -554,6 +555,11 @@ def run_evaluation(
         openclaw_state = result_root / "runtime" / "openclaw-state"
         openclaw_state.mkdir(parents=True, exist_ok=True)
         env["OPENCLAW_STATE_DIR"] = str(openclaw_state)
+        if requested_agent == "openclaw":
+            env["AGENT_EVAL_OPENCLAW_AGENT_EXEC"] = "1"
+            env["AGENT_EVAL_OPENCLAW_EXEC_MODEL"] = (
+                f"litellm/{resolved_profile.gateway_model_for_agent('openclaw')}"
+            )
     env["AGENT_EVAL_RUN_ID"] = operation_id
     env["AGENT_EVAL_TASK_ID"] = canonical_task_id
     env["AGENT_EVAL_USER_ID"] = user_id
@@ -764,9 +770,18 @@ def run_evaluation(
             # that provider at the same resilience proxy so JustDo receives
             # retries and the evaluator can retain the real upstream failure.
             env["AGENT_EVAL_PROVIDER_BASE_URL"] = resilience_proxy.openai_base_url
-    if interaction_thread is not None:
-        interaction_thread.start()
+    run_lock = agent_run_lock(project_root, agent, cancel_event=cancel_event)
+    if run_lock is not None:
+        progress("waiting_agent_lock", 24, "Waiting for exclusive OpenClaw/JustDo runtime")
+        try:
+            run_lock.acquire()
+        except InterruptedError as exc:
+            if resilience_proxy is not None:
+                resilience_proxy.close()
+            raise EvaluationCancelled(str(exc)) from exc
     try:
+        if interaction_thread is not None:
+            interaction_thread.start()
         completed = _execute_process(
             command,
             cwd=project_root,
@@ -789,6 +804,8 @@ def run_evaluation(
         if resilience_proxy is not None:
             gateway_resilience = {"status": "completed", **resilience_proxy.stats()}
             resilience_proxy.close()
+        if run_lock is not None:
+            run_lock.release()
     evaluation_finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
     (result_root / "skill-up.stdout.log").write_text(completed.stdout, encoding="utf-8")
     (result_root / "skill-up.stderr.log").write_text(completed.stderr, encoding="utf-8")
@@ -936,6 +953,28 @@ def run_evaluation(
         raise TypeError(
             f"Evaluator {evaluator.id} must return PluginEvaluation from evaluator API v1"
         )
+    if evaluation_type == "schematic" and evaluation_status == "completed":
+        schematic_extension = plugin_evaluation.extensions.get("schematic") or {}
+        acceptance = schematic_extension.get("acceptance") or {}
+        if acceptance.get("accepted") is False:
+            evaluation_status = "failed"
+            failed_checks = [
+                str(item.get("name"))
+                for item in acceptance.get("checks") or []
+                if item.get("required") and not item.get("passed")
+            ]
+            failure = {
+                "category": "agent_output_invalid",
+                "retryable": False,
+                "summary": "Agent 未按原理图 Skill 完成有效交付",
+                "title": "原理图交付验收失败",
+                "detail": "模型调用链正常，但 Agent 没有完成原理图任务的必要步骤或产物。",
+                "suggested_action": "检查 Agent 轨迹和失败的验收项；这属于本次 Agent/Skill 执行结果，不应归类为 LiteLLM 故障。",
+                "component": "agent",
+                "status_code": None,
+                "reset_after": None,
+                "technical_detail": ", ".join(failed_checks) or "schematic acceptance failed",
+            }
     if not run_llm_judge_enabled:
         llm_judge = {"status": "disabled_by_request"}
     elif evaluation_status != "completed":
@@ -950,6 +989,7 @@ def run_evaluation(
             scoring_config=scoring_config,
             evidence=plugin_evaluation.llm_evidence,
             system_prompt=plugin_evaluation.judge_system_prompt,
+            employee_no=user_id,
         )
     scoring = combine_dimensions(
         rule_dimensions=plugin_evaluation.rule_dimensions,

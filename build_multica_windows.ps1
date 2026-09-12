@@ -14,11 +14,25 @@ $binary = Get-AgentEvalConfiguredPath -ProjectRoot $projectRoot -Name 'MULTICA_E
 $vendor = Join-Path $server 'vendor'
 $runnerSource = Join-Path $projectRoot 'backend\runtime\multica-local-runner'
 $runnerTarget = Join-Path $server 'cmd\multica-eval-runtime'
+$openclawPatch = Join-Path $projectRoot 'backend\patches\multica-openclaw-agent-exec.patch'
 
 if (-not (Test-Path -LiteralPath $go)) { throw "Go was not found: $go" }
 if (-not (Test-Path -LiteralPath (Join-Path $server 'go.mod'))) { throw "Multica server source was not found: $server" }
 if (-not (Test-Path -LiteralPath $vendor)) {
     throw 'Multica server/vendor is missing. The offline release must include vendored Go dependencies.'
+}
+if (Test-Path -LiteralPath $openclawPatch) {
+    & git.exe -C $server apply --check $openclawPatch 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        & git.exe -C $server apply $openclawPatch
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to apply the Multica OpenClaw agent-exec patch.' }
+    } else {
+        & git.exe -C $server apply --reverse --check $openclawPatch 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw 'The bundled Multica source is incompatible with multica-openclaw-agent-exec.patch.'
+        }
+        Write-Host 'Multica OpenClaw agent-exec patch is already applied.'
+    }
 }
 New-Item -ItemType Directory -Force -Path $runnerTarget | Out-Null
 Copy-Item -LiteralPath (Join-Path $runnerSource 'main.go') -Destination $runnerTarget -Force

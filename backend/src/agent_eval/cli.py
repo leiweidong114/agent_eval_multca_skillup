@@ -443,6 +443,11 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             state_path = root / "openclaw-state"
             state_path.mkdir()
             env["OPENCLAW_STATE_DIR"] = str(state_path)
+            if str(args.agent).strip().lower() == "openclaw":
+                env["AGENT_EVAL_OPENCLAW_AGENT_EXEC"] = "1"
+                env["AGENT_EVAL_OPENCLAW_EXEC_MODEL"] = (
+                    f"litellm/{profile.gateway_model_for_agent('openclaw')}"
+                )
         command = [
             str(runtime), "--input", str(input_path), "--output", str(output_path),
             "--agent", runtime_agent, "--model", profile.model_for_agent(runtime_agent),
@@ -882,6 +887,16 @@ def _evaluation_batch(
     def evaluation_passed(result: dict[str, object]) -> bool:
         if result.get("status", "completed") != "completed":
             return False
+        scoring = result.get("scoring") or {}
+        # Ranking eligibility and task acceptance are separate concepts.  A
+        # transient Judge outage makes an otherwise valid deterministic result
+        # diagnostic-only, but it must not rewrite a strict schematic PASS into
+        # a failed Agent execution in the batch summary.
+        extensions = scoring.get("extensions") or {}
+        schematic = extensions.get("schematic") or {}
+        acceptance = schematic.get("acceptance") or schematic.get("result") or {}
+        if isinstance(acceptance.get("accepted"), bool):
+            return acceptance["accepted"]
         cases = [
             case
             for iteration in (result.get("results") or [])
@@ -920,6 +935,7 @@ def _evaluation_batch(
                 schematic_task_type=schematic_task_type,
             )
             scores = result.get("scores") or {}
+            scoring = result.get("scoring") or {}
             passed = evaluation_passed(result)
             return {
                 "agent": agent,
@@ -931,6 +947,8 @@ def _evaluation_batch(
                 "result_score": scores.get("result_dimension_score"),
                 "process_score": scores.get("process_dimension_score"),
                 "skill_quality_score": scores.get("skill_quality_dimension_score"),
+                "valid_for_ranking": scoring.get("valid_for_ranking"),
+                "diagnostic_only": scoring.get("diagnostic_only"),
                 "result_dir": result.get("result_dir"),
                 "failure": result.get("failure"),
             }

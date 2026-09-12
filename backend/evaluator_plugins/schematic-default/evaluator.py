@@ -40,7 +40,13 @@ class SchematicDefaultEvaluator:
             skill_quality=evidence.skill_quality,
             config=scoring_config,
         )
-        result_evidence = evaluate_result(evidence)
+        result_evidence = evaluate_result(
+            evidence, task_type=context.schematic_task_type or "block_to_schematic"
+        )
+        dimensions["result"] = {
+            "score": result_evidence["score"],
+            "evidence": result_evidence,
+        }
         trace_evidence = evaluate_trace(evidence)
         judge_evidence = {
             "task": {
@@ -58,6 +64,7 @@ class SchematicDefaultEvaluator:
             "skill_quality_rules": evidence.skill_quality,
             "skill_md": context.skill_md,
             "skill_up_results": evidence.results,
+            "schematic_result": result_evidence,
         }
         return PluginEvaluation(
             rule_dimensions=dimensions,
@@ -68,6 +75,7 @@ class SchematicDefaultEvaluator:
                     "profile": self.id,
                     "trace": trace_evidence,
                     "result": result_evidence,
+                    "acceptance": result_evidence,
                 }
             },
         )

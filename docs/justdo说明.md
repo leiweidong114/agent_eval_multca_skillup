@@ -256,3 +256,15 @@ Get-FileHash "D:\software\JustDo\JustDo-agent.exe"
 - 只修改评测系统：重启评测前后端，不需要打包 JustDo。
 - 修改 JustDo 前端、Electron 主进程或评测桥接：开发测试可不打包；正式安装必须重新执行 npm run dist:win 并安装。
 - 修改模型配置：通常不需要重新打包。
+
+
+
+$env:EvalCli = [Environment]::GetEnvironmentVariable('EvalCli', 'User')
+
+& $env:EvalCli prompt `
+  --agent justdo `
+  --model glm-4.5-air `
+  --prompt "只回复 JUSTDO_PROMPT_OK" `
+  --workers 1 `
+  --timeout 180 `
+  --database-verify

@@ -100,6 +100,7 @@ def run_llm_judge(
     scoring_config: dict[str, Any],
     evidence: dict[str, Any],
     system_prompt: str | None = None,
+    employee_no: str | None = None,
 ) -> dict[str, Any]:
     config = scoring_config.get("llm_judge") or {}
     if not config.get("enabled", False):

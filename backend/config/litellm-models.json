@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "refreshed_at": "2026-09-11T08:30:19.169015+00:00",
+  "refreshed_at": "2026-09-12T00:58:23.917099+00:00",
   "status": "completed",
   "source": "LiteLLM /v1/models + /v1/chat/completions",
   "catalog_visible_only": false,
@@ -10,13 +10,13 @@
   "probe_prompt": "HI",
   "probe_workers": 8,
   "visible_model_count": 57,
-  "available_model_count": 6,
-  "unavailable_model_count": 51,
+  "available_model_count": 3,
+  "unavailable_model_count": 54,
   "note": "models contains only deployments that returned a successful real inference. Agent-specific protocol compatibility must still be verified with check-agent.",
-  "model_count": 6,
+  "model_count": 3,
   "models": [
     {
-      "id": "oc/big-pickle",
+      "id": "deepseek-v4-flash-vision-exp-free",
       "owned_by": "openai",
       "available": true,
       "enabled": true,
@@ -25,10 +25,10 @@
       "probe_scope": "text_only_not_tool_or_agent_validation",
       "probe_endpoint": "chat/completions",
       "probe_status_code": 200,
-      "probe_latency_ms": 14227.77
+      "probe_latency_ms": 40419.69
     },
     {
-      "id": "oc/ling-3.0-flash-fin",
+      "id": "minicpm5-2b-free",
       "owned_by": "openai",
       "available": true,
       "enabled": true,
@@ -37,43 +37,7 @@
       "probe_scope": "text_only_not_tool_or_agent_validation",
       "probe_endpoint": "chat/completions",
       "probe_status_code": 200,
-      "probe_latency_ms": 6676.17
-    },
-    {
-      "id": "oc/mimo-v2.5",
-      "owned_by": "openai",
-      "available": true,
-      "enabled": true,
-      "reasoning": null,
-      "reasoning_policy": "provider_default_not_disabled",
-      "probe_scope": "text_only_not_tool_or_agent_validation",
-      "probe_endpoint": "chat/completions",
-      "probe_status_code": 200,
-      "probe_latency_ms": 10378.74
-    },
-    {
-      "id": "oc/muse-spark-1.2-contributor",
-      "owned_by": "openai",
-      "available": true,
-      "enabled": true,
-      "reasoning": null,
-      "reasoning_policy": "provider_default_not_disabled",
-      "probe_scope": "text_only_not_tool_or_agent_validation",
-      "probe_endpoint": "chat/completions",
-      "probe_status_code": 200,
-      "probe_latency_ms": 8144.05
-    },
-    {
-      "id": "oc/muse-spark-1.3-contributor",
-      "owned_by": "openai",
-      "available": true,
-      "enabled": true,
-      "reasoning": null,
-      "reasoning_policy": "provider_default_not_disabled",
-      "probe_scope": "text_only_not_tool_or_agent_validation",
-      "probe_endpoint": "chat/completions",
-      "probe_status_code": 200,
-      "probe_latency_ms": 15812.71
+      "probe_latency_ms": 1609.55
     },
     {
       "id": "qwen3.8-flash-free",
@@ -85,7 +49,7 @@
       "probe_scope": "text_only_not_tool_or_agent_validation",
       "probe_endpoint": "chat/completions",
       "probe_status_code": 200,
-      "probe_latency_ms": 19278.32
+      "probe_latency_ms": 2216.88
     }
   ],
   "unavailable_models": [
@@ -93,7 +57,7 @@
       "id": "deepseek",
       "available": false,
       "probe_status_code": 402,
-      "probe_latency_ms": 656.97,
+      "probe_latency_ms": 612.65,
       "failure": {
         "category": "gateway_quota_exhausted",
         "retryable": false,
@@ -110,25 +74,7 @@
       "id": "deepseek-v4-flash-0731-free-3",
       "available": false,
       "probe_status_code": null,
-      "probe_latency_ms": 45091.8,
-      "failure": {
-        "category": "gateway_unavailable",
-        "retryable": true,
-        "summary": "模型服务连接失败",
-        "title": "模型服务连接失败",
-        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
-        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
-        "component": "litellm_model_probe",
-        "status_code": null,
-        "reset_after": null,
-        "technical_detail": "timed out"
-      }
-    },
-    {
-      "id": "deepseek-v4-flash-vision-exp-free",
-      "available": false,
-      "probe_status_code": null,
-      "probe_latency_ms": 45091.58,
+      "probe_latency_ms": 60103.91,
       "failure": {
         "category": "gateway_unavailable",
         "retryable": true,
@@ -145,85 +91,85 @@
     {
       "id": "fal-ai/flux/dev",
       "available": false,
-      "probe_status_code": 404,
-      "probe_latency_ms": 1235.4,
+      "probe_status_code": 503,
+      "probe_latency_ms": 6212.75,
       "failure": {
-        "category": "model_protocol_incompatible",
-        "retryable": false,
-        "summary": "模型接口与 Agent 协议不兼容",
-        "title": "模型接口与 Agent 协议不兼容",
-        "detail": "LiteLLM 已找到模型，但该模型的上游接口不支持 Agent 请求的端点。",
-        "suggested_action": "改用支持该端点的模型，或在 LiteLLM 配置端点转换；Codex 当前要求 Responses API。",
+        "category": "gateway_server_error",
+        "retryable": true,
+        "summary": "模型网关或上游服务异常",
+        "title": "模型网关或上游服务异常",
+        "detail": "模型服务返回 HTTP 503，暂时无法完成推理。",
+        "suggested_action": "稍后重试，并检查 LiteLLM 与上游服务日志。",
         "component": "litellm_model_probe",
-        "status_code": 404,
+        "status_code": 503,
         "reset_after": null
       }
     },
     {
       "id": "fal-ai/gpt-image-2",
       "available": false,
-      "probe_status_code": 404,
-      "probe_latency_ms": 1192.81,
+      "probe_status_code": 503,
+      "probe_latency_ms": 6858.35,
       "failure": {
-        "category": "model_protocol_incompatible",
-        "retryable": false,
-        "summary": "模型接口与 Agent 协议不兼容",
-        "title": "模型接口与 Agent 协议不兼容",
-        "detail": "LiteLLM 已找到模型，但该模型的上游接口不支持 Agent 请求的端点。",
-        "suggested_action": "改用支持该端点的模型，或在 LiteLLM 配置端点转换；Codex 当前要求 Responses API。",
+        "category": "gateway_server_error",
+        "retryable": true,
+        "summary": "模型网关或上游服务异常",
+        "title": "模型网关或上游服务异常",
+        "detail": "模型服务返回 HTTP 503，暂时无法完成推理。",
+        "suggested_action": "稍后重试，并检查 LiteLLM 与上游服务日志。",
         "component": "litellm_model_probe",
-        "status_code": 404,
+        "status_code": 503,
         "reset_after": null
       }
     },
     {
       "id": "fal-ai/nano-banana",
       "available": false,
-      "probe_status_code": 404,
-      "probe_latency_ms": 1222.85,
+      "probe_status_code": 503,
+      "probe_latency_ms": 6519.33,
       "failure": {
-        "category": "model_protocol_incompatible",
-        "retryable": false,
-        "summary": "模型接口与 Agent 协议不兼容",
-        "title": "模型接口与 Agent 协议不兼容",
-        "detail": "LiteLLM 已找到模型，但该模型的上游接口不支持 Agent 请求的端点。",
-        "suggested_action": "改用支持该端点的模型，或在 LiteLLM 配置端点转换；Codex 当前要求 Responses API。",
+        "category": "gateway_server_error",
+        "retryable": true,
+        "summary": "模型网关或上游服务异常",
+        "title": "模型网关或上游服务异常",
+        "detail": "模型服务返回 HTTP 503，暂时无法完成推理。",
+        "suggested_action": "稍后重试，并检查 LiteLLM 与上游服务日志。",
         "component": "litellm_model_probe",
-        "status_code": 404,
+        "status_code": 503,
         "reset_after": null
       }
     },
     {
       "id": "fal-ai/nano-banana-2",
       "available": false,
-      "probe_status_code": 404,
-      "probe_latency_ms": 1224.12,
+      "probe_status_code": 503,
+      "probe_latency_ms": 5977.05,
       "failure": {
-        "category": "model_protocol_incompatible",
-        "retryable": false,
-        "summary": "模型接口与 Agent 协议不兼容",
-        "title": "模型接口与 Agent 协议不兼容",
-        "detail": "LiteLLM 已找到模型，但该模型的上游接口不支持 Agent 请求的端点。",
-        "suggested_action": "改用支持该端点的模型，或在 LiteLLM 配置端点转换；Codex 当前要求 Responses API。",
+        "category": "gateway_server_error",
+        "retryable": true,
+        "summary": "模型网关或上游服务异常",
+        "title": "模型网关或上游服务异常",
+        "detail": "模型服务返回 HTTP 503，暂时无法完成推理。",
+        "suggested_action": "稍后重试，并检查 LiteLLM 与上游服务日志。",
         "component": "litellm_model_probe",
-        "status_code": 404,
+        "status_code": 503,
         "reset_after": null
       }
     },
     {
       "id": "fal-ai/nano-banana-pro",
       "available": false,
-      "probe_status_code": 404,
-      "probe_latency_ms": 847.02,
+      "probe_status_code": 503,
+      "probe_latency_ms": 6448.49,
       "failure": {
-        "category": "model_protocol_incompatible",
-        "retryable": false,
-        "summary": "模型接口与 Agent 协议不兼容",
-        "title": "模型接口与 Agent 协议不兼容",
-        "detail": "LiteLLM 已找到模型，但该模型的上游接口不支持 Agent 请求的端点。",
-        "suggested_action": "改用支持该端点的模型，或在 LiteLLM 配置端点转换；Codex 当前要求 Responses API。",
+        "category": "gateway_server_error",
+        "retryable": true,
+        "summary": "模型网关或上游服务异常",
+        "title": "模型网关或上游服务异常",
+        "detail": "模型服务返回 HTTP 503，暂时无法完成推理。",
+        "suggested_action": "稍后重试，并检查 LiteLLM 与上游服务日志。",
         "component": "litellm_model_probe",
-        "status_code": 404,
+        "status_code": 503,
         "reset_after": null
       }
     },
@@ -231,7 +177,7 @@
       "id": "glm-4.5-air",
       "available": false,
       "probe_status_code": 429,
-      "probe_latency_ms": 4976.23,
+      "probe_latency_ms": 4757.11,
       "failure": {
         "category": "gateway_quota_exhausted",
         "retryable": false,
@@ -248,7 +194,7 @@
       "id": "glm-4.7",
       "available": false,
       "probe_status_code": 429,
-      "probe_latency_ms": 5005.73,
+      "probe_latency_ms": 5134.09,
       "failure": {
         "category": "gateway_quota_exhausted",
         "retryable": false,
@@ -265,7 +211,7 @@
       "id": "glm-4.7-anthropic",
       "available": false,
       "probe_status_code": 429,
-      "probe_latency_ms": 5605.46,
+      "probe_latency_ms": 5081.79,
       "failure": {
         "category": "gateway_quota_exhausted",
         "retryable": false,
@@ -282,7 +228,7 @@
       "id": "glm-4.7-no-thinking",
       "available": false,
       "probe_status_code": null,
-      "probe_latency_ms": 18.72,
+      "probe_latency_ms": 9.06,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -300,7 +246,7 @@
       "id": "minicpm5-1b-free",
       "available": false,
       "probe_status_code": 503,
-      "probe_latency_ms": 7466.49,
+      "probe_latency_ms": 6152.73,
       "failure": {
         "category": "gateway_server_error",
         "retryable": true,
@@ -314,28 +260,10 @@
       }
     },
     {
-      "id": "minicpm5-2b-free",
-      "available": false,
-      "probe_status_code": null,
-      "probe_latency_ms": 45081.84,
-      "failure": {
-        "category": "gateway_unavailable",
-        "retryable": true,
-        "summary": "模型服务连接失败",
-        "title": "模型服务连接失败",
-        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
-        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
-        "component": "litellm_model_probe",
-        "status_code": null,
-        "reset_after": null,
-        "technical_detail": "timed out"
-      }
-    },
-    {
       "id": "MiniMax-M2.7",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1080.68,
+      "probe_latency_ms": 1061.41,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -352,7 +280,7 @@
       "id": "MiniMax-M3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 552.64,
+      "probe_latency_ms": 972.17,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -366,10 +294,100 @@
       }
     },
     {
+      "id": "oc/big-pickle",
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 60049.09,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
+    },
+    {
+      "id": "oc/ling-3.0-flash-fin",
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 60053.91,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
+    },
+    {
+      "id": "oc/mimo-v2.5",
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 60053.86,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
+    },
+    {
+      "id": "oc/muse-spark-1.2-contributor",
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 60052.59,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
+    },
+    {
+      "id": "oc/muse-spark-1.3-contributor",
+      "available": false,
+      "probe_status_code": null,
+      "probe_latency_ms": 60055.41,
+      "failure": {
+        "category": "gateway_unavailable",
+        "retryable": true,
+        "summary": "模型服务连接失败",
+        "title": "模型服务连接失败",
+        "detail": "连接模型网关时发生超时、断开或服务暂不可用。",
+        "suggested_action": "检查网络和 LiteLLM 健康状态后重试。",
+        "component": "litellm_model_probe",
+        "status_code": null,
+        "reset_after": null,
+        "technical_detail": "timed out"
+      }
+    },
+    {
       "id": "oc/nemotron-3-ultra",
       "available": false,
       "probe_status_code": null,
-      "probe_latency_ms": 45060.88,
+      "probe_latency_ms": 60053.09,
       "failure": {
         "category": "gateway_unavailable",
         "retryable": true,
@@ -387,7 +405,7 @@
       "id": "oc/nemotron-3.5-lightning",
       "available": false,
       "probe_status_code": null,
-      "probe_latency_ms": 45068.18,
+      "probe_latency_ms": 60062.13,
       "failure": {
         "category": "gateway_unavailable",
         "retryable": true,
@@ -405,7 +423,7 @@
       "id": "opencode-go/deepseek-v4-flash",
       "available": false,
       "probe_status_code": 403,
-      "probe_latency_ms": 6412.41,
+      "probe_latency_ms": 6071.08,
       "failure": {
         "category": "gateway_authorization",
         "retryable": false,
@@ -422,7 +440,7 @@
       "id": "opencode-go/deepseek-v4-flash-vision-exp",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 508.38,
+      "probe_latency_ms": 489.82,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -439,7 +457,7 @@
       "id": "opencode-go/deepseek-v4-pro",
       "available": false,
       "probe_status_code": 403,
-      "probe_latency_ms": 6217.5,
+      "probe_latency_ms": 6347.33,
       "failure": {
         "category": "gateway_authorization",
         "retryable": false,
@@ -456,7 +474,7 @@
       "id": "opencode-go/glm-5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 522.5,
+      "probe_latency_ms": 498.56,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -473,7 +491,7 @@
       "id": "opencode-go/glm-5.1",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 471.87,
+      "probe_latency_ms": 931.85,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -490,7 +508,7 @@
       "id": "opencode-go/glm-5.2",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 454.0,
+      "probe_latency_ms": 1008.98,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -507,7 +525,7 @@
       "id": "opencode-go/glm-5.3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1053.52,
+      "probe_latency_ms": 487.59,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -524,7 +542,7 @@
       "id": "opencode-go/glm-5.3-flash",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 477.53,
+      "probe_latency_ms": 475.13,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -541,7 +559,7 @@
       "id": "opencode-go/gpt-5.6-luna",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 979.45,
+      "probe_latency_ms": 971.22,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -558,7 +576,7 @@
       "id": "opencode-go/grok-4.5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 999.45,
+      "probe_latency_ms": 1024.98,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -575,7 +593,7 @@
       "id": "opencode-go/grok-4.6",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 1025.43,
+      "probe_latency_ms": 1042.26,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -592,7 +610,7 @@
       "id": "opencode-go/hy3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 521.97,
+      "probe_latency_ms": 503.02,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -609,7 +627,7 @@
       "id": "opencode-go/hy3-preview",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 494.89,
+      "probe_latency_ms": 516.09,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -626,7 +644,7 @@
       "id": "opencode-go/hy4-preview",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 501.3,
+      "probe_latency_ms": 523.29,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -643,7 +661,7 @@
       "id": "opencode-go/kimi-k2.5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 473.82,
+      "probe_latency_ms": 598.29,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -660,7 +678,7 @@
       "id": "opencode-go/kimi-k2.6",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 958.43,
+      "probe_latency_ms": 520.64,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -677,7 +695,7 @@
       "id": "opencode-go/kimi-k2.7-code",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 492.58,
+      "probe_latency_ms": 487.33,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -694,7 +712,7 @@
       "id": "opencode-go/kimi-k3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 464.93,
+      "probe_latency_ms": 1032.84,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -711,7 +729,7 @@
       "id": "opencode-go/longcat-2.0",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 499.75,
+      "probe_latency_ms": 470.25,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -728,7 +746,7 @@
       "id": "opencode-go/mimo-v2-omni",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 511.23,
+      "probe_latency_ms": 514.79,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -745,7 +763,7 @@
       "id": "opencode-go/mimo-v2-pro",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 474.6,
+      "probe_latency_ms": 556.47,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -762,7 +780,7 @@
       "id": "opencode-go/mimo-v2.5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 525.71,
+      "probe_latency_ms": 485.11,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -779,7 +797,7 @@
       "id": "opencode-go/mimo-v2.5-pro",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 546.13,
+      "probe_latency_ms": 510.85,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -796,7 +814,7 @@
       "id": "opencode-go/minimax-m2.5",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 525.26,
+      "probe_latency_ms": 494.52,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -813,7 +831,7 @@
       "id": "opencode-go/minimax-m2.7",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 553.12,
+      "probe_latency_ms": 480.15,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -830,7 +848,7 @@
       "id": "opencode-go/minimax-m3",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 972.68,
+      "probe_latency_ms": 994.42,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -847,7 +865,7 @@
       "id": "opencode-go/muse-spark-1.2-contributor",
       "available": false,
       "probe_status_code": 403,
-      "probe_latency_ms": 5919.66,
+      "probe_latency_ms": 5479.82,
       "failure": {
         "category": "gateway_authorization",
         "retryable": false,
@@ -864,7 +882,7 @@
       "id": "opencode-go/qwen3.5-plus",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 697.63,
+      "probe_latency_ms": 516.01,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -881,7 +899,7 @@
       "id": "opencode-go/qwen3.6-plus",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 477.68,
+      "probe_latency_ms": 505.74,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -898,7 +916,7 @@
       "id": "opencode-go/qwen3.7-max",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 488.99,
+      "probe_latency_ms": 542.28,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -915,7 +933,7 @@
       "id": "opencode-go/qwen3.7-plus",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 485.77,
+      "probe_latency_ms": 485.64,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -932,7 +950,7 @@
       "id": "opencode-go/qwen3.8-flash",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 454.23,
+      "probe_latency_ms": 504.92,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,
@@ -949,7 +967,7 @@
       "id": "opencode-go/qwen3.8-max",
       "available": false,
       "probe_status_code": 400,
-      "probe_latency_ms": 470.19,
+      "probe_latency_ms": 525.83,
       "failure": {
         "category": "agent_execution_failed",
         "retryable": false,

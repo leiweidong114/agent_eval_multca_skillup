@@ -9,6 +9,7 @@ from agent_eval.evaluators.protocol import (
     EvaluationContext,
     EvaluationEvidence,
 )
+from agent_eval.evaluators.artifacts import build_artifact_manifest
 
 
 BUNDLED_SCHEMATIC_PLUGIN = (
@@ -122,3 +123,77 @@ def test_project_extension_evaluator_is_discovered_without_env_path(tmp_path):
             evaluator_id="block-list",
             schematic_task_type="block_to_schematic",
         )
+
+
+def test_schematic_evaluator_requires_real_pipeline_delivery(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    install_bundled_schematic_plugin(backend)
+    output = (
+        tmp_path / "run" / "skill-up" / "iteration-1" / "case"
+        / "with_skill" / "outputs" / "workspace" / "out"
+    )
+    (output / "layout").mkdir(parents=True)
+    (output / "sheets.json").write_text(
+        '{"sheets":[{"sheet_id":"S1","components":[],"nets":[]}]}', encoding="utf-8"
+    )
+    (output / "layout" / "S1.json").write_text(
+        '{"metrics":{"component_overlap_count":0,"unrouted_net_count":0}}', encoding="utf-8"
+    )
+    url = "http://127.0.0.1:8631/static_schematic/project/shell.html"
+    (output / "apply_result.json").write_text(
+        '{"project_id":"project","sheet_count":1,"url":"' + url
+        + '","url_verification":{"status":"ok","http_status":200}}',
+        encoding="utf-8",
+    )
+    evidence = EvaluationEvidence(
+        deterministic_scores={},
+        process_metrics={"subagent_calls": 2},
+        skill_usage={"all_selected_skills_read": True, "all_selected_skills_observed": True},
+        skill_quality={"score": 100, "details": []},
+        results=[{"case_results": [{"status": "PASS", "response": url}]}],
+        interactions=[],
+        artifact_root=str(tmp_path / "run"),
+        artifact_manifest=build_artifact_manifest(tmp_path / "run"),
+    )
+    context = EvaluationContext(
+        run_id="run", task_id="task", evaluation_type="schematic",
+        agent="codex", requested_model="model", skill_name="bundle",
+        selected_skills=("schematic-pipeline",), skill_md="# Skill",
+        schematic_task_type="block_to_schematic",
+    )
+    result = resolve_evaluator(backend, evaluation_type="schematic").evaluate(
+        context=context, evidence=evidence, scoring_config={}
+    )
+    acceptance = result.extensions["schematic"]["acceptance"]
+
+    assert acceptance["accepted"] is True
+    assert acceptance["score"] == 100
+    assert result.rule_dimensions["result"]["score"] == 100
+
+
+def test_schematic_evaluator_rejects_process_only_success(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    install_bundled_schematic_plugin(backend)
+    evidence = EvaluationEvidence(
+        deterministic_scores={},
+        process_metrics={"subagent_calls": 0},
+        skill_usage={"all_selected_skills_read": True, "all_selected_skills_observed": True},
+        skill_quality={"score": 100, "details": []},
+        results=[{"case_results": [{"status": "PASS", "response": "still working"}]}],
+        interactions=[], artifact_root=str(tmp_path),
+        artifact_manifest=build_artifact_manifest(tmp_path),
+    )
+    context = EvaluationContext(
+        run_id="run", task_id="task", evaluation_type="schematic",
+        agent="codex", requested_model="model", skill_name="bundle",
+        selected_skills=("schematic-pipeline",), skill_md="# Skill",
+        schematic_task_type="block_to_schematic",
+    )
+    result = resolve_evaluator(backend, evaluation_type="schematic").evaluate(
+        context=context, evidence=evidence, scoring_config={}
+    )
+
+    assert result.extensions["schematic"]["acceptance"]["accepted"] is False
+    assert "schematic_url_verified" in result.extensions["schematic"]["acceptance"]["failed_checks"]

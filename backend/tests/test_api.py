@@ -27,6 +27,12 @@ def test_login_is_required_and_password_is_not_returned():
     assert anonymous.get("/api/auth/me").json()["employee_no"] == "E10001"
 
 
+def test_openapi_schema_is_available():
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    assert "/api/runs" in response.json()["paths"]
+
+
 def test_health_and_discovery_endpoints(monkeypatch):
     monkeypatch.setattr(
         "app.api.routes_skill.load_runtime_settings",

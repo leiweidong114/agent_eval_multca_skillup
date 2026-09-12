@@ -104,9 +104,10 @@ def recover_tagged_tool_call(message, request):
 
 def to_chat(payload, protocol):
     messages = []
+    system_messages = []
     system = payload.get("instructions") if protocol == "responses" else payload.get("system")
     if system:
-        messages.append({"role": "system", "content": text_blocks(system)})
+        system_messages.append(text_blocks(system))
     source = payload.get("input", []) if protocol == "responses" else payload.get("messages", [])
     if isinstance(source, str):
         source = [{"role": "user", "content": source}]
@@ -117,6 +118,13 @@ def to_chat(payload, protocol):
         if protocol == "responses" and kind == "additional_tools":
             # Tool definitions are merged below.  This item is not a chat
             # message and must not be forwarded as user-visible content.
+            continue
+        if item.get("role") in {"system", "developer"}:
+            # Responses clients may repeat instructions as message items during
+            # a later turn. Several OpenAI-compatible upstreams reject any
+            # system message that is not first, so collapse all such fragments
+            # into one leading system message without changing user/tool order.
+            system_messages.append(text_blocks(item.get("content", "")))
             continue
         if kind == "reasoning":
             continue  # Server-side reasoning tokens are not user/tool messages.
@@ -153,6 +161,11 @@ def to_chat(payload, protocol):
             if kind not in {None, "message"}:
                 raise ValueError(f"Unsupported Responses input item: {kind}")
             messages.append({"role": item.get("role", "user"), "content": text_blocks(content)})
+    if system_messages:
+        messages.insert(0, {
+            "role": "system",
+            "content": "\n\n".join(part for part in system_messages if part),
+        })
     body = {"model": payload["model"], "messages": messages, "stream": False}
     tools = []
     tool_source = response_tools(payload) if protocol == "responses" else payload.get("tools") or []

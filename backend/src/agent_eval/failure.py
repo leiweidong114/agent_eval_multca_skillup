@@ -91,6 +91,15 @@ def describe_evaluation_failure(
         category, title = "gateway_quota_exhausted", "模型账户余额不足"
         detail = "上游模型账户拒绝付费请求（HTTP 402），通常表示余额或资源包不足。"
         action, retryable = "由管理员补充上游模型账户额度或资源包后重试。", False
+    elif any(marker in lowered for marker in (
+        "system message must be at the beginning",
+        "system message must be first",
+        "does not support system messages",
+    )):
+        category, title = "model_protocol_incompatible", "模型接口与 Agent 消息协议不兼容"
+        detail = "模型可以连通，但无法接受 Agent 生成的多轮消息结构。"
+        action = "在统一协议适配层归并并前置 system 消息，或改用支持该消息格式的模型。"
+        retryable = False
     elif inferred_status == 404 and any(
         marker in lowered for marker in ("/responses", "model group", "model not found")
     ):
@@ -102,7 +111,18 @@ def describe_evaluation_failure(
         category, title = "gateway_server_error", "模型网关或上游服务异常"
         detail = f"模型服务返回 HTTP {inferred_status or '5xx'}，暂时无法完成推理。"
         action, retryable = "稍后重试，并检查 LiteLLM 与上游服务日志。", True
-    elif any(marker in lowered for marker in ("timeout", "timed out", "connection reset", "connection refused", "temporarily unavailable")):
+    elif any(marker in lowered for marker in (
+        "context deadline exceeded (case timeout",
+        "case timeout exceeded",
+        "agent execution timeout",
+    )):
+        category, title = "agent_timeout", "Agent 未在规定时间内完成任务"
+        detail = "模型调用链已启动，但 Agent 在评测时限内没有完成任务和最终交付。"
+        action, retryable = "检查运行轨迹；如步骤合理可增加任务时限，否则应判定该 Agent 本次任务失败。", False
+    elif any(marker in lowered for marker in (
+        "timed out", "connection reset", "connection refused",
+        "connection timeout", "request timeout", "temporarily unavailable",
+    )):
         category, title = "gateway_unavailable", "模型服务连接失败"
         detail = "连接模型网关时发生超时、断开或服务暂不可用。"
         action, retryable = "检查网络和 LiteLLM 健康状态后重试。", True

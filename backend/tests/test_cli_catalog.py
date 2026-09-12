@@ -197,3 +197,50 @@ def test_evaluation_batch_does_not_count_failed_cases_as_passed(tmp_path, monkey
     assert result["status"] == "failed"
     assert result["passed"] == 0
     assert result["results"][0]["evaluation_passed"] is False
+
+
+def test_evaluation_batch_counts_strict_acceptance_when_judge_is_unavailable(
+    tmp_path, monkeypatch
+):
+    skill = _skill(tmp_path, "schematic-pipeline")
+
+    def fake_run_evaluation(**kwargs):
+        return {
+            "status": "completed",
+            "task_id": kwargs["task_id"],
+            "provider_model": kwargs["model"],
+            "result_dir": str(tmp_path / kwargs["agent"]),
+            "scores": {"overall_score": 100},
+            "scoring": {
+                "valid_for_ranking": False,
+                "diagnostic_only": True,
+                "extensions": {
+                    "schematic": {"acceptance": {"accepted": True}}
+                },
+            },
+            "results": [{"case_results": [{"status": "PASS"}]}],
+        }
+
+    monkeypatch.setattr(cli, "run_evaluation", fake_run_evaluation)
+    args = argparse.Namespace(
+        agent=["opencode"], workers=1, model="qwen3.8-flash-free", profile=None,
+        case=[], prompt="same task", must_contain=[], must_not_contain=[],
+        parallelism=1, iterations=1, timeout=30, max_turns=2,
+        benchmark=False, output_dir=None, database_trace=True,
+        require_model_verification=True, user_id="local", task_name=None,
+        llm_judge=True, evaluator_id="schematic-default",
+    )
+
+    result = cli._evaluation_batch(
+        args,
+        skill_dir=skill,
+        selected_skills=["schematic-pipeline"],
+        evaluation_type="schematic",
+        schematic_task_type="block_to_schematic",
+    )
+
+    assert result["status"] == "completed"
+    assert result["passed"] == 1
+    assert result["results"][0]["evaluation_passed"] is True
+    assert result["results"][0]["valid_for_ranking"] is False
+    assert result["results"][0]["diagnostic_only"] is True
