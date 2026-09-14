@@ -352,9 +352,13 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         try:
             response = httpx.post(
                 endpoint,
-                headers={"Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}"},
+                headers={
+                    "Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}",
+                    **internal_headers,
+                },
                 json={"model": profile.model, "messages": [{"role": "user", "content": "HI"}], "stream": False},
                 timeout=min(float(args.timeout), 45.0),
+                trust_env=False,
             )
             protocol_probe = {
                 "status": "available" if response.is_success else "unavailable",
@@ -457,13 +461,20 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         for value in [*profile.agent_args, *getattr(args, "extra_arg", [])]:
             command.extend(["--extra-arg", value])
         resilience_proxy = None
-        if profile.api_base and runtime_agent in {"claude", "codex", "codebuddy", "openclaw"}:
+        if profile.api_base and runtime_agent in {
+            "claude", "codex", "codebuddy", "openclaw", "opencode"
+        }:
             resilience_proxy = CodeBuddyCompatibilityProxy(
                 profile.api_base,
                 timeout=args.timeout,
                 forced_model=profile.gateway_model_for_agent(runtime_agent),
-            strip_tools_after_result=False,
+                strip_tools_after_result=False,
                 translate_protocols=runtime_agent in {"claude", "codex"},
+                upstream_headers=internal_headers,
+                request_metadata={
+                    "agent_eval_user_id": user_id,
+                    "agent_eval_agent": args.agent,
+                },
             )
             resilience_proxy.start()
             env["OPENAI_BASE_URL"] = resilience_proxy.openai_base_url
@@ -986,7 +997,12 @@ def main() -> None:
     if args.command in {"check-litellm", "check-database"}:
         from agent_eval.diagnostics import check_database, check_litellm
         result = (check_database(PROJECT_ROOT) if args.command == "check-database"
-                  else check_litellm(PROJECT_ROOT, model=args.model, timeout=args.timeout))
+                  else check_litellm(
+                      PROJECT_ROOT,
+                      model=args.model,
+                      timeout=args.timeout,
+                      employee_no=getattr(args, "user_id", "local"),
+                  ))
         print(json.dumps(result, ensure_ascii=False, indent=2))
         raise SystemExit(0 if result["status"] == "ok" else 1)
     if args.command == "agents":
@@ -1028,7 +1044,9 @@ def main() -> None:
         return
     if args.command == "models":
         if args.list:
-            result = discover_available_models(PROJECT_ROOT)
+            result = discover_available_models(
+                PROJECT_ROOT, employee_no=getattr(args, "user_id", "local")
+            )
             result["connectivity_tested"] = False
             if args.prefix:
                 result["models"] = [m for m in result["models"] if m["id"].startswith(args.prefix)]
@@ -1044,6 +1062,7 @@ def main() -> None:
             result = (
                 refresh_litellm_model_catalog(
                     PROJECT_ROOT,
+                    employee_no=getattr(args, "user_id", "local"),
                     probe_timeout=args.timeout,
                     probe_workers=args.workers,
                     probe_agent=backend_agent(args.agent) if args.agent else None,

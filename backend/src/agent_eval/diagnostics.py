@@ -5,7 +5,7 @@ import httpx
 
 from agent_eval.database import database_health
 from agent_eval.failure import describe_evaluation_failure
-from agent_eval.model_config import resolve_model_profile
+from agent_eval.model_config import gateway_request_headers, resolve_model_profile
 
 
 def check_database(root: Path) -> dict:
@@ -16,11 +16,20 @@ def check_database(root: Path) -> dict:
                 "suggested_action": "Check DATABASE_URL and PostgreSQL connectivity"}
 
 
-def check_litellm(root: Path, *, model: str | None = None, timeout: float = 30) -> dict:
+def check_litellm(
+    root: Path,
+    *,
+    model: str | None = None,
+    timeout: float = 30,
+    employee_no: str | None = None,
+) -> dict:
     try:
         profile = resolve_model_profile(root, model_override=model)
-        with httpx.Client(timeout=timeout) as client:
-            headers = {"Authorization": "Bearer " + profile.environment[profile.api_key_env]}
+        with httpx.Client(timeout=timeout, trust_env=False) as client:
+            headers = {
+                "Authorization": "Bearer " + profile.environment[profile.api_key_env],
+                **gateway_request_headers(root, profile, employee_no),
+            }
             response = client.get(profile.api_base + "/models", headers=headers)
             response.raise_for_status()
             data = response.json()

@@ -117,15 +117,21 @@ def test_runtime_settings_save_non_secret_default_models(tmp_path, monkeypatch):
 
 
 def test_batch_model_probe_endpoint_returns_real_probe_summary(monkeypatch):
-    monkeypatch.setattr(
-        "app.api.routes_skill.refresh_litellm_model_catalog",
-        lambda root, **kwargs: {
+    captured = {}
+
+    def fake_refresh(root, **kwargs):
+        captured.update(kwargs)
+        return {
             "connectivity_tested": True,
             "available_model_count": 2,
             "unavailable_model_count": 1,
             "models": [{"id": "a", "available": True}, {"id": "b", "available": True}],
             "unavailable_models": [{"id": "c", "available": False}],
-        },
+        }
+
+    monkeypatch.setattr(
+        "app.api.routes_skill.refresh_litellm_model_catalog",
+        fake_refresh,
     )
     response = client.post(
         "/api/models/test-batch",
@@ -134,6 +140,7 @@ def test_batch_model_probe_endpoint_returns_real_probe_summary(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["available_model_count"] == 2
+    assert captured["employee_no"] == "test-worker"
 
 
 def test_run_rejects_an_unsupported_model_or_skill_contract_before_queueing():

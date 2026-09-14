@@ -541,13 +541,16 @@ def gateway_request_headers(
     profile: ResolvedModelProfile,
     employee_no: str | None,
 ) -> dict[str, str]:
-    """Return intranet-only identity headers; external profiles receive none."""
-    if not getattr(profile, "internal_gateway", False):
-        return {}
-    account = (employee_no or "").strip()
-    if not account or any(char in account for char in "\r\n"):
-        raise ValueError("A valid employee number is required for the internal gateway")
+    """Return the identity headers required by every LiteLLM request."""
     source = effective_environment(project_root)
+    account = (
+        employee_no
+        or source.get("LITELLM_X_USER_ACCOUNT")
+        or source.get("AGENT_EVAL_USER_ID")
+        or "local"
+    ).strip()
+    if not account or any(char in account for char in "\r\n"):
+        raise ValueError("A valid x-user-account value is required for LiteLLM")
     return {
         "User-Agent": source.get("LITELLM_USER_AGENT", "OpenAI/Python"),
         "x-cookie": source.get("LITELLM_X_COOKIE", "11"),
@@ -942,13 +945,16 @@ def discover_available_models(
 def refresh_litellm_model_catalog(
     project_root: Path,
     *,
+    employee_no: str | None = None,
     transport: httpx.BaseTransport | None = None,
     probe_timeout: float = 15.0,
     probe_workers: int = 8,
     probe_agent: str | None = None,
 ) -> dict[str, Any]:
     """Refresh the catalog and retain only models that complete a real inference."""
-    discovered = discover_available_models(project_root, transport=transport)
+    discovered = discover_available_models(
+        project_root, employee_no=employee_no, transport=transport
+    )
     visible_models = [
         item for item in discovered.get("models", []) if item.get("source") == "litellm"
     ]
@@ -970,10 +976,15 @@ def refresh_litellm_model_catalog(
                     "stream": False,
                 }
             )
-            with httpx.Client(timeout=probe_timeout, transport=transport) as client:
+            with httpx.Client(
+                timeout=probe_timeout, transport=transport, trust_env=False
+            ) as client:
                 response = client.post(
                     endpoint,
-                    headers={"Authorization": f"Bearer {api_key}"},
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        **gateway_request_headers(project_root, profile, employee_no),
+                    },
                     json=request_body,
                 )
             latency_ms = round((time.perf_counter() - started) * 1000, 2)

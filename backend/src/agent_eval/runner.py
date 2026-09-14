@@ -617,17 +617,19 @@ def run_evaluation(
         )
         return summary
 
+    request_headers = gateway_request_headers(
+        project_root, resolved_profile, user_id
+    ) if resolved_profile.api_base else {}
     trace_key = None
     trace_key_error: str | None = None
     if collect_database_trace and resolved_profile.api_base:
         try:
-            internal_headers = gateway_request_headers(project_root, resolved_profile, user_id)
             trace_key = create_trace_key(
                 resolved_profile.api_base,
                 gateway_model,
                 operation_id,
                 master_key=resolve_config_secret(project_root, "LITELLM_MASTER_KEY"),
-                request_headers=internal_headers,
+                request_headers=request_headers,
                 metadata={
                     "agent_eval_user_id": user_id,
                     "agent_eval_task_id": canonical_task_id,
@@ -720,13 +722,21 @@ def run_evaluation(
         )
     resilience_proxy = None
     gateway_resilience: dict[str, Any] = {"status": "not_used"}
-    if resolved_profile.api_base and agent in {"claude", "codex", "codebuddy", "openclaw"}:
+    if resolved_profile.api_base and agent in {
+        "claude", "codex", "codebuddy", "openclaw", "opencode"
+    }:
         resilience_proxy = CodeBuddyCompatibilityProxy(
             resolved_profile.api_base,
             timeout=timeout_seconds,
             forced_model=gateway_model,
             strip_tools_after_result=False,
             translate_protocols=agent in {"claude", "codex"},
+            upstream_headers=request_headers,
+            request_metadata={
+                "agent_eval_user_id": user_id,
+                "agent_eval_task_id": canonical_task_id,
+                "agent_eval_agent": requested_agent,
+            },
         )
         try:
             resilience_proxy.start()

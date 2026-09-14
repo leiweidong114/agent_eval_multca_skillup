@@ -19,18 +19,22 @@ from agent_eval.model_config import (
 )
 
 
-def test_internal_headers_are_profile_scoped(tmp_path):
+def test_litellm_headers_are_added_for_every_profile(tmp_path):
     _write_config(tmp_path)
     profile = resolve_model_profile(
         tmp_path, environ={"TEST_LITELLM_KEY": "secret"}
     )
-    assert gateway_request_headers(tmp_path, profile, "E123") == {}
-    internal = profile.__class__(
-        **{**profile.__dict__, "internal_gateway": True}
-    )
-    assert gateway_request_headers(tmp_path, internal, "E123") == {
+    assert gateway_request_headers(tmp_path, profile, "E123") == {
         "User-Agent": "OpenAI/Python", "x-cookie": "11", "x-user-account": "E123"
     }
+
+
+def test_litellm_headers_have_a_cli_fallback_account(tmp_path):
+    _write_config(tmp_path)
+    profile = resolve_model_profile(
+        tmp_path, environ={"TEST_LITELLM_KEY": "secret"}
+    )
+    assert gateway_request_headers(tmp_path, profile, None)["x-user-account"] == "local"
 
 
 def _write_config(root: Path) -> None:
@@ -359,9 +363,14 @@ def test_discovers_litellm_models_and_keeps_profile_mapping(tmp_path, monkeypatc
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/models"
         assert request.headers["Authorization"] == "Bearer virtual-key"
+        assert request.headers["User-Agent"] == "OpenAI/Python"
+        assert request.headers["x-cookie"] == "11"
+        assert request.headers["x-user-account"] == "E123"
         return httpx.Response(200, json={"data": [{"id": "gateway/model-a", "owned_by": "test"}]})
 
-    result = discover_available_models(tmp_path, transport=httpx.MockTransport(handler))
+    result = discover_available_models(
+        tmp_path, employee_no="E123", transport=httpx.MockTransport(handler)
+    )
 
     assert result["litellm_available"] is True
     discovered = next(item for item in result["models"] if item["id"] == "gateway/model-a")
@@ -374,6 +383,9 @@ def test_refreshes_and_loads_non_secret_litellm_catalog(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_LITELLM_KEY", "virtual-key")
 
     def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["User-Agent"] == "OpenAI/Python"
+        assert request.headers["x-cookie"] == "11"
+        assert request.headers["x-user-account"] == "E123"
         if request.url.path == "/v1/chat/completions":
             body = json.loads(request.content)
             assert body["model"] == "gateway/model-a"
@@ -388,7 +400,7 @@ def test_refreshes_and_loads_non_secret_litellm_catalog(tmp_path, monkeypatch):
         )
 
     snapshot = refresh_litellm_model_catalog(
-        tmp_path, transport=httpx.MockTransport(handler)
+        tmp_path, employee_no="E123", transport=httpx.MockTransport(handler)
     )
     stored = (tmp_path / "config" / "litellm-models.json").read_text(encoding="utf-8")
 
