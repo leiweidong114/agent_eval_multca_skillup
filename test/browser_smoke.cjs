@@ -24,16 +24,13 @@ const path = require('node:path');
         checks.push({ route: new URL(page.url()).pathname, title: await page.title(), result_detail: true });
       }
     }
-    await page.locator('.interaction-card').first().waitFor();
+    await page.locator('.conversation-row').first().click();
+    await page.locator('.conversation-dialog').waitFor();
+    await page.locator('.turn-list .turn-card').first().waitFor();
     await page.locator('.raw-log summary').first().click();
     if (!(await page.locator('.raw-log pre').first().innerText()).includes('request_id')) throw new Error('Raw interaction not rendered');
     await page.screenshot({ path: path.join(output, 'schematic-overview.png'), fullPage: false });
-    if (await page.getByRole('button', { name: '加载更多交互' }).isVisible()) {
-      const count = await page.locator('.interaction-card').count();
-      await page.getByRole('button', { name: '加载更多交互' }).click();
-      await page.waitForFunction(n => document.querySelectorAll('.interaction-card').length > n, count);
-    }
-    const report = { checks, errors, interactions: await page.locator('.interaction-card').count() };
+    const report = { checks, errors, interactions: await page.locator('.turn-list .turn-card').count() };
     fs.writeFileSync(path.join(output, 'summary.json'), JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report));
     if (errors.length) process.exitCode = 1;
