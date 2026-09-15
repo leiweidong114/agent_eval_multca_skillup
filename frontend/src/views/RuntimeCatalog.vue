@@ -58,7 +58,7 @@ const sortedAgents=computed(()=>agents.value.slice().sort((a,b)=>a.agent.localeC
 const filteredModels=computed(()=>[...models.value].filter(x=>`${x.id} ${x.owned_by||''}`.toLowerCase().includes(keyword.value.toLowerCase())).sort((a,b)=>modelRank(a)-modelRank(b)||a.id.localeCompare(b.id)))
 
 const modelRank=row=>row.connectivity?.available===true?0:row.connectivity?.available===false?2:1
-function agentState(row){const tested=agentTests.value[row.agent];if(tested)return tested.ok?{type:'available',label:'可用'}:{type:'unavailable',label:'不可用'};return row.detected_executable?{type:'unknown',label:'待测试'}:{type:'unavailable',label:'未安装'}}
+function agentState(row){const tested=agentTests.value[row.agent];if(tested)return tested.ok?{type:'available',label:'可用'}:{type:'unavailable',label:'不可用'};return row.detected_executable?{type:'available',label:'可用'}:{type:'unavailable',label:'未安装'}}
 function modelState(row){return row.connectivity?.available===true?{type:'available',label:'可用'}:row.connectivity?.available===false?{type:'unavailable',label:'不可用'}:{type:'unknown',label:'未测试'}}
 function modelMessage(row){const failure=row.connectivity?.failure;return row.connectivity?.available===true?'真实推理成功':failure?.detail||failure?.summary||(row.connectivity?.available===false?'推理请求失败':'等待连通性测试')}
 function testTime(value){return value?new Date(value).toLocaleString('zh-CN'):'—'}

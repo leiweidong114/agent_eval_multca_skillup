@@ -1,82 +1,54 @@
 <template>
-  <div class="page-stack">
-    <section class="hero compact"><div><span class="eyebrow">EVALUATION SETTINGS</span><h1>设置</h1><p>选择默认模型，并为三类原理图任务分别配置 Skill 流水线和评测插件。</p></div></section>
-    <el-card shadow="never" class="panel settings-card" v-loading="loading">
-      <el-form label-position="top">
-        <el-form-item label="LLM Judge 默认模型">
-          <el-select v-model="form.judge_model" filterable placeholder="选择用于评测打分的模型">
-            <el-option v-for="model in selectableModels" :key="`judge-${model.id}`" :label="modelLabel(model)" :value="model.id"/>
-          </el-select>
-          <div class="help">Skill 与原理图评测完成后，系统使用该模型读取结果、过程和 Skill 质量证据并打分。</div>
-        </el-form-item>
-        <el-form-item label="Agent 可用性测试默认模型">
-          <el-select v-model="form.agent_test_model" filterable placeholder="选择用于 Agent HI 测试的模型">
-            <el-option v-for="model in selectableModels" :key="`agent-${model.id}`" :label="modelLabel(model)" :value="model.id"/>
-          </el-select>
-          <div class="help">“模型与 Agent”页面点击测试时，将要求对应 Agent 通过此模型完成一次 HI 请求。</div>
-        </el-form-item>
-        <el-divider content-position="left">远程 JustDo</el-divider>
-        <el-form-item label="JustDo HTTP 地址">
-          <el-input v-model="justdo.url" clearable placeholder="例如：http://192.168.1.20:43128" />
-          <div class="help">留空时使用本机 JustDo-agent；填写后，命令行和网页评测都通过该地址调用运行中的 JustDo。</div>
-        </el-form-item>
-        <el-form-item label="访问令牌">
-          <el-input v-model="justdo.token" type="password" show-password clearable :placeholder="justdo.token_configured?'已配置；留空保持不变':'填写 JUSTDO_MULTICA_HTTP_TOKEN'" />
-          <div class="help">令牌仅写入根目录 .env，后端不会向浏览器返回明文。</div>
-        </el-form-item>
-        <div class="justdo-actions">
-          <el-button :loading="savingJustdo" @click="saveJustdo">保存 JustDo 配置</el-button>
-          <el-button :loading="testingJustdo" @click="testJustdo">测试远程桥接</el-button>
-          <el-tag :type="justdo.enabled?'success':'info'">{{justdo.enabled?'已启用远程调用':'使用本机调用'}}</el-tag>
-        </div>
-        <el-divider content-position="left">原理图任务配置</el-divider>
-        <div class="task-profiles">
-          <el-card v-for="task in taskTypes" :key="task.id" shadow="never" class="task-profile">
-            <template #header><div class="task-title"><div><b>{{task.name}}</b><span>{{contractLabel(task.input_contract)}} → {{contractLabel(task.output_contract)}}</span></div><el-tag effect="plain">{{task.id}}</el-tag></div></template>
-            <el-form-item label="Skill 流水线（按选择顺序执行）">
-              <el-select v-model="profile(task.id).skills" multiple filterable collapse-tags :max-collapse-tags="4" placeholder="选择 1 至 30 个已扫描 Skill">
-                <el-option v-for="skill in skills" :key="skill.identifier||skill.name" :label="`${skill.name} · ${sourceLabel(skill.source)}`" :value="skill.identifier||skill.name"/>
-              </el-select>
-              <div class="help">当前顺序：{{profile(task.id).skills.join(' → ')||'未选择'}}</div>
-            </el-form-item>
-            <el-form-item label="评测插件">
-              <el-select v-model="profile(task.id).evaluator_id" filterable placeholder="选择兼容的评测插件">
-                <el-option v-for="item in compatibleEvaluators(task.id)" :key="item.id" :label="`${item.id} · v${item.version} · ${sourceLabel(item.source)}`" :value="item.id"/>
-              </el-select>
-            </el-form-item>
-          </el-card>
-        </div>
-        <div class="scan-summary"><span>已扫描 {{skills.length}} 个 Skill、{{evaluators.length}} 个评测插件</span><el-button :loading="loading" @click="load">重新扫描</el-button></div>
-        <el-alert type="info" :closable="false" show-icon title="这里只保存模型 ID，不修改 LiteLLM 地址、密钥、Agent 注入方式或鉴权配置。"/>
-        <div class="actions"><el-button type="primary" :loading="saving" @click="save">保存设置</el-button><el-button @click="load">恢复当前设置</el-button></div>
-      </el-form>
+  <div class="page-stack settings-page">
+    <section class="hero compact settings-hero"><div><span class="eyebrow">CONTROL CENTER</span><h1>设置中心</h1><p>按功能管理模型、Agent、原理图流水线与基础服务。每项设置只影响对应子系统。</p></div><el-button :loading="loading" @click="load">重新读取配置</el-button></section>
+    <div class="status-strip">
+      <div><i :class="models.length?'ok':'muted'"/><span>模型目录</span><b>{{models.length}} 个</b></div><div><i :class="health.store?.status==='ok'?'ok':'bad'"/><span>指标数据库</span><b>{{health.store?.status==='ok'?'正常':'未就绪'}}</b></div><div><i :class="health.cache?.status==='ok'?'ok':'bad'"/><span>Redis 缓存</span><b>{{health.cache?.status==='ok'?'正常':'未就绪'}}</b></div><div><i :class="health.scheduler?.enabled?'ok':'muted'"/><span>自动计算</span><b>{{health.scheduler?.enabled?'已开启':'未开启'}}</b></div>
+    </div>
+    <el-card shadow="never" class="panel settings-shell" v-loading="loading">
+      <el-tabs v-model="activeSection" tab-position="left" class="settings-tabs">
+        <el-tab-pane name="models"><template #label><div class="tab-label"><b>模型与评分</b><span>默认模型</span></div></template><section class="section-content">
+          <header><span class="section-index">01</span><div><h2>模型与评分</h2><p>设置 LLM Judge 和 Agent 可用性探测使用的模型。</p></div></header>
+          <div class="subproject-grid two"><article class="subproject"><div class="subproject-title"><span>JUDGE</span><h3>评测打分模型</h3></div><el-select v-model="form.judge_model" filterable placeholder="选择 Judge 模型"><el-option v-for="item in selectableModels" :key="`judge-${item.id}`" :label="modelLabel(item)" :value="item.id"/></el-select><p>读取任务结果、执行过程和 Skill 证据，输出语义评分。</p></article><article class="subproject"><div class="subproject-title"><span>AGENT TEST</span><h3>Agent 测试模型</h3></div><el-select v-model="form.agent_test_model" filterable placeholder="选择 HI 测试模型"><el-option v-for="item in selectableModels" :key="`test-${item.id}`" :label="modelLabel(item)" :value="item.id"/></el-select><p>“模型与 Agent”页面执行真实可用性测试时使用。</p></article></div>
+          <div class="section-actions"><el-button type="primary" :loading="saving" @click="saveCore">保存模型设置</el-button></div>
+        </section></el-tab-pane>
+        <el-tab-pane name="justdo"><template #label><div class="tab-label"><b>JustDo 调用</b><span>本机 / 远程</span></div></template><section class="section-content">
+          <header><span class="section-index">02</span><div><h2>JustDo 调用</h2><p>留空时调用本机 JustDo；填写地址后切换到鉴权 HTTP 桥。</p></div></header>
+          <article class="subproject wide"><div class="subproject-title"><span>REMOTE BRIDGE</span><h3>远程连接</h3><el-tag :type="justdo.enabled?'success':'info'">{{justdo.enabled?'远程模式':'本机模式'}}</el-tag></div><div class="field-grid"><el-form-item label="HTTP 地址"><el-input v-model="justdo.url" clearable placeholder="http://192.168.1.20:43128"/></el-form-item><el-form-item label="访问令牌"><el-input v-model="justdo.token" type="password" show-password clearable :placeholder="justdo.token_configured?'已配置，留空保持不变':'填写桥接令牌'"/></el-form-item></div><p>令牌只写入根目录 .env，查询接口不会返回明文。远程任务会同步隔离工作区、Skill 和产物。</p><div class="inline-actions"><el-button type="primary" :loading="savingJustdo" @click="saveJustdo">保存连接</el-button><el-button :loading="testingJustdo" @click="testJustdo">测试桥接</el-button></div></article>
+        </section></el-tab-pane>
+        <el-tab-pane name="schematic"><template #label><div class="tab-label"><b>原理图评测</b><span>Skill 流水线</span></div></template><section class="section-content">
+          <header><span class="section-index">03</span><div><h2>原理图评测</h2><p>每种任务独立选择 Skill 顺序和评测插件。</p></div></header>
+          <div class="task-profiles"><article v-for="(task,index) in taskTypes" :key="task.id" class="subproject task-project"><div class="task-heading"><span class="task-number">{{String(index+1).padStart(2,'0')}}</span><div><h3>{{task.name}}</h3><p>{{contractLabel(task.input_contract)}} → {{contractLabel(task.output_contract)}}</p></div><el-tag effect="plain">{{task.id}}</el-tag></div><el-form-item label="Skill 流水线（按选择顺序执行）"><el-select v-model="profile(task.id).skills" multiple filterable collapse-tags :max-collapse-tags="4" placeholder="选择 Skill"><el-option v-for="skill in skills" :key="skill.identifier||skill.name" :label="`${skill.name} · ${sourceLabel(skill.source)}`" :value="skill.identifier||skill.name"/></el-select></el-form-item><div class="pipeline-preview"><span v-for="(skill,skillIndex) in profile(task.id).skills" :key="skill"><b>{{skillIndex+1}}</b>{{skill}}</span></div><el-form-item label="评测插件"><el-select v-model="profile(task.id).evaluator_id" filterable placeholder="选择评测插件"><el-option v-for="item in compatibleEvaluators(task.id)" :key="item.id" :label="`${item.id} · v${item.version}`" :value="item.id"/></el-select></el-form-item></article></div>
+          <div class="section-actions"><span>已扫描 {{skills.length}} 个 Skill、{{evaluators.length}} 个评测插件</span><el-button type="primary" :loading="saving" @click="saveCore">保存流水线</el-button></div>
+        </section></el-tab-pane>
+        <el-tab-pane name="services"><template #label><div class="tab-label"><b>系统服务</b><span>Nacos / 数据库 / 缓存</span></div></template><section class="section-content">
+          <header><span class="section-index">04</span><div><h2>系统服务</h2><p>这里显示非敏感健康状态，地址和凭据仍由 .env 与 Nacos 管理。</p></div></header>
+          <div class="subproject-grid three"><article v-for="item in serviceCards" :key="item.name" class="subproject service-card"><i :class="item.ok?'ok':'bad'"/><div><span>{{item.kicker}}</span><h3>{{item.name}}</h3><p>{{item.message}}</p></div></article></div><el-alert type="info" :closable="false" show-icon title="页面不显示或修改数据库密码、Redis 密码和 Nacos 凭据。请使用被 Git 忽略的 .env 与 .secrets 配置。"/>
+        </section></el-tab-pane>
+      </el-tabs>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { fetchEvaluators, fetchJustDoHttp, fetchModels, fetchSchematicTaskTypes, fetchSettings, fetchSkills, saveJustDoHttp, saveSettings, testJustDoHttp } from '../api'
-
+import {computed,onMounted,reactive,ref} from 'vue'
+import {ElMessage} from 'element-plus'
+import {fetchEvaluators,fetchJustDoHttp,fetchMetricHealth,fetchModels,fetchSchematicTaskTypes,fetchSettings,fetchSkills,saveJustDoHttp,saveSettings,testJustDoHttp} from '../api'
 const defaultTaskTypes=[{id:'block_to_schematic',name:'框图生成原理图',input_contract:'block_diagram',output_contract:'schematic_project'},{id:'block_to_signal_list',name:'框图生成信号接口列表',input_contract:'block_diagram',output_contract:'signal_interface_v1'},{id:'signal_list_to_schematic',name:'信号接口列表生成原理图',input_contract:'signal_interface_v1',output_contract:'schematic_project'}]
 const defaultProfiles={block_to_schematic:{skills:['schematic-pipeline','signal-interface-generation','schematic-layout-codegen','schematic-web-apply'],evaluator_id:'schematic-default'},block_to_signal_list:{skills:['signal-interface-generation'],evaluator_id:'schematic-default'},signal_list_to_schematic:{skills:['schematic-layout-codegen','schematic-web-apply'],evaluator_id:'schematic-default'}}
-const loading=ref(false),saving=ref(false),savingJustdo=ref(false),testingJustdo=ref(false),models=ref([]),skills=ref([]),evaluators=ref([]),taskTypes=ref(defaultTaskTypes)
-const form=reactive({judge_model:'',agent_test_model:'',schematic_skills:[],schematic_task_profiles:structuredClone(defaultProfiles)})
-const justdo=reactive({url:'',token:'',token_configured:false,enabled:false})
+const activeSection=ref('models'),loading=ref(false),saving=ref(false),savingJustdo=ref(false),testingJustdo=ref(false),models=ref([]),skills=ref([]),evaluators=ref([]),taskTypes=ref(defaultTaskTypes),health=ref({})
+const form=reactive({judge_model:'',agent_test_model:'',schematic_skills:[],schematic_task_profiles:structuredClone(defaultProfiles)}),justdo=reactive({url:'',token:'',token_configured:false,enabled:false})
 const selectableModels=computed(()=>[...models.value].sort((a,b)=>Number(a.connectivity?.available!==true)-Number(b.connectivity?.available!==true)||a.id.localeCompare(b.id)))
-const modelLabel=model=>`${model.id}${model.connectivity?.available===true?' · 已测试可用':model.connectivity?.available===false?' · 测试失败':' · 未测试'}`
-const sourceLabel=source=>source==='built_in'?'内置':source==='bundled'?'项目插件':source==='uploaded'?'已导入':source==='external'||String(source||'').includes(':')?'本机扩展':'外部'
-const contractLabel=value=>({block_diagram:'框图',signal_interface_v1:'信号接口列表',schematic_project:'原理图工程'}[value]||value)
-const profile=id=>{if(!form.schematic_task_profiles[id])form.schematic_task_profiles[id]={skills:[],evaluator_id:''};return form.schematic_task_profiles[id]}
-const compatibleEvaluators=id=>evaluators.value.filter(item=>item.evaluation_types?.includes('schematic')&&(!item.schematic_task_types?.length||item.schematic_task_types.includes(id)))
-async function load(){loading.value=true;try{const[settings,catalog,skillCatalog,evaluatorCatalog,taskCatalog,justdoConfig]=await Promise.all([fetchSettings(),fetchModels(),fetchSkills(),fetchEvaluators(),fetchSchematicTaskTypes(),fetchJustDoHttp()]);Object.assign(form,settings);Object.assign(justdo,justdoConfig,{token:''});models.value=catalog.models||[];skills.value=skillCatalog.skills||[];evaluators.value=evaluatorCatalog||[];taskTypes.value=taskCatalog?.length?taskCatalog:defaultTaskTypes;for(const task of taskTypes.value)profile(task.id)}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{loading.value=false}}
-async function saveJustdo(){savingJustdo.value=true;try{const result=await saveJustDoHttp({url:justdo.url,token:justdo.token||null});Object.assign(justdo,result,{token:''});ElMessage.success('JustDo 调用配置已保存')}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{savingJustdo.value=false}}
-async function testJustdo(){testingJustdo.value=true;try{if(justdo.token||!justdo.token_configured)await saveJustdo();const result=await testJustDoHttp();result.ok?ElMessage.success(`${result.message}${result.version?'：'+result.version:''}`):ElMessage.error(result.message)}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{testingJustdo.value=false}}
-async function save(){if(!form.judge_model||!form.agent_test_model)return ElMessage.warning('请选择两个默认模型');for(const task of taskTypes.value){const item=profile(task.id);if(!item.skills.length)return ElMessage.warning(`请为“${task.name}”选择至少一个 Skill`);if(!item.evaluator_id)return ElMessage.warning(`请为“${task.name}”选择评测插件`)}form.schematic_skills=profile('block_to_schematic').skills;saving.value=true;try{Object.assign(form,await saveSettings({...form}));ElMessage.success('三类原理图任务设置已保存到根目录 .env')}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{saving.value=false}}
+const serviceCards=computed(()=>[{name:'Nacos 配置中心',kicker:'CONFIG',ok:health.value.configuration?.status==='configured',message:health.value.configuration?.source==='nacos'?'当前从 Nacos 读取配置':'当前使用环境变量配置'},{name:'MongoDB 指标库',kicker:'METRICS',ok:health.value.store?.status==='ok',message:health.value.store?.status==='ok'?'指标读写正常':health.value.store?.detail||'服务未就绪'},{name:'Redis 页面缓存',kicker:'CACHE',ok:health.value.cache?.status==='ok',message:health.value.cache?.status==='ok'?'缓存连接正常':health.value.cache?.detail||'服务未就绪'}])
+const modelLabel=item=>`${item.id}${item.connectivity?.available===true?' · 可用':item.connectivity?.available===false?' · 不可用':' · 未测试'}`
+const sourceLabel=value=>value==='built_in'?'内置':value==='bundled'?'项目插件':value==='uploaded'?'已导入':'扩展',contractLabel=value=>({block_diagram:'框图',signal_interface_v1:'信号接口列表',schematic_project:'原理图工程'}[value]||value)
+const profile=id=>{if(!form.schematic_task_profiles[id])form.schematic_task_profiles[id]={skills:[],evaluator_id:''};return form.schematic_task_profiles[id]},compatibleEvaluators=id=>evaluators.value.filter(item=>item.evaluation_types?.includes('schematic')&&(!item.schematic_task_types?.length||item.schematic_task_types.includes(id)))
+async function load(){loading.value=true;try{const results=await Promise.allSettled([fetchSettings(),fetchModels(),fetchSkills(),fetchEvaluators(),fetchSchematicTaskTypes(),fetchJustDoHttp(),fetchMetricHealth()]);if(results[0].status==='fulfilled')Object.assign(form,results[0].value);models.value=results[1].status==='fulfilled'?results[1].value.models||[]:[];skills.value=results[2].status==='fulfilled'?results[2].value.skills||[]:[];evaluators.value=results[3].status==='fulfilled'?results[3].value||[]:[];taskTypes.value=results[4].status==='fulfilled'&&results[4].value?.length?results[4].value:defaultTaskTypes;if(results[5].status==='fulfilled')Object.assign(justdo,results[5].value,{token:''});health.value=results[6].status==='fulfilled'?results[6].value:{};for(const task of taskTypes.value)profile(task.id)}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{loading.value=false}}
+async function saveCore(){if(!form.judge_model||!form.agent_test_model)return ElMessage.warning('请选择两个默认模型');for(const task of taskTypes.value){const item=profile(task.id);if(!item.skills.length)return ElMessage.warning(`请为“${task.name}”选择至少一个 Skill`);if(!item.evaluator_id)return ElMessage.warning(`请为“${task.name}”选择评测插件`)}form.schematic_skills=profile('block_to_schematic').skills;saving.value=true;try{Object.assign(form,await saveSettings({...form}));ElMessage.success('设置已保存')}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{saving.value=false}}
+async function saveJustdo(){savingJustdo.value=true;try{Object.assign(justdo,await saveJustDoHttp({url:justdo.url,token:justdo.token||null}),{token:''});ElMessage.success('JustDo 配置已保存')}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{savingJustdo.value=false}}
+async function testJustdo(){testingJustdo.value=true;try{if(justdo.token||!justdo.token_configured)await saveJustdo();const result=await testJustDoHttp();ElMessage[result.ok?'success':'error'](`${result.message}${result.version?'：'+result.version:''}`)}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{testingJustdo.value=false}}
 onMounted(load)
 </script>
 
 <style scoped>
-.settings-card{max-width:980px}.settings-card :deep(.el-select){width:100%}.settings-card :deep(.el-form-item){margin-bottom:24px}.help{margin-top:7px;color:var(--muted);font-size:13px;line-height:1.55}.actions,.justdo-actions{display:flex;align-items:center;gap:10px;margin-top:24px}.justdo-actions{margin-top:-8px;margin-bottom:24px}.task-profiles{display:grid;gap:14px}.task-profile{background:var(--surface-2)}.task-title{display:flex;align-items:center;justify-content:space-between;gap:12px}.task-title>div{display:flex;flex-direction:column;gap:5px}.task-title span,.scan-summary{color:var(--muted);font-size:12px}.scan-summary{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+.settings-page{--setting-accent:#153f33}.settings-hero{background:linear-gradient(125deg,#f2f8f5 0%,#fff 52%,#f8f3e9 100%)}.status-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.status-strip>div{display:grid;grid-template-columns:11px 1fr;gap:4px 10px;align-items:center;padding:15px 17px;border:1px solid var(--line);border-radius:11px;background:var(--surface)}.status-strip i,.service-card>i{width:9px;height:9px;border-radius:50%;background:#aab2b0}.status-strip i{grid-row:1/3}.status-strip i.ok,.service-card>i.ok{background:#24a36a;box-shadow:0 0 0 4px rgba(36,163,106,.12)}.status-strip i.bad,.service-card>i.bad{background:#d84a4a}.status-strip span{color:var(--muted);font-size:11px}.status-strip b{font-size:14px}.settings-shell{overflow:hidden}.settings-shell :deep(.el-card__body){padding:0}.settings-tabs{min-height:650px}.settings-tabs :deep(.el-tabs__header){width:210px;margin:0;padding:22px 12px;background:#f6f8f7}.settings-tabs :deep(.el-tabs__item){height:auto;min-height:66px;padding:10px 16px!important;border-radius:9px;text-align:left;justify-content:flex-start}.settings-tabs :deep(.el-tabs__item.is-active){background:#e7f1ec;color:var(--setting-accent)}.settings-tabs :deep(.el-tabs__active-bar){display:none}.settings-tabs :deep(.el-tabs__content){padding:30px 34px}.tab-label{display:flex;flex-direction:column;gap:3px}.tab-label b{font-size:14px}.tab-label span{color:var(--muted);font-size:11px}.section-content>header{display:flex;align-items:center;gap:16px;margin-bottom:26px}.section-content h2,.section-content h3,.section-content p{margin:0}.section-content>header h2{font-size:24px}.section-content>header p,.subproject>p{margin-top:6px;color:var(--muted);line-height:1.55}.section-index{font:700 12px/1 monospace;color:#fff;background:var(--setting-accent);padding:10px;border-radius:8px}.subproject-grid{display:grid;gap:14px}.subproject-grid.two{grid-template-columns:1fr 1fr}.subproject-grid.three{grid-template-columns:repeat(3,1fr)}.subproject{padding:20px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}.subproject.wide{max-width:850px}.subproject-title{display:flex;align-items:center;gap:10px;margin-bottom:17px}.subproject-title>span,.service-card span{color:#718079;font-size:10px;font-weight:700;letter-spacing:.08em}.subproject-title h3{margin-right:auto}.subproject :deep(.el-select){width:100%}.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field-grid :deep(.el-form-item){margin:0}.inline-actions,.section-actions{display:flex;align-items:center;gap:10px;margin-top:18px}.section-actions{justify-content:flex-end;padding-top:22px;border-top:1px solid var(--line)}.section-actions>span{margin-right:auto;color:var(--muted);font-size:12px}.task-profiles{display:grid;gap:14px}.task-heading{display:flex;align-items:center;gap:13px;margin-bottom:17px}.task-heading>div{flex:1}.task-heading p{color:var(--muted);font-size:12px}.task-number{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#e7f1ec;color:var(--setting-accent);font-weight:700}.pipeline-preview{display:flex;gap:7px;flex-wrap:wrap;margin:-4px 0 17px}.pipeline-preview span{display:flex;align-items:center;gap:5px;padding:5px 8px;border-radius:6px;background:#fff;border:1px solid var(--line);font-size:11px}.pipeline-preview b{color:var(--setting-accent)}.service-card{display:flex;align-items:flex-start;gap:13px}.service-card>i{flex:0 0 auto;margin-top:5px}.service-card p{font-size:12px}.section-content>.el-alert{margin-top:18px}@media(max-width:1000px){.status-strip,.subproject-grid.two,.subproject-grid.three{grid-template-columns:1fr 1fr}.settings-tabs :deep(.el-tabs__header){width:170px}.field-grid{grid-template-columns:1fr}}@media(max-width:700px){.status-strip,.subproject-grid.two,.subproject-grid.three{grid-template-columns:1fr}.settings-tabs :deep(.el-tabs__header){width:120px}.settings-tabs :deep(.el-tabs__content){padding:22px 16px}.tab-label span{display:none}}
 </style>

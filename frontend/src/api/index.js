@@ -67,6 +67,7 @@ export const fetchMetricHealth = () => data(http.get('/session-metrics/health'))
 export const fetchMetricSessions = (params = {}) => data(http.get('/session-metrics/sessions', { params }))
 export const createMetricJob = (payload) => data(http.post('/session-metrics/jobs', payload))
 export const fetchMetricJob = (jobId) => data(http.get(`/session-metrics/jobs/${encodeURIComponent(jobId)}`))
+export const fetchMetricDetail = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}`))
 
 export const fetchPrismDashboard = () => data(prism.get('/dashboard'))
 export const fetchBenchmarks = () => data(prism.get('/benchmarks'))
