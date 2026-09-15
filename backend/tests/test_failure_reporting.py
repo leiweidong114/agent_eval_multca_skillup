@@ -122,6 +122,16 @@ def test_system_message_order_is_protocol_incompatibility():
     assert failure["category"] == "model_protocol_incompatible"
 
 
+def test_invalid_model_name_is_reported_with_configuration_guidance():
+    failure = describe_evaluation_failure(
+        "/chat/completions: Invalid model name passed in model=missing-model.",
+        status_code=400,
+    )
+
+    assert failure["category"] == "model_incompatible"
+    assert "模型 ID" in failure["suggested_action"]
+
+
 def test_llm_judge_forwards_employee_number_to_gateway_headers(monkeypatch, tmp_path):
     profile = SimpleNamespace(
         api_base="http://gateway/v1",

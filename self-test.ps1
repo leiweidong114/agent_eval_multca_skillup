@@ -87,7 +87,9 @@ function Add-DiagnosticIssue {
         [Parameter(Mandatory)][string]$Summary,
         [string]$Category = 'diagnostic',
         [string]$Detail = '',
-        [string]$SuggestedAction = ''
+        [string]$SuggestedAction = '',
+        [string[]]$ConfigurationChanges = @(),
+        $Evidence = $null
     )
     $Issues.Add([ordered]@{
         severity = $Severity
@@ -96,6 +98,8 @@ function Add-DiagnosticIssue {
         summary = $Summary
         detail = Protect-DiagnosticText $Detail
         suggested_action = $SuggestedAction
+        configuration_changes = @($ConfigurationChanges)
+        evidence = $Evidence
     }) | Out-Null
 }
 
@@ -118,6 +122,48 @@ function ConvertTo-NativeArgument {
     if ($Value.Length -eq 0) { return '""' }
     if ($Value -notmatch '[\s"]') { return $Value }
     return '"' + $Value.Replace('"', '\"') + '"'
+}
+
+function Get-FailureConfigurationChanges {
+    param(
+        [string]$Category,
+        [string]$Component
+    )
+    switch -Regex ($Category) {
+        'authentication' {
+            return @('Set a valid intranet Virtual Key in root .env: LITELLM_API_KEY=<key>.')
+        }
+        'authorization' {
+            return @('Grant LITELLM_API_KEY access to the selected model; for strict checks, grant LITELLM_MASTER_KEY access to /key/generate and /key/delete.')
+        }
+        'model_(incompatible|protocol_incompatible)|unrecognized_model' {
+            return @('Set LITELLM_MODEL/AGENT_TEST_MODEL to the exact LiteLLM deployment id and keep LITELLM_PROTOCOL=openai_compatible.')
+        }
+        'gateway_(unavailable|server_error)' {
+            return @('Set LITELLM_API_BASE to a directly reachable intranet URL ending in /v1; verify firewall, DNS, proxy and TLS trust.')
+        }
+        'gateway_(quota_exhausted|rate_limited)' {
+            return @('No local code change is required; replenish upstream quota or lower Agent/model concurrency.')
+        }
+        'postgresql|database_' {
+            return @('Correct DATABASE_URL or DATABASE_HOST/PORT/NAME/USER/PASSWORD/SSLMODE in root .env and grant SELECT on public."LiteLLM_SpendLogs".')
+        }
+        'trace_key' {
+            return @('Set LITELLM_MASTER_KEY to a key allowed to create and delete temporary LiteLLM keys.')
+        }
+        'agent_bridge' {
+            return @('Set JUSTDO_AGENT_EXECUTABLE to the matching JustDo-agent.exe, then start the same-version JustDo desktop application and keep it running.')
+        }
+        'agent_timeout' {
+            return @('Increase -Timeout only after confirming the gateway is progressing; otherwise inspect Agent stderr and LiteLLM logs.')
+        }
+        'command_failed' {
+            if ($Component -like 'agent:*') {
+                return @('Set AGENT_PATHS_JSON in root .env to the Agent executable absolute path, using forward slashes in Windows JSON.')
+            }
+        }
+    }
+    return @()
 }
 
 function Invoke-AgentEvalJson {
@@ -221,22 +267,37 @@ function Add-StepFailureIssue {
     $FailureAction = Get-DiagnosticProperty -InputObject $Failure -Name 'suggested_action'
     $StepDataError = Get-DiagnosticProperty -InputObject $StepData -Name 'error'
     $StepError = Get-DiagnosticProperty -InputObject $Step -Name 'error'
+    $TechnicalDetail = Get-DiagnosticProperty -InputObject $Failure -Name 'technical_detail'
     $Category = if ($FailureCategory) {
         [string]$FailureCategory
     } else { 'command_failed' }
     $Summary = if ($FailureSummary) {
         [string]$FailureSummary
     } else { "$Component self-test failed" }
-    $Detail = if ($FailureDetail) {
-        [string]$FailureDetail
-    } elseif ($StepDataError) {
-        [string]$StepDataError
-    } else { [string]$StepError }
+    $DetailParts = [System.Collections.Generic.List[string]]::new()
+    foreach ($Part in @($FailureDetail, $TechnicalDetail, $StepDataError, $StepError)) {
+        $Text = [string]$Part
+        if ($Text.Trim() -and -not $DetailParts.Contains($Text.Trim())) {
+            $DetailParts.Add($Text.Trim())
+        }
+    }
+    $Detail = $DetailParts -join ' | '
     $Action = if ($FailureAction) {
         [string]$FailureAction
     } else { $FallbackAction }
+    $ProtocolProbe = Get-DiagnosticProperty -InputObject $StepData -Name 'protocol_probe'
+    $Evidence = [ordered]@{
+        status = Get-DiagnosticProperty -InputObject $StepData -Name 'status'
+        status_code = Get-DiagnosticProperty -InputObject $Failure -Name 'status_code'
+        runtime_exit_code = Get-DiagnosticProperty -InputObject $StepData -Name 'runtime_exit_code'
+        agent_exit_code = Get-DiagnosticProperty -InputObject $StepData -Name 'agent_exit_code'
+        executable = Get-DiagnosticProperty -InputObject $StepData -Name 'executable'
+        protocol_probe_status = Get-DiagnosticProperty -InputObject $ProtocolProbe -Name 'status'
+    }
+    $Changes = @(Get-FailureConfigurationChanges -Category $Category -Component $Component)
     Add-DiagnosticIssue -Severity error -Component $Component -Category $Category `
-        -Summary $Summary -Detail $Detail -SuggestedAction $Action
+        -Summary $Summary -Detail $Detail -SuggestedAction $Action `
+        -ConfigurationChanges $Changes -Evidence $Evidence
 }
 
 $RuntimeSpecifications = @(
@@ -369,6 +430,26 @@ if ($PythonExecutable -and (Test-Path -LiteralPath $PythonExecutable)) {
             -FallbackAction 'Check DATABASE_URL or DATABASE_HOST/PORT/NAME/USER/PASSWORD, SSL mode and LiteLLM_SpendLogs read permission.'
     }
 
+    $Steps['database_schema'] = Invoke-AgentEvalJson -Name 'database-schema' `
+        -Arguments @('inspect-database')
+    $DatabaseAuditData = Get-DiagnosticProperty -InputObject $Steps['database_schema'] -Name 'data'
+    $DatabaseAuditIssues = Get-DiagnosticProperty -InputObject $DatabaseAuditData -Name 'issues'
+    if ($DatabaseAuditIssues) {
+        foreach ($AuditIssue in @($DatabaseAuditIssues)) {
+            $AuditSeverity = [string](Get-DiagnosticProperty -InputObject $AuditIssue -Name 'severity')
+            if ($AuditSeverity -notin @('error', 'warning', 'info')) { $AuditSeverity = 'error' }
+            Add-DiagnosticIssue -Severity $AuditSeverity -Component 'database-schema' `
+                -Category ([string](Get-DiagnosticProperty -InputObject $AuditIssue -Name 'category')) `
+                -Summary ([string](Get-DiagnosticProperty -InputObject $AuditIssue -Name 'summary')) `
+                -Detail ([string](Get-DiagnosticProperty -InputObject $AuditIssue -Name 'detail')) `
+                -SuggestedAction ([string](Get-DiagnosticProperty -InputObject $AuditIssue -Name 'suggested_action')) `
+                -ConfigurationChanges @(Get-DiagnosticProperty -InputObject $AuditIssue -Name 'configuration_changes')
+        }
+    } elseif (-not $Steps['database_schema'].success) {
+        Add-StepFailureIssue -Component 'database-schema' -Step $Steps['database_schema'] `
+            -FallbackAction 'Compare the intranet LiteLLM database migration version with backend/config/database-schema-baseline.json.'
+    }
+
     $Steps['agent_catalog'] = Invoke-AgentEvalJson -Name 'agent-catalog' `
         -Arguments @('agents', '--all')
     Add-StepFailureIssue -Component 'agent-catalog' -Step $Steps['agent_catalog']
@@ -493,6 +574,12 @@ if ($Issues.Count -eq 0) {
         $Lines.Add("  [$($Issue.severity.ToUpperInvariant())] $($Issue.component): $($Issue.summary)")
         if ($Issue.detail) { $Lines.Add("    Detail: $($Issue.detail)") }
         if ($Issue.suggested_action) { $Lines.Add("    Action: $($Issue.suggested_action)") }
+        foreach ($Change in @($Issue.configuration_changes)) {
+            if ($Change) { $Lines.Add("    Change: $Change") }
+        }
+        if ($Issue.evidence) {
+            $Lines.Add("    Evidence: $($Issue.evidence | ConvertTo-Json -Compress -Depth 5)")
+        }
     }
 }
 $Lines.Add('')

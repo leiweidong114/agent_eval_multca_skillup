@@ -148,7 +148,9 @@ def describe_evaluation_failure(
         if "enterprise" in lowered and "tags" in lowered:
             detail = "当前 LiteLLM 版本不支持 Enterprise 专属的 trace key tags 字段。"
         action, retryable = "请管理员核对 LiteLLM 角色、模型访问范围或版本功能。", False
-    elif any(marker in lowered for marker in ("unrecognized_model", "model not found", "unknown model")):
+    elif any(marker in lowered for marker in (
+        "unrecognized_model", "model not found", "unknown model", "invalid model name"
+    )):
         category, title = "model_incompatible", "指定模型不存在或不兼容"
         detail = "模型网关无法识别当前模型名称，或 Agent 不支持该模型协议。"
         action, retryable = "检查模型 ID、Profile 映射和 Agent 协议配置。", False

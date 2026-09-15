@@ -5,7 +5,7 @@
 1. 项目内 Python、Multica、Skill-Up、Node、npm、Go 和前端依赖；
 2. 根目录 `.env` 的必要配置（报告不保存密码或 Key）；
 3. LiteLLM 模型目录和指定模型的真实推理；
-4. PostgreSQL 连接及 `LiteLLM_SpendLogs` 只读权限；
+4. PostgreSQL 连接、完整表/字段/索引清单及 `LiteLLM_SpendLogs` 只读权限；
 5. 本机 Agent 发现和真实 `Agent + 模型 + Prompt` 调用；
 6. 可选的临时 Trace Key、数据库归因和指定模型严格核验。
 
@@ -24,6 +24,9 @@
   `LITELLM_JUDGE_MODEL` 的不同取值逐一发送一次 `HI`；
 - 列出全部 Agent，并对本机实际发现的每个 Agent 使用第一个配置模型发送最小 Prompt；
 - 检查 PostgreSQL，但基础 Agent 调用不依赖数据库核验；
+- 读取数据库元数据和最近最多 1000 条日志的 JSON 形状统计，不读取或输出 Prompt/响应正文；
+- 将内网 `public."LiteLLM_SpendLogs"` 与
+  `backend/config/database-schema-baseline.json` 中的当前可用环境基线比较；
 - 所有输出写入 `backend/.runtime/self-test/<时间>/`。
 
 只测试指定 Agent 和模型：
@@ -81,6 +84,7 @@ backend/.runtime/self-test/<时间>/
 ├─ model-catalog.stdout.json
 ├─ model-<模型>.stdout.json
 ├─ database.stdout.json
+├─ database-schema.stdout.json
 ├─ agent-catalog.stdout.json
 └─ agent-<Agent>-basic.stdout.json
 ```
@@ -94,6 +98,23 @@ backend/.runtime/self-test/<时间>/
 - `summary`：问题摘要；
 - `detail`：脱敏后的详细错误；
 - `suggested_action`：建议处理方法。
+- `configuration_changes`：应该修改的 `.env` 项、权限或服务配置；
+- `evidence`：HTTP 状态、运行器/Agent 退出码、可执行文件和协议探测状态。
+
+`database-schema.stdout.json` 还包含：
+
+- PostgreSQL 服务版本、当前数据库和数据库用户；
+- 所有非系统表的字段名称、数据类型、可空性、索引和当前用户 SELECT 权限；
+- `LiteLLM_SpendLogs` 最近样本中 `metadata`、`proxy_server_request`、
+  `messages` 和 `response` 是否存在；
+- 上述 JSONB 字段在样本中是 object、array、string 还是 SQL NULL 的数量；
+- `metadata` 与 `proxy_server_request.metadata` 的键名和出现次数，不包含值；
+- 相对当前环境基线缺少/新增/类型变化的字段以及缺少的索引；
+- 是否能够执行评测系统实际使用的 JSON 操作符和查询字段。
+
+数据库结构不一致时，优先让内网 LiteLLM 使用与基线环境匹配的版本并执行对应的
+官方数据库迁移。不要为了让检查通过而手工创建一张空的
+`LiteLLM_SpendLogs`，否则 LiteLLM 自身写入和后续升级仍会失败。
 
 脚本发现错误时默认返回退出码 `1`，便于批处理或验收脚本识别。仅希望收集报告、
 不希望 PowerShell 返回失败时，可使用：

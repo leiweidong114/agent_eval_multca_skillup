@@ -159,6 +159,10 @@ def _parser() -> argparse.ArgumentParser:
     gateway_check.add_argument("--model", help="Also send HI to this model")
     gateway_check.add_argument("--timeout", type=float, default=30)
     commands.add_parser("check-database", help="Check PostgreSQL and LiteLLM SpendLogs access")
+    commands.add_parser(
+        "inspect-database",
+        help="Inspect PostgreSQL schema/data shapes and compare with the working baseline",
+    )
     agents = commands.add_parser("agents", help="List locally available evaluation Agents")
     agents.add_argument(
         "--all", action="store_true",
@@ -994,15 +998,20 @@ def _evaluation_batch(
 def main() -> None:
     apply_root_env(PROJECT_ROOT)
     args = _parser().parse_args()
-    if args.command in {"check-litellm", "check-database"}:
+    if args.command in {"check-litellm", "check-database", "inspect-database"}:
         from agent_eval.diagnostics import check_database, check_litellm
-        result = (check_database(PROJECT_ROOT) if args.command == "check-database"
-                  else check_litellm(
-                      PROJECT_ROOT,
-                      model=args.model,
-                      timeout=args.timeout,
-                      employee_no=getattr(args, "user_id", "local"),
-                  ))
+        if args.command == "inspect-database":
+            from agent_eval.database_audit import audit_database_schema
+            result = audit_database_schema(PROJECT_ROOT)
+        elif args.command == "check-database":
+            result = check_database(PROJECT_ROOT)
+        else:
+            result = check_litellm(
+                PROJECT_ROOT,
+                model=args.model,
+                timeout=args.timeout,
+                employee_no=getattr(args, "user_id", "local"),
+            )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         raise SystemExit(0 if result["status"] == "ok" else 1)
     if args.command == "agents":

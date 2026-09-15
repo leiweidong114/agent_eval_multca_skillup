@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "source": "working-environment-2026-09-15",
+  "scope": "PostgreSQL public.LiteLLM_SpendLogs used by agent_eval",
+  "tables": [
+    {
+      "schema": "public",
+      "name": "LiteLLM_SpendLogs",
+      "columns": [
+        {"name": "request_id", "data_type": "text", "udt_name": "text", "nullable": false},
+        {"name": "call_type", "data_type": "text", "udt_name": "text", "nullable": false},
+        {"name": "api_key", "data_type": "text", "udt_name": "text", "nullable": false},
+        {"name": "spend", "data_type": "double precision", "udt_name": "float8", "nullable": false},
+        {"name": "total_tokens", "data_type": "integer", "udt_name": "int4", "nullable": false},
+        {"name": "prompt_tokens", "data_type": "integer", "udt_name": "int4", "nullable": false},
+        {"name": "completion_tokens", "data_type": "integer", "udt_name": "int4", "nullable": false},
+        {"name": "startTime", "data_type": "timestamp without time zone", "udt_name": "timestamp", "nullable": false},
+        {"name": "endTime", "data_type": "timestamp without time zone", "udt_name": "timestamp", "nullable": false},
+        {"name": "completionStartTime", "data_type": "timestamp without time zone", "udt_name": "timestamp", "nullable": true},
+        {"name": "model", "data_type": "text", "udt_name": "text", "nullable": false},
+        {"name": "model_id", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "model_group", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "custom_llm_provider", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "api_base", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "user", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "metadata", "data_type": "jsonb", "udt_name": "jsonb", "nullable": true},
+        {"name": "cache_hit", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "cache_key", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "request_tags", "data_type": "jsonb", "udt_name": "jsonb", "nullable": true},
+        {"name": "team_id", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "end_user", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "requester_ip_address", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "messages", "data_type": "jsonb", "udt_name": "jsonb", "nullable": true},
+        {"name": "response", "data_type": "jsonb", "udt_name": "jsonb", "nullable": true},
+        {"name": "proxy_server_request", "data_type": "jsonb", "udt_name": "jsonb", "nullable": true},
+        {"name": "session_id", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "status", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "mcp_namespaced_tool_name", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "organization_id", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "agent_id", "data_type": "text", "udt_name": "text", "nullable": true},
+        {"name": "request_duration_ms", "data_type": "integer", "udt_name": "int4", "nullable": true}
+      ],
+      "indexes": [
+        {"name": "LiteLLM_SpendLogs_end_user_idx", "definition": "CREATE INDEX \"LiteLLM_SpendLogs_end_user_idx\" ON public.\"LiteLLM_SpendLogs\" USING btree (end_user)"},
+        {"name": "LiteLLM_SpendLogs_pkey", "definition": "CREATE UNIQUE INDEX \"LiteLLM_SpendLogs_pkey\" ON public.\"LiteLLM_SpendLogs\" USING btree (request_id)"},
+        {"name": "LiteLLM_SpendLogs_session_id_idx", "definition": "CREATE INDEX \"LiteLLM_SpendLogs_session_id_idx\" ON public.\"LiteLLM_SpendLogs\" USING btree (session_id)"},
+        {"name": "LiteLLM_SpendLogs_startTime_idx", "definition": "CREATE INDEX \"LiteLLM_SpendLogs_startTime_idx\" ON public.\"LiteLLM_SpendLogs\" USING btree (\"startTime\")"},
+        {"name": "LiteLLM_SpendLogs_startTime_request_id_idx", "definition": "CREATE INDEX \"LiteLLM_SpendLogs_startTime_request_id_idx\" ON public.\"LiteLLM_SpendLogs\" USING btree (\"startTime\", request_id)"}
+      ]
+    }
+  ]
+}
