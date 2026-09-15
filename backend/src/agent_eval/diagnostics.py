@@ -47,10 +47,17 @@ def check_litellm(
                 result.update(inference="ok", model=model, usage=data.get("usage"))
             return result
     except Exception as exc:
-        status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
-        # Error body may contain credentials from provider diagnostics; report a safe summary.
-        failure = describe_evaluation_failure(str(exc), returncode=1, status_code=status,
-                                             component="litellm_connectivity") or {}
-        failure.pop("technical_detail", None)
+        is_http_error = isinstance(exc, httpx.HTTPStatusError)
+        status = exc.response.status_code if is_http_error else None
+        # ``describe_evaluation_failure`` redacts bearer/sk-* credentials and URLs.
+        # Use the response body when available so an intranet report can distinguish
+        # an invalid deployment id from a generic HTTP 400 without exposing secrets.
+        diagnostic_text = exc.response.text if is_http_error else str(exc)
+        failure = describe_evaluation_failure(
+            diagnostic_text,
+            returncode=1,
+            status_code=status,
+            component="litellm_connectivity",
+        ) or {}
         return {"status": "failed", "status_code": status, "failure": failure,
                 "error_type": type(exc).__name__}

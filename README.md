@@ -381,6 +381,11 @@ schematic-pipeline/            以上三步的总编排 SKILL
 
 Windows 使用独立离线 Runtime Release。新电脑只需要 PowerShell 和用于克隆仓库的 Git；Go、Python、Node.js、Python wheel、npm cache、Skill-Up、Multica、JustDo 和公开题库均由离线包提供。
 
+完成安装和根目录 `.env` 配置后，可运行 `./self-test.ps1` 分层检查本地运行时、
+LiteLLM 模型、已安装 Agent、PostgreSQL 和真实 Agent Prompt 调用。需要同时验证
+临时 Trace Key 与数据库模型归因时使用 `./self-test.ps1 -Strict`。完整参数和报告说明见
+[`docs/intranet-self-test.md`](docs/intranet-self-test.md)。
+
 下载当前完整包：[`agent-eval-runtime-windows-x64-portable.zip`](https://github.com/leiweidong114/agent_eval_multca_skillup/releases/download/windows-runtime-20260910/agent-eval-runtime-windows-x64-portable.zip)
 
 ```powershell
