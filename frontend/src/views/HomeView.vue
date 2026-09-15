@@ -66,14 +66,14 @@ const detectedAgents=computed(()=>agents.value.filter(x=>x.detected_executable).
 const modelCount=computed(()=>models.value.models?.length||0)
 const modelsAvailable=computed(()=>models.value.litellm_available)
 const recent=computed(()=>[
-  ...runs.value.map(x=>({type:x.report?.evaluation_type||((x.report?.skills||[]).includes('schematic-generation')?'schematic':'skill'),id:x.run_id,name:x.task_name||x.run_id,status:x.report?.status||'completed',agent:x.report?.agent||'—',model:x.report?.provider_model||x.report?.model||'—',created:x.report?.created_at||''})),
+  ...runs.value.map(x=>({type:x.evaluation_type||((x.skills||[]).includes('schematic-pipeline')?'schematic':'skill'),id:x.run_id,name:x.task_name||x.run_id,status:x.status||'completed',agent:x.agent||'—',model:x.provider_model||x.model||'—',created:x.started_at||x.created_at||''})),
   ...experiments.value.map(x=>({type:'question',id:x.id,name:x.name,status:x.status,agent:x.track||'model_direct',model:'题库实验',created:x.created_at||''})),
 ].sort((a,b)=>String(b.created).localeCompare(String(a.created))).slice(0,6))
 function typeName(type){return {skill:'Skill',schematic:'原理图',question:'题库'}[type]||type}
 function statusName(status){return {completed:'已完成',running:'运行中',queued:'排队中',failed:'失败',cancelled:'已取消',interrupted:'已中断'}[status]||status}
 function statusType(status){return status==='completed'?'success':['running','queued'].includes(status)?'primary':status==='failed'?'danger':'info'}
 function openResult(item){location.href=`/results/${item.type}/${item.id}`}
-onMounted(async()=>{try{const [skillData,benchmarkData,jobData,runData,experimentData,agentData,modelData,capacityData]=await Promise.all([fetchSkills(),fetchBenchmarks(),fetchJobs(),fetchRuns(),fetchExperiments(),fetchAgents(),fetchModels(),fetchCapacity()]);skills.value=skillData.skills||[];benchmarks.value=benchmarkData;jobs.value=jobData;runs.value=runData;experiments.value=experimentData;agents.value=agentData;models.value=modelData;capacity.value=capacityData}catch{}finally{loading.value=false}})
+onMounted(async()=>{try{const [skillData,benchmarkData,jobData,runData,experimentData,agentData,modelData,capacityData]=await Promise.all([fetchSkills(),fetchBenchmarks(),fetchJobs(),fetchRuns({summary_only:true,include_local:true}),fetchExperiments(),fetchAgents(),fetchModels(),fetchCapacity()]);skills.value=skillData.skills||[];benchmarks.value=benchmarkData;jobs.value=jobData;runs.value=runData;experiments.value=experimentData;agents.value=agentData;models.value=modelData;capacity.value=capacityData}catch{}finally{loading.value=false}})
 </script>
 
 <style scoped>

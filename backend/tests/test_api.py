@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 import shutil
 
@@ -326,6 +327,59 @@ def test_run_interactions_can_filter_main_and_subagent_calls(tmp_path, monkeypat
     assert child["items"][0]["subagent_name"] == "LIGHT_SENSE"
     assert child["subagents"][0]["name"] == "LIGHT_SENSE"
     assert child["scope_counts"] == {"all": 2, "main_agent": 1, "subagent": 1}
+
+
+def test_run_summary_can_include_machine_local_cli_results(tmp_path, monkeypatch):
+    run_dir = tmp_path / "local" / "JustDo-CLI" / "20260915-120000__local-run"
+    run_dir.mkdir(parents=True)
+    (run_dir / "evaluation-report.json").write_text(
+        '{"run_id":"local-run","user_id":"local","task_name":"JustDo CLI",'
+        '"status":"completed","agent":"justdo","provider_model":"judge-model",'
+        '"evaluation_type":"schematic","skills":["schematic-pipeline"],'
+        '"started_at":"2026-09-15T12:00:00+00:00","scores":{"overall_score":99}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.api.routes_runs.RUNS_ROOT", tmp_path)
+    monkeypatch.setattr("app.api.routes_runs.get_cached_json", lambda key: None)
+    monkeypatch.setattr("app.api.routes_runs.set_cached_json", lambda *args, **kwargs: None)
+
+    hidden = client.get("/api/runs", params={"summary_only": True}).json()
+    visible = client.get(
+        "/api/runs", params={"summary_only": True, "include_local": True}
+    ).json()
+
+    assert hidden == []
+    assert visible[0]["run_id"] == "local-run"
+    assert visible[0]["score"] == 99
+    assert "report" not in visible[0]
+
+
+def test_judge_interactions_are_listed_as_summaries_and_opened_separately(tmp_path, monkeypatch):
+    records = tmp_path / "records"
+    records.mkdir()
+    interaction_id = "a" * 32
+    summary = {
+        "interaction_id": interaction_id,
+        "user_id": "local",
+        "purpose": "evaluation_judge",
+        "model": "judge-model",
+        "started_at": "2026-09-15T12:00:00+00:00",
+        "usage": {"total_tokens": 42},
+    }
+    (tmp_path / "index.jsonl").write_text(json.dumps(summary) + "\n", encoding="utf-8")
+    (records / f"{interaction_id}.json").write_text(
+        json.dumps({**summary, "input": {"system": [], "user": []}, "output": {"content": "ok"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.api.routes_judge.AUDIT_ROOT", tmp_path)
+    monkeypatch.setattr("app.api.routes_judge.RECORDS_ROOT", records)
+
+    listed = client.get("/api/judge-interactions").json()
+    detail = client.get(f"/api/judge-interactions/{interaction_id}").json()
+
+    assert listed["items"][0]["total_tokens"] == 42
+    assert "input" not in listed["items"][0]
+    assert detail["output"]["content"] == "ok"
 
 
 def test_batch_rejects_duplicate_combinations_before_queueing():

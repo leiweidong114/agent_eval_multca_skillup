@@ -94,6 +94,8 @@ def judge_session_metrics(
                 system_prompt=SYSTEM_PROMPT,
                 user_prompt=_prompt(chunk, index, len(chunks)),
                 employee_no=employee_no,
+                context_id=str(conversation.get("root_session_id") or "") or None,
+                purpose="session_metric_judge",
             )
             report = response["result"]
             if not isinstance(report, dict):

@@ -9,6 +9,7 @@ const routes = [
   { path: '/benchmarks', name: 'benchmarks', component: () => import('../views/BenchmarkManager.vue'), meta: { title: '题库管理', description: '查看标准题库、私有题库及题目内容' } },
   { path: '/skills', name: 'skills', component: () => import('../views/SkillCatalog.vue'), meta: { title: 'Skill 管理', description: '查看、上传和管理当前支持评测的 Skill' } },
   { path: '/results', name: 'results', component: () => import('../views/ResultsView.vue'), meta: { title: '评测结果', description: '按评测类型查看历史任务与结果' } },
+  { path: '/judge-interactions', name: 'judge-interactions', component: () => import('../views/JudgeInteractions.vue'), meta: { title: 'Judge 交互记录', description: '集中查看 Judge LLM 的完整输入、输出和调用开销' } },
   { path: '/results/:type/:id', name: 'result-detail', component: () => import('../views/ResultDetail.vue'), meta: { title: '结果详情', description: '查看评分、证据和运行配置' } },
   { path: '/runtimes', name: 'runtimes', component: () => import('../views/RuntimeCatalog.vue'), meta: { title: '模型与 Agent', description: '查看本地 Agent 和 LiteLLM 可用模型' } },
   { path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue'), meta: { title: '设置', description: '配置 Judge 和 Agent 可用性测试使用的默认模型' } },

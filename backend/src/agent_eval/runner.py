@@ -289,6 +289,8 @@ def build_eval_config(
     extra_args: list[str],
     additional_skills: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
+    run_started_at = datetime.now(timezone.utc)
+
     args = [
         "--input",
         "${input_file}",
@@ -587,6 +589,7 @@ def run_evaluation(
             "client_task_id": client_task_id,
             "user_id": user_id,
             "task_name": task_name or source_skill.name,
+            "started_at": run_started_at.isoformat(),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "agent": requested_agent,
             "agent_backend": agent,
@@ -1001,6 +1004,7 @@ def run_evaluation(
             evidence=plugin_evaluation.llm_evidence,
             system_prompt=plugin_evaluation.judge_system_prompt,
             employee_no=user_id,
+            context_id=canonical_task_id,
         )
     scoring = combine_dimensions(
         rule_dimensions=plugin_evaluation.rule_dimensions,
@@ -1027,6 +1031,7 @@ def run_evaluation(
         "client_task_id": client_task_id,
         "user_id": user_id,
         "task_name": task_name or source_skill.name,
+        "started_at": run_started_at.isoformat(),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": evaluation_status,
         "agent": requested_agent,

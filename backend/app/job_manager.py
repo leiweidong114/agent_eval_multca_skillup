@@ -196,7 +196,13 @@ class EvaluationJobManager:
                 return
 
     def _run(self, job_id: str, request: dict[str, Any], skill_dir: Path, cancel: threading.Event) -> None:
-        self._update(job_id, status="running", phase="preparing", progress=1)
+        self._update(
+            job_id,
+            status="running",
+            phase="preparing",
+            progress=1,
+            started_at=datetime.now().isoformat(),
+        )
         self._append_event(job_id, "phase", "评测 Worker 已启动", phase="preparing")
 
         def on_progress(phase: str, percent: int, message: str) -> None:
@@ -279,12 +285,24 @@ class EvaluationJobManager:
 
     def list(self, user_id: str | None = None) -> list[dict[str, Any]]:
         with self._lock:
-            items = (
-                {**item, "event_count": len(item.get("events") or []), "events": None}
-                for item in self._jobs.values()
-            )
+            items = []
+            for item in self._jobs.values():
+                result = item.get("result") if isinstance(item.get("result"), dict) else {}
+                scores = result.get("scores") if isinstance(result.get("scores"), dict) else {}
+                scoring = result.get("scoring") if isinstance(result.get("scoring"), dict) else {}
+                summary = {
+                    key: value for key, value in item.items()
+                    if key not in {"events", "result"}
+                }
+                summary.update({
+                    "event_count": len(item.get("events") or []),
+                    "score": scores.get("overall_score"),
+                    "valid_for_ranking": scoring.get("valid_for_ranking", True),
+                    "diagnostic_only": scoring.get("diagnostic_only", False),
+                })
+                items.append(summary)
             if user_id is not None:
-                items = (item for item in items if item.get("user_id") == user_id)
+                items = [item for item in items if item.get("user_id") == user_id]
             return sorted(items, key=lambda x: x["created_at"], reverse=True)
 
     def capacity(self) -> dict[str, Any]:

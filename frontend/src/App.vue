@@ -12,6 +12,7 @@
       <el-menu-item index="/benchmarks"><el-icon><Collection /></el-icon><span>题库管理</span></el-menu-item>
       <el-menu-item index="/skills"><el-icon><MagicStick /></el-icon><span>Skill 管理</span></el-menu-item>
       <el-menu-item index="/results"><el-icon><Clock /></el-icon><span>评测结果</span></el-menu-item>
+      <el-menu-item index="/judge-interactions"><el-icon><ChatLineRound /></el-icon><span>Judge 交互记录</span></el-menu-item>
       <el-menu-item index="/runtimes"><el-icon><Cpu /></el-icon><span>模型与 Agent</span></el-menu-item>
       <el-menu-item index="/settings"><el-icon><Setting /></el-icon><span>设置</span></el-menu-item>
     </el-menu>

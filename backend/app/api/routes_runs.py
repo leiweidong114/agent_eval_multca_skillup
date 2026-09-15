@@ -20,6 +20,7 @@ from agent_eval.database import (
 
 from app.auth import employee_from_request
 from app.config import RUNS_ROOT
+from app.response_cache import cache_key, get_cached_json, set_cached_json
 
 router = APIRouter(prefix="/api", tags=["runs"])
 
@@ -34,19 +35,91 @@ def _read_interaction_trace(path_text: str, modified_ns: int, size: int) -> list
     return [dict(item) for item in value if isinstance(item, dict)]
 
 
+@lru_cache(maxsize=512)
+def _read_report(path_text: str, modified_ns: int, size: int) -> dict[str, object] | None:
+    del modified_ns, size
+    try:
+        value = json.loads(Path(path_text).read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else None
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def _load_report(run_dir: Path) -> dict[str, object] | None:
     report_file = run_dir / "evaluation-report.json"
     if not report_file.is_file():
         return None
     try:
-        return json.loads(report_file.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        stat = report_file.stat()
+    except OSError:
         return None
+    return _read_report(str(report_file), stat.st_mtime_ns, stat.st_size)
+
+
+def _report_summary(run_dir: Path, report: dict[str, object]) -> dict[str, object]:
+    scoring = report.get("scoring") if isinstance(report.get("scoring"), dict) else {}
+    scores = report.get("scores") if isinstance(report.get("scores"), dict) else {}
+    evaluation = report.get("evaluation") if isinstance(report.get("evaluation"), dict) else {}
+    return {
+        "run_id": report.get("run_id", run_dir.name),
+        "task_id": report.get("task_id", report.get("run_id", run_dir.name)),
+        "user_id": report.get("user_id", run_dir.parents[1].name),
+        "task_name": report.get("task_name", run_dir.parent.name),
+        "result_dir": str(run_dir),
+        "status": report.get("status", "completed"),
+        "agent": report.get("agent"),
+        "model": report.get("model"),
+        "provider_model": report.get("provider_model"),
+        "skills": report.get("skills") or [],
+        "evaluation_type": report.get("evaluation_type") or (
+            "schematic" if evaluation.get("schematic_task_type") else "skill"
+        ),
+        "score": scores.get("overall_score") if scores.get("overall_score") is not None else report.get("overall_score"),
+        "valid_for_ranking": scoring.get("valid_for_ranking", True),
+        "diagnostic_only": scoring.get("diagnostic_only", False),
+        "started_at": report.get("started_at") or report.get("created_at"),
+        "created_at": report.get("created_at"),
+    }
+
+
+def _load_run_summary(run_dir: Path) -> dict[str, object] | None:
+    report_file = run_dir / "evaluation-report.json"
+    sidecar = run_dir / "evaluation-summary.json"
+    try:
+        report_stat = report_file.stat()
+        if sidecar.is_file() and sidecar.stat().st_mtime_ns >= report_stat.st_mtime_ns:
+            value = json.loads(sidecar.read_text(encoding="utf-8"))
+            if isinstance(value, dict):
+                return value
+    except (OSError, ValueError):
+        pass
+    report = _load_report(run_dir)
+    if report is None:
+        return None
+    summary = _report_summary(run_dir, report)
+    try:
+        sidecar.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+    return summary
 
 
 def _find_run(run_id: str) -> tuple[Path, dict[str, object]] | None:
     root = RUNS_ROOT.resolve()
-    for report_file in root.rglob("evaluation-report.json") if root.is_dir() else []:
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", run_id):
+        direct = sorted(
+            (
+                path.resolve() for path in root.glob(f"*/*/*__{run_id}")
+                if path.is_dir() and root in path.resolve().parents
+            ),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        ) if root.is_dir() else []
+        for run_dir in direct:
+            report = _load_report(run_dir)
+            if report is not None and str(report.get("run_id")) == run_id:
+                return run_dir, report
+    for report_file in root.glob("*/*/*/evaluation-report.json") if root.is_dir() else []:
         run_dir = report_file.parent.resolve()
         if root not in run_dir.parents:
             continue
@@ -65,40 +138,67 @@ def _find_run_dir(run_id: str) -> Path | None:
     root = RUNS_ROOT.resolve()
     matches = [
         path.resolve()
-        for path in root.rglob(f"*__{run_id}") if root.is_dir() and path.is_dir()
+        for path in root.glob(f"*/*/*__{run_id}") if root.is_dir() and path.is_dir()
         if root in path.resolve().parents
     ]
     return max(matches, key=lambda path: path.stat().st_mtime) if matches else None
 
 
 @router.get("/runs")
-def list_runs(request: Request) -> list[dict[str, object]]:
+def list_runs(
+    request: Request,
+    summary_only: bool = Query(False),
+    include_local: bool = Query(False),
+) -> list[dict[str, object]]:
     """List evaluation run directories with a report, newest first."""
     if not RUNS_ROOT.is_dir():
         return []
-    entries: list[dict[str, object]] = []
     report_files = sorted(
-        RUNS_ROOT.rglob("evaluation-report.json"),
+        RUNS_ROOT.glob("*/*/*/evaluation-report.json"),
         key=lambda item: item.stat().st_mtime,
         reverse=True,
     )
+    employee = employee_from_request(request)
+    allowed_users = {employee, "local"} if include_local else {employee}
+    fingerprint = [
+        (str(path.relative_to(RUNS_ROOT)), path.stat().st_mtime_ns, path.stat().st_size)
+        for path in report_files
+    ]
+    result_cache_key = cache_key(
+        "run-list-v3",
+        {
+            "user": employee,
+            "include_local": include_local,
+            "summary_only": summary_only,
+            "fingerprint": fingerprint,
+        },
+    )
+    if summary_only:
+        cached = get_cached_json(result_cache_key)
+        if isinstance(cached, list):
+            return cached
+    entries: list[dict[str, object]] = []
     for report_file in report_files:
         run_dir = report_file.parent
-        report = _load_report(run_dir)
+        report = _load_run_summary(run_dir) if summary_only else _load_report(run_dir)
         if report is None:
             continue
-        if report.get("user_id") != employee_from_request(request):
+        if report.get("user_id") not in allowed_users:
             continue
-        entries.append(
-            {
-                "run_id": report.get("run_id", run_dir.name),
-                "task_id": report.get("task_id", report.get("run_id", run_dir.name)),
-                "user_id": report.get("user_id", run_dir.parents[1].name),
-                "task_name": report.get("task_name", run_dir.parent.name),
-                "result_dir": str(run_dir),
-                "report": report,
-            }
-        )
+        entry = {
+            "run_id": report.get("run_id", run_dir.name),
+            "task_id": report.get("task_id", report.get("run_id", run_dir.name)),
+            "user_id": report.get("user_id", run_dir.parents[1].name),
+            "task_name": report.get("task_name", run_dir.parent.name),
+            "result_dir": str(run_dir),
+        }
+        if summary_only:
+            entry.update(report)
+        else:
+            entry["report"] = report
+        entries.append(entry)
+    if summary_only:
+        set_cached_json(result_cache_key, entries, ttl_seconds=300)
     return entries
 
 

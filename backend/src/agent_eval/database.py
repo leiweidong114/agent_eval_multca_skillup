@@ -929,6 +929,8 @@ def search_conversations(
         prompt_tokens, completion_tokens, total_tokens, spend
         from "LiteLLM_SpendLogs" where {user_clause}
         and "startTime" >= %s and "startTime" < %s
+        and coalesce(proxy_server_request->'metadata'->>'request_purpose',
+            metadata->>'request_purpose', metadata->'spend_logs_metadata'->>'request_purpose', '') <> 'llm_judge'
         order by "startTime" desc, request_id limit %s'''
     psycopg, dict_row = _driver()
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
@@ -1110,12 +1112,16 @@ def conversation_filter_options(
         with connection.cursor() as cursor:
             cursor.execute(f'''select distinct end_user from "LiteLLM_SpendLogs"
                 where {user_clause} and "startTime" >= %s and "startTime" < %s
+                and coalesce(proxy_server_request->'metadata'->>'request_purpose',
+                    metadata->>'request_purpose', metadata->'spend_logs_metadata'->>'request_purpose', '') <> 'llm_judge'
                 and end_user is not null and end_user <> '' order by end_user limit 500''',
                 (*parameters, window_start, window_end))
             end_users = [str(row["end_user"]) for row in cursor.fetchall()]
             cursor.execute(f'''select distinct coalesce(nullif(model_group, ''), model) as model
                 from "LiteLLM_SpendLogs" where {user_clause}
                 and "startTime" >= %s and "startTime" < %s
+                and coalesce(proxy_server_request->'metadata'->>'request_purpose',
+                    metadata->>'request_purpose', metadata->'spend_logs_metadata'->>'request_purpose', '') <> 'llm_judge'
                 and coalesce(nullif(model_group, ''), model) is not null
                 order by model limit 500''', (*parameters, window_start, window_end))
             models = [str(row["model"]) for row in cursor.fetchall()]

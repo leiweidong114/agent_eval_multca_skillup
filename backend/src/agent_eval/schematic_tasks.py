@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from agent_eval.skill_sources import MAX_SELECTED_SKILLS
-
-
 SCHEMATIC_TASK_TYPES: dict[str, dict[str, str]] = {
     "block_to_schematic": {
         "name": "框图生成原理图",
@@ -64,7 +61,7 @@ def normalize_schematic_task_profiles(
             skills = defaults["skills"]
         normalized_skills = list(dict.fromkeys(
             str(item).strip() for item in skills if str(item).strip()
-        ))[:MAX_SELECTED_SKILLS]
+        ))
         evaluator_id = str(raw.get("evaluator_id") or "").strip()
         if task_type == DEFAULT_SCHEMATIC_TASK_TYPE and not evaluator_id and legacy_evaluator:
             evaluator_id = legacy_evaluator

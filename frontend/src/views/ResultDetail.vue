@@ -3,7 +3,7 @@
     <div class="back-row"><el-button link @click="$router.push('/results')"><el-icon><ArrowLeft/></el-icon> 返回结果中心</el-button><div class="top-actions"><el-button v-if="!['question','batch'].includes(route.params.type)" @click="openArtifacts" :loading="openingFolder"><el-icon><FolderOpened/></el-icon> {{route.params.type==='schematic'?'打开原理图项目文件夹':'打开评测产物文件夹'}}</el-button><el-button @click="load(false)" :loading="loading"><el-icon><Refresh/></el-icon> 刷新</el-button></div></div>
     <el-skeleton v-if="loading&&!detail" :rows="8" animated/>
     <template v-else-if="detail">
-      <section class="hero compact"><div><span class="eyebrow">{{typeLabel}} RESULT</span><h1>{{title}}</h1><p>评测 ID {{route.params.id}} · {{formatTime(detail.created_at)}} · {{statusText(detail.status||'completed')}}</p></div><el-tag size="large" :type="statusType(detail.status)">{{statusText(detail.status||'completed')}}</el-tag></section>
+      <section class="hero compact"><div><span class="eyebrow">{{typeLabel}} RESULT</span><h1>{{title}}</h1><p>评测 ID {{route.params.id}} · 启动于 {{formatTime(detail.started_at||detail.created_at)}} · {{statusText(detail.status||'completed')}}</p></div><el-tag size="large" :type="statusType(detail.status)">{{statusText(detail.status||'completed')}}</el-tag></section>
       <el-alert v-if="detail.status==='failed'&&failure" class="failure-alert" type="error" show-icon :closable="false" :title="failureTitle(failure)" :description="`${failureDescription(failure)} 本页分数仅用于故障诊断，不参与排名。`"/>
       <el-alert v-else-if="isDiagnostic" class="failure-alert" type="warning" show-icon :closable="false" title="本次得分仅用于诊断" description="LLM Judge 或必要证据未完成，当前规则分不会进入正式排名；请根据 Judge 状态和失败详情排查后重新评测。"/>
 
