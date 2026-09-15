@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from agent_eval.llm_judge import run_json_judge
 from app.config import BACKEND_ROOT
@@ -70,7 +70,12 @@ def _prompt(chunk: list[dict[str, Any]], index: int, total: int) -> str:
     )
 
 
-def judge_session_metrics(conversation: Mapping[str, Any], *, employee_no: str | None = None) -> dict[str, Any]:
+def judge_session_metrics(
+    conversation: Mapping[str, Any],
+    *,
+    employee_no: str | None = None,
+    progress_callback: Callable[[str, int, int, str], None] | None = None,
+) -> dict[str, Any]:
     rows = [row for row in conversation.get("timeline", []) if isinstance(row, Mapping)]
     rows.sort(key=lambda row: (str(row.get("start_time") or ""), str(row.get("request_id") or "")))
     chunks = _chunks(rows)
@@ -82,6 +87,8 @@ def judge_session_metrics(conversation: Mapping[str, Any], *, employee_no: str |
     models: set[str] = set()
     try:
         for index, chunk in enumerate(chunks, start=1):
+            if progress_callback:
+                progress_callback("llm_judge_chunk_started", index, len(chunks), f"LLM Judge 正在分析第 {index} / {len(chunks)} 个上下文分片")
             response = run_json_judge(
                 project_root=BACKEND_ROOT,
                 system_prompt=SYSTEM_PROMPT,
@@ -94,6 +101,8 @@ def judge_session_metrics(conversation: Mapping[str, Any], *, employee_no: str |
             reports.append(report)
             usages.append(response.get("usage") or {})
             models.add(str(response.get("model") or ""))
+            if progress_callback:
+                progress_callback("llm_judge_chunk_completed", index, len(chunks), f"LLM Judge 已完成第 {index} / {len(chunks)} 个上下文分片")
     except Exception as exc:
         return {
             "status": "unavailable",

@@ -785,6 +785,7 @@ def run_evaluation(
         progress("waiting_agent_lock", 24, "Waiting for exclusive OpenClaw/JustDo runtime")
         try:
             run_lock.acquire()
+            progress("running", 25, "Exclusive Agent runtime acquired; evaluation is running")
         except InterruptedError as exc:
             if resilience_proxy is not None:
                 resilience_proxy.close()

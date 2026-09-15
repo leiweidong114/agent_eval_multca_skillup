@@ -28,3 +28,20 @@ def test_judge_rejects_unknown_evidence_ids(monkeypatch) -> None:
     result = judge_session_metrics({"timeline": [{"request_id": "r1", "messages": []}]})
     assert result["status"] == "completed"
     assert [item["event_id"] for item in result["suspected_fabrications"]] == ["valid"]
+
+
+def test_judge_reports_chunk_progress(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.session_metric_judge.run_json_judge",
+        lambda **kwargs: {"model": "judge-model", "usage": {}, "result": {"task_type": "other"}},
+    )
+    events: list[tuple[str, int, int, str]] = []
+
+    result = judge_session_metrics(
+        {"timeline": [{"request_id": "r1", "messages": []}]},
+        progress_callback=lambda *args: events.append(args),
+    )
+
+    assert result["status"] == "completed"
+    assert [event[0] for event in events] == ["llm_judge_chunk_started", "llm_judge_chunk_completed"]
+    assert all(event[1:3] == (1, 1) for event in events)
