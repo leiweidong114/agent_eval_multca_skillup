@@ -104,4 +104,3 @@ backend/.runtime/self-test/<时间>/
 
 不要把包含内网主机名、模型名称或业务 Prompt 的完整报告上传到公网。报告会尽量
 遮蔽 API Key、Master Key、数据库密码、Bearer Token 和 `sk-` Key，但分享前仍应人工复核。
-
