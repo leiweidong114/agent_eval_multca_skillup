@@ -1712,4 +1712,6 @@ agent-eval check-agent --agent justdo --model glm-4.5-air --prompt "HI" --timeou
 
 评测系统使用随离线包构建的 `backend/.runtime/windows/bin/justdo-http-agent.exe`，Multica 无需区分本机或 HTTP JustDo。执行 `.\build_multica_windows.ps1 -Test` 会同时重新构建该代理。
 
-注意：当前 HTTP 模式适用于评测系统与 JustDo 在同一台电脑，或双方能够访问相同工作目录的局域网环境。跨公网、文件系统完全隔离的电脑还需要工作区上传/产物回传或反向 WSS Worker；不能只暴露此明文 HTTP 端口到公网。
+评测系统与 JustDo 不需要共享磁盘。执行正式 `agent` 命令时，代理会把本次隔离任务工作区、Skill 快照和 OpenClaw 配置上传到 JustDo；执行结束后再把产物和更新后的工作区写回评测机。单次最多传输 5,000 个文件、48 MiB，`.git` 和 `node_modules` 不上传。超限会明确报错，不会静默漏文件。
+
+HTTP 桥本身不提供 TLS。局域网可以使用 IP 直连；跨公网必须放在 VPN、SSH 隧道或 HTTPS 反向代理后面，并保留高强度 Bearer 令牌，不能把 `0.0.0.0:43128` 直接暴露到公网。
