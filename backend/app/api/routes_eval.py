@@ -50,7 +50,7 @@ class RunRequest(BaseModel):
     parallelism: int = Field(default=1, ge=1, le=16)
     iterations: int = Field(default=1, ge=1, le=20)
     timeout_seconds: int = Field(default=1800, ge=1)
-    max_turns: int = Field(default=12, ge=1)
+    max_turns: int = Field(default=60, ge=1)
     benchmark: bool = Field(default=True)
     extra_args: list[str] = Field(default_factory=list)
     collect_database_trace: bool = Field(default=True)

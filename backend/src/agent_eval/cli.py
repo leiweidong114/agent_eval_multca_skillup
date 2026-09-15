@@ -92,7 +92,12 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
     parser.add_argument("--parallelism", type=int, default=1, help="Case concurrency per Agent")
     parser.add_argument("--iterations", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=1800)
-    parser.add_argument("--max-turns", type=int, default=12)
+    parser.add_argument(
+        "--max-turns",
+        type=int,
+        default=60 if pipeline else 12,
+        help="Maximum Agent turns (pipeline default: 60; regular Skill default: 12)",
+    )
     parser.add_argument("--output-dir")
     parser.add_argument("--user", "--user-id", dest="user_id", default="local")
     parser.add_argument("--task-name")

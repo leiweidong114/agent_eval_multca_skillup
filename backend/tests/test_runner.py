@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import os
 import sys
 from threading import Event
@@ -220,6 +221,46 @@ def test_session_evidence_is_attached_to_matching_case(tmp_path):
     enriched = attach_session_evidence(tmp_path, result)
 
     assert enriched["case_results"][0]["session_result"]["final_message"] == "OK"
+
+
+def test_session_evidence_deduplicates_agent_and_workspace_copies(tmp_path):
+    payload = {
+        "session_id": "same-session",
+        "final_message": "完成",
+        "transcript": [
+            {"role": "user", "content": "生成原理图", "turn": 1},
+            {"role": "assistant", "content": "完成", "turn": 1},
+            {
+                "role": "assistant",
+                "content": "AGENT_EVAL_TELEMETRY_JSON:{\"total_tokens\":1}",
+                "turn": 1,
+            },
+            {"role": "assistant", "content": "完成", "turn": 1},
+        ],
+    }
+    for relative in (
+        "marker/with_skill/outputs/agent/run",
+        "marker/with_skill/outputs/workspace/outputs",
+    ):
+        session_dir = tmp_path / relative
+        session_dir.mkdir(parents=True)
+        (session_dir / "session-result.json").write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+    result = {
+        "case_results": [
+            {"case_id": "marker", "configuration": "with_skill"}
+        ]
+    }
+
+    enriched = attach_session_evidence(tmp_path, result)
+
+    case = enriched["case_results"][0]
+    assert "session_results" not in case
+    assert [item["role"] for item in case["session_result"]["transcript"]] == [
+        "user",
+        "assistant",
+    ]
 
 
 def test_background_process_can_be_cancelled(tmp_path):

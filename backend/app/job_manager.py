@@ -229,7 +229,7 @@ class EvaluationJobManager:
                 executable=request.get("agent_executable"),
                 must_contain=request.get("must_contain"), must_not_contain=request.get("must_not_contain"),
                 parallelism=request.get("parallelism", 1), iterations=request.get("iterations", 1),
-                timeout_seconds=request.get("timeout_seconds", 1800), max_turns=request.get("max_turns", 12),
+                timeout_seconds=request.get("timeout_seconds", 1800), max_turns=request.get("max_turns", 60),
                 benchmark=request.get("benchmark", True), output_dir=str(RUNS_ROOT),
                 extra_args=request.get("extra_args"), validate_only=False,
                 collect_database_trace=request.get("collect_database_trace", True),

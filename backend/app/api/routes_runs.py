@@ -17,6 +17,7 @@ from agent_eval.database import (
     group_subagent_interactions,
     summarize_interaction_rows,
 )
+from agent_eval.evidence_normalization import normalize_report_evidence
 
 from app.auth import employee_from_request
 from app.config import RUNS_ROOT
@@ -40,7 +41,7 @@ def _read_report(path_text: str, modified_ns: int, size: int) -> dict[str, objec
     del modified_ns, size
     try:
         value = json.loads(Path(path_text).read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else None
+        return normalize_report_evidence(value) if isinstance(value, dict) else None
     except (json.JSONDecodeError, OSError):
         return None
 

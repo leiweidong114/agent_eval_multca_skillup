@@ -50,6 +50,38 @@ def test_skill_usage_evidence_accepts_bundled_script_execution():
     assert result["evidence"]["schematic-web-apply"][0]["kind"] == "bundled_script_execution"
 
 
+def test_skill_usage_evidence_accepts_native_agent_transcript_tools():
+    results = {"case_results": [{"session_result": {
+        "session_id": "session-1",
+        "transcript": [
+            {"role": "tool_call", "tool_call": {
+                "id": "skill-1", "name": "Skill",
+                "arguments": {"skill": "signal-interface-generation"},
+            }},
+            {"role": "tool_call", "tool_call": {
+                "id": "script-1", "name": "Bash",
+                "arguments": {"command": "python .claude/skills/schematic-web-apply/scripts/apply.py"},
+            }},
+        ],
+    }}]}
+    result = collect_skill_read_evidence(
+        [], ["signal-interface-generation", "schematic-web-apply"], results=results
+    )
+    assert result["status"] == "verified"
+    assert result["all_selected_skills_observed"] is True
+    assert result["evidence"]["signal-interface-generation"][0]["kind"] == "native_skill_invocation"
+    assert result["evidence"]["schematic-web-apply"][0]["kind"] == "bundled_script_execution"
+
+
+def test_skill_usage_does_not_trust_agent_final_claim():
+    results = {"case_results": [{"session_result": {
+        "final_message": "I used schematic-pipeline successfully.",
+        "transcript": [{"role": "assistant", "content": "Used schematic-pipeline"}],
+    }}]}
+    result = collect_skill_read_evidence([], ["schematic-pipeline"], results=results)
+    assert result["status"] == "not_observed"
+
+
 def test_database_supplements_native_subagent_when_transcript_has_shell_tools():
     process = {
         "tool_calls": 2, "tool_results": 2, "tool_failures": 0,

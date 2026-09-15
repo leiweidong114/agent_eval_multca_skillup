@@ -639,6 +639,7 @@ def _elapsed_ms(start: Any, end: Any) -> int | None:
 
 def enrich_interaction_rows(rows: list[dict[str, Any]], *, start_index: int = 1) -> list[dict[str, Any]]:
     """Add stable per-turn metrics used by database and durable report views."""
+    previous_messages: dict[str, list[dict[str, Any]]] = {}
     for index, row in enumerate(rows, start=start_index):
         tool_calls = _response_tool_calls(row.get("response"))
         row["turn_index"] = index
@@ -649,6 +650,30 @@ def enrich_interaction_rows(rows: list[dict[str, Any]], *, start_index: int = 1)
         scope, subagent_name = _interaction_actor(row)
         row["interaction_scope"] = scope
         row["subagent_name"] = subagent_name
+        messages = _request_messages(row)
+        session_key = str(row.get("session_id") or f"{scope}:{subagent_name or ''}")
+        previous = previous_messages.get(session_key, [])
+        if previous:
+            common = 0
+            for old, current in zip(previous, messages):
+                if json.dumps(old, ensure_ascii=False, sort_keys=True, default=str) != json.dumps(
+                    current, ensure_ascii=False, sort_keys=True, default=str
+                ):
+                    break
+                common += 1
+            current_input = messages[common:]
+            history_count = common
+        else:
+            non_system_indexes = [
+                position for position, message in enumerate(messages)
+                if str(message.get("role") or "").lower() not in {"system", "developer"}
+            ]
+            first_current = non_system_indexes[-1] if non_system_indexes else len(messages)
+            current_input = messages[first_current:] if first_current < len(messages) else []
+            history_count = first_current
+        row["current_input_messages"] = current_input
+        row["history_message_count"] = history_count
+        previous_messages[session_key] = messages
     return rows
 
 

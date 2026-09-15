@@ -21,7 +21,7 @@
       <template #header><div class="dialog-title"><div><b>Judge LLM 交互详情</b><small>{{detail?.interaction_id}}</small></div><el-tag :type="detail?.status==='success'?'success':'danger'">{{detail?.status==='success'?'成功':'失败'}}</el-tag></div></template>
       <div v-loading="detailLoading" class="judge-detail" v-if="detail">
         <div class="facts"><div><span>用途</span><b>{{purposeLabel(detail.purpose)}}</b></div><div><span>模型</span><b>{{detail.model}}</b></div><div><span>任务 / Session</span><b>{{detail.context_id||'未记录'}}</b></div><div><span>耗时 / Token</span><b>{{duration(detail.duration_ms)}} / {{number(detail.usage?.total_tokens)}}</b></div></div>
-        <section class="io input"><header><span>INPUT</span><b>Judge 模型输入</b></header><div class="input-grid"><article v-for="group in inputGroups" :key="group.key"><header><b>{{group.label}}</b><span>{{group.items.length}} 条</span></header><div v-if="group.items.length" class="messages"><pre v-for="(message,index) in group.items" :key="index">{{content(message)}}</pre></div><el-empty v-else :description="`没有 ${group.label} 内容`" :image-size="38"/></article></div></section>
+        <section class="io input"><header><span>INPUT</span><b>Judge 模型输入</b></header><div class="input-grid"><article v-for="group in inputGroups" :key="group.key"><header><b>{{group.label}}</b><span>{{group.items.length}} 条</span></header><div class="messages"><pre v-for="(message,index) in group.items" :key="index">{{content(message)}}</pre></div></article></div></section>
         <section class="io output"><header><span>OUTPUT</span><b>Judge 模型输出</b></header><pre>{{detail.output?.content||detail.error||'没有输出内容'}}</pre></section>
         <details><summary>查看原始响应</summary><pre>{{pretty(detail.output?.response||{})}}</pre></details>
       </div>
@@ -31,10 +31,12 @@
 
 <script setup>
 import {computed,onMounted,ref} from 'vue'
+import {useRoute} from 'vue-router'
 import {ElMessage} from 'element-plus'
 import {fetchJudgeInteraction,fetchJudgeInteractions} from '../api'
-const items=ref([]),total=ref(0),page=ref(1),pageSize=ref(20),loading=ref(false),purpose=ref(''),model=ref(''),contextId=ref(''),detailVisible=ref(false),detailLoading=ref(false),detail=ref(null)
-const inputGroups=computed(()=>[{key:'system',label:'System',items:detail.value?.input?.system||[]},{key:'user',label:'User',items:detail.value?.input?.user||[]},{key:'history',label:'History',items:detail.value?.input?.history||[]},{key:'tool',label:'Tool',items:detail.value?.input?.tool||[]}])
+const route=useRoute()
+const items=ref([]),total=ref(0),page=ref(1),pageSize=ref(20),loading=ref(false),purpose=ref(''),model=ref(''),contextId=ref(String(route.query.context_id||'')),detailVisible=ref(false),detailLoading=ref(false),detail=ref(null)
+const inputGroups=computed(()=>[{key:'system',label:'System',items:detail.value?.input?.system||[]},{key:'user',label:'User',items:detail.value?.input?.user||[]},{key:'history',label:'History',items:detail.value?.input?.history||[]},{key:'tool',label:'Tool',items:detail.value?.input?.tool||[]}].filter(group=>group.items.length))
 async function load(){loading.value=true;try{const data=await fetchJudgeInteractions({limit:pageSize.value,offset:(page.value-1)*pageSize.value,purpose:purpose.value||undefined,model:model.value.trim()||undefined,context_id:contextId.value.trim()||undefined});items.value=data.items||[];total.value=data.total||0}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{loading.value=false}}
 function resetAndLoad(){page.value=1;load()}
 async function openDetail(row){detailVisible.value=true;detailLoading.value=true;detail.value=null;try{detail.value=await fetchJudgeInteraction(row.interaction_id)}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{detailLoading.value=false}}

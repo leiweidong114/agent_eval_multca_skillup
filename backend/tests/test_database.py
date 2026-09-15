@@ -376,3 +376,38 @@ def test_interaction_rows_distinguish_main_agent_and_named_subagent():
     assert rows[0]["subagent_name"] is None
     assert rows[1]["interaction_scope"] == "subagent"
     assert rows[1]["subagent_name"] == "POWER"
+
+
+def test_interaction_rows_expose_only_the_new_input_delta_per_turn():
+    rows = [
+        {
+            "session_id": "session-1",
+            "proxy_server_request": {"messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "create schematic"},
+            ]},
+            "response": {},
+        },
+        {
+            "session_id": "session-1",
+            "proxy_server_request": {"messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "create schematic"},
+                {"role": "assistant", "content": "calling tool"},
+                {"role": "tool", "content": "tool result"},
+            ]},
+            "response": {},
+        },
+    ]
+
+    enrich_interaction_rows(rows)
+
+    assert rows[0]["current_input_messages"] == [
+        {"role": "user", "content": "create schematic"}
+    ]
+    assert rows[0]["history_message_count"] == 1
+    assert rows[1]["current_input_messages"] == [
+        {"role": "assistant", "content": "calling tool"},
+        {"role": "tool", "content": "tool result"},
+    ]
+    assert rows[1]["history_message_count"] == 2

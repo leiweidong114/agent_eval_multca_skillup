@@ -38,6 +38,7 @@ from agent_eval.litellm_trace import TraceKeyError, create_trace_key, delete_tra
 from agent_eval.failure import describe_evaluation_failure
 from agent_eval.agent_contract import assess_agent_contract
 from agent_eval.llm_judge import run_llm_judge
+from agent_eval.evidence_normalization import normalize_report_evidence
 from agent_eval.evaluators import resolve_evaluator
 from agent_eval.evaluators.artifacts import build_artifact_manifest
 from agent_eval.evaluators.protocol import EvaluationContext, EvaluationEvidence, PluginEvaluation
@@ -184,7 +185,7 @@ def _generated_case(
 ) -> None:
     case: dict[str, Any] = {
         "id": "cli-prompt",
-        "title": "CLI prompt evaluation",
+        "title": "命令行提示词评测",
         "input": {"prompt": prompt},
     }
     if must_contain or must_not_contain:
@@ -270,7 +271,7 @@ def attach_session_evidence(iteration_dir: Path, result: dict[str, Any]) -> dict
             case["session_result"] = evidence[0]
         elif evidence:
             case["session_results"] = evidence
-    return result
+    return normalize_report_evidence({"results": [result]})["results"][0]
 
 
 def build_eval_config(
@@ -289,8 +290,6 @@ def build_eval_config(
     extra_args: list[str],
     additional_skills: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
-    run_started_at = datetime.now(timezone.utc)
-
     args = [
         "--input",
         "${input_file}",
@@ -411,6 +410,8 @@ def run_evaluation(
     evaluator_id: str | None = None,
     schematic_task_type: str | None = None,
 ) -> dict[str, Any]:
+    run_started_at = datetime.now(timezone.utc)
+
     def progress(phase: str, percent: int, message: str) -> None:
         if cancel_event is not None and cancel_event.is_set():
             raise EvaluationCancelled("Evaluation was cancelled")
@@ -937,7 +938,9 @@ def run_evaluation(
     process_metrics = collect_process_metrics(results, database_trace)
     supplement_database_tool_metrics(process_metrics, interactions)
     process_metrics["total_duration_ms"] = scores.get("total_duration_ms", 0)
-    skill_usage = collect_skill_read_evidence(interactions, selected_skills)
+    skill_usage = collect_skill_read_evidence(
+        interactions, selected_skills, results=results
+    )
     scoring_config = load_scoring_config(project_root)
     plugin_evaluation = evaluator.evaluate(
         context=EvaluationContext(

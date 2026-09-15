@@ -333,7 +333,9 @@ def supplement_database_tool_metrics(process: dict[str, Any], interactions: list
 
 
 def collect_skill_read_evidence(
-    interactions: list[dict[str, Any]], selected_skills: list[str]
+    interactions: list[dict[str, Any]],
+    selected_skills: list[str],
+    results: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Prove Skill use from an instruction read or bundled script execution."""
     observed: dict[str, list[dict[str, str]]] = {name: [] for name in selected_skills}
@@ -346,6 +348,11 @@ def collect_skill_read_evidence(
             except ValueError:
                 return value
         return value
+
+    def references_skill_asset(argument_text: str, skill: str) -> bool:
+        normalized = argument_text.replace("\\\\", "/").replace("\\", "/")
+        escaped = re.escape(skill.lower())
+        return bool(re.search(rf"/(?:\d+-)?{escaped}(?:/|$)", normalized))
 
     def visit(node: Any, request_id: str) -> None:
         node = obj(node)
@@ -367,11 +374,11 @@ def collect_skill_read_evidence(
                 tool.rsplit("__", 1)[-1] in {"exec", "exec_command", "shell_command"}
                 and any(marker in argument_text for marker in ("get-content", "type ", "cat "))
             )
-            if (explicit_read_tool or shell_read) and "skill.md" in argument_text:
+            if explicit_read_tool or shell_read:
                 for skill in selected_skills:
-                    if skill.lower() in argument_text:
+                    if references_skill_asset(argument_text, skill):
                         observed[skill].append({
-                            "request_id": request_id, "tool": tool, "kind": "instruction_read",
+                            "request_id": request_id, "tool": tool, "kind": "instruction_asset_read",
                         })
                         read_skills.add(skill)
             shell_execution = (
@@ -393,6 +400,80 @@ def collect_skill_read_evidence(
         request_id = str(row.get("request_id") or "")
         visit(row.get("proxy_server_request") or row.get("messages"), request_id)
         visit(row.get("response"), request_id)
+
+    # Native Agent CLIs do not consistently copy their tool calls into the
+    # LiteLLM request/response rows. Skill-Up does, however, preserve the
+    # authoritative tool transcript in session-result.json. Inspect only
+    # structured tool-call records here; never trust a final answer that merely
+    # claims a Skill was used.
+    def visit_transcripts(node: Any, session_id: str = "") -> None:
+        if isinstance(node, list):
+            for item in node:
+                visit_transcripts(item, session_id)
+            return
+        if not isinstance(node, dict):
+            return
+        current_session = str(node.get("session_id") or session_id)
+        transcript = node.get("transcript")
+        if isinstance(transcript, list):
+            for index, event in enumerate(transcript):
+                if not isinstance(event, dict) or event.get("role") != "tool_call":
+                    continue
+                call = event.get("tool_call")
+                if not isinstance(call, dict):
+                    continue
+                tool = str(call.get("name") or "").lower()
+                arguments = obj(call.get("arguments") or {})
+                argument_text = json.dumps(arguments, ensure_ascii=False, default=str).lower()
+                evidence_id = str(call.get("id") or f"{current_session}:{index}")
+                for skill in selected_skills:
+                    skill_lower = skill.lower()
+                    if skill_lower not in argument_text:
+                        continue
+                    kind = ""
+                    if tool in {"skill", "use_skill"}:
+                        kind = "native_skill_invocation"
+                        read_skills.add(skill)
+                    elif ".py" in argument_text and "scripts" in argument_text and any(
+                        marker in tool for marker in ("exec", "shell", "bash", "command")
+                    ):
+                        kind = "bundled_script_execution"
+                    elif references_skill_asset(argument_text, skill) and (
+                        any(marker in tool for marker in ("read", "open", "view"))
+                        or (
+                            any(marker in tool for marker in ("exec", "shell", "bash", "command"))
+                            and any(marker in argument_text for marker in ("get-content", "type ", "cat "))
+                        )
+                    ):
+                        kind = "instruction_asset_read"
+                        read_skills.add(skill)
+                    if kind:
+                        observed[skill].append({
+                            "request_id": evidence_id,
+                            "tool": tool,
+                            "kind": kind,
+                            "source": "agent_session_transcript",
+                        })
+        for key, child in node.items():
+            if key != "transcript":
+                visit_transcripts(child, current_session)
+
+    if results:
+        visit_transcripts(results)
+
+    for skill, entries in observed.items():
+        unique: list[dict[str, str]] = []
+        seen: set[tuple[str, str, str]] = set()
+        for entry in entries:
+            identity = (
+                str(entry.get("request_id") or ""),
+                str(entry.get("tool") or ""),
+                str(entry.get("kind") or ""),
+            )
+            if identity not in seen:
+                seen.add(identity)
+                unique.append(entry)
+        observed[skill] = unique
     missing = [skill for skill, evidence in observed.items() if not evidence]
     return {
         "status": "verified" if not missing else "partial" if len(missing) < len(selected_skills) else "not_observed",
@@ -403,7 +484,7 @@ def collect_skill_read_evidence(
         "missing_skills": missing,
         "missing_read_skills": [skill for skill in selected_skills if skill not in read_skills],
         "evidence": observed,
-        "method": "explicit_skill_md_read_or_bundled_script_execution",
+        "method": "explicit_skill_invocation_or_instruction_read_or_bundled_script_execution",
     }
 
 
