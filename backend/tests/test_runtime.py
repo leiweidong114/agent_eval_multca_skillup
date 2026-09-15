@@ -55,6 +55,24 @@ def test_empty_saved_agent_path_restores_automatic_discovery(tmp_path):
     assert save_agent_path("justdo", "", project_root=tmp_path) == {}
 
 
+def test_justdo_http_proxy_overrides_local_path_when_enabled(tmp_path):
+    executable = tmp_path / ("local.cmd" if os.name == "nt" else "local")
+    executable.write_text("@echo off\n" if os.name == "nt" else "#!/bin/sh\n", encoding="utf-8")
+    if os.name != "nt":
+        executable.chmod(0o755)
+    save_agent_path("justdo", str(executable), project_root=tmp_path)
+    platform_dir = "windows" if os.name == "nt" else "linux"
+    proxy = tmp_path / ".runtime" / platform_dir / "bin" / (
+        "justdo-http-agent.exe" if os.name == "nt" else "justdo-http-agent"
+    )
+    proxy.parent.mkdir(parents=True)
+    proxy.touch()
+    with (tmp_path / ".env").open("a", encoding="utf-8") as stream:
+        stream.write("JUSTDO_HTTP_URL=http://127.0.0.1:43128\n")
+
+    assert default_agent_command("justdo", tmp_path) == str(proxy)
+
+
 def test_skill_target_matches_agent_native_discovery():
     assert skill_target("codex", "demo") == ".agents/skills/demo"
     assert skill_target("claude_code", "demo") == ".claude/skills/demo"

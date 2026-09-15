@@ -161,11 +161,20 @@ def normalize_agent(value: str) -> str:
 
 def default_agent_command(agent: str, project_root: Path | None = None) -> str:
     normalized = normalize_agent(agent)
+    root = project_root or _default_project_root()
     configured_paths = load_agent_paths(project_root)
+    if normalized == "justdo":
+        environment = effective_environment(root)
+        if environment.get("JUSTDO_HTTP_URL", "").strip():
+            platform_dir = "windows" if os.name == "nt" else "linux"
+            binary = "justdo-http-agent.exe" if os.name == "nt" else "justdo-http-agent"
+            proxy = root / ".runtime" / platform_dir / "bin" / binary
+            if proxy.is_file():
+                return str(proxy)
     if normalized in configured_paths:
         return configured_paths[normalized]
     if normalized == "justdo":
-        configured = effective_environment(project_root or _default_project_root()).get(
+        configured = effective_environment(root).get(
             "JUSTDO_AGENT_EXECUTABLE", ""
         ).strip()
         if configured:

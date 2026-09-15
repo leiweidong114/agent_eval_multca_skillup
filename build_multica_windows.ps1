@@ -14,6 +14,8 @@ $binary = Get-AgentEvalConfiguredPath -ProjectRoot $projectRoot -Name 'MULTICA_E
 $vendor = Join-Path $server 'vendor'
 $runnerSource = Join-Path $projectRoot 'backend\runtime\multica-local-runner'
 $runnerTarget = Join-Path $server 'cmd\multica-eval-runtime'
+$justDoProxySource = Join-Path $projectRoot 'backend\runtime\justdo-http-agent'
+$justDoProxyBinary = Join-Path (Split-Path -Parent $binary) 'justdo-http-agent.exe'
 $openclawPatch = Join-Path $projectRoot 'backend\patches\multica-openclaw-agent-exec.patch'
 
 if (-not (Test-Path -LiteralPath $go)) { throw "Go was not found: $go" }
@@ -49,6 +51,13 @@ Invoke-WithAgentEvalOfflineGo {
             'test', '-mod=vendor', '.\cmd\multica-eval-runtime'
         )
     }
+
+    $temporaryProxy = "$justDoProxyBinary.new"
+    Invoke-AgentEvalCommand -FilePath $go -WorkingDirectory $justDoProxySource -ArgumentList @(
+        'build', '-trimpath', '-o', $temporaryProxy, '.\main.go'
+    )
+    Move-Item -LiteralPath $temporaryProxy -Destination $justDoProxyBinary -Force
 }
 Move-Item -LiteralPath $temporaryBinary -Destination $binary -Force
 Write-Host "MULTICA_BUILD_OK: $binary" -ForegroundColor Green
+Write-Host "JUSTDO_HTTP_PROXY_BUILD_OK: $justDoProxyBinary" -ForegroundColor Green

@@ -1,2 +1,2 @@
 # Install the backend, Web API, PostgreSQL collector and test dependencies.
--e .[web,database,dev]
+-e .[web,database,metrics,dev]

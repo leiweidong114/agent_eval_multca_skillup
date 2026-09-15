@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,11 +14,13 @@ from pydantic import BaseModel
 from agent_eval.database import (
     conversation_filter_options,
     get_conversation,
+    get_interaction_detail,
     search_conversation_interactions,
     search_conversations,
 )
 from app.auth import employee_from_request
 from app.config import BACKEND_ROOT
+from app.response_cache import cache_key, get_cached_json, set_cached_json
 
 
 router = APIRouter(prefix="/api/schematic", tags=["schematic"])
@@ -82,9 +85,20 @@ def conversation_list(
     source: str = Query("all", pattern="^(all|evaluation|non_evaluation)$"),
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
 ) -> dict[str, Any]:
+    key = cache_key("schematic-conversations-v2", {
+        "end_user": end_user, "session_id": session_id, "model": model,
+        "source": source, "limit": limit, "offset": offset,
+        "start_time": start_time, "end_time": end_time,
+    })
+    cached = get_cached_json(key)
+    if cached is not None:
+        cached["cache"] = "hit"
+        return cached
     try:
-        return search_conversations(
+        result = search_conversations(
             BACKEND_ROOT,
             user_id=None,
             end_user=end_user,
@@ -93,7 +107,12 @@ def conversation_list(
             source=source,
             limit=limit,
             offset=offset,
+            start_time=start_time,
+            end_time=end_time,
         )
+        result["cache"] = "miss"
+        set_cached_json(key, result, ttl_seconds=30)
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -101,18 +120,55 @@ def conversation_list(
 
 
 @router.get("/conversations/{root_session_id}")
-def conversation_detail(request: Request, root_session_id: str) -> dict[str, Any]:
+def conversation_detail(
+    request: Request,
+    root_session_id: str,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+) -> dict[str, Any]:
+    key = cache_key("schematic-conversation-detail-v2", {
+        "session_id": root_session_id, "start_time": start_time, "end_time": end_time,
+    })
+    cached = get_cached_json(key)
+    if cached is not None:
+        cached["cache"] = "hit"
+        return cached
     try:
         employee_from_request(request)
         result = get_conversation(
             BACKEND_ROOT,
             root_session_id=root_session_id,
             user_id=None,
+            include_content=False,
+            start_time=start_time,
+            end_time=end_time,
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail="数据库查询失败，请运行 agent-eval check-database 检查连接") from exc
     if result is None:
         raise HTTPException(status_code=404, detail="会话不存在或无权查看")
+    result["cache"] = "miss"
+    set_cached_json(key, result, ttl_seconds=30)
+    return result
+
+
+@router.get("/interactions/{request_id}")
+def interaction_detail(request: Request, request_id: str) -> dict[str, Any]:
+    """Load the large request/response payload only after a user expands one turn."""
+    key = cache_key("schematic-interaction-v1", {"request_id": request_id})
+    cached = get_cached_json(key)
+    if cached is not None:
+        cached["cache"] = "hit"
+        return cached
+    try:
+        employee_from_request(request)
+        result = get_interaction_detail(BACKEND_ROOT, request_id=request_id, user_id=None)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="数据库查询失败，请运行 agent-eval check-database 检查连接") from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="模型交互不存在或无权查看")
+    result["cache"] = "miss"
+    set_cached_json(key, result, ttl_seconds=300)
     return result
 
 

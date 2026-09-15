@@ -83,6 +83,33 @@ def test_agent_path_endpoint_persists_shared_executable(tmp_path, monkeypatch):
     assert reset.json()["configured_path"] is None
 
 
+def test_justdo_http_settings_hide_token(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.api.routes_skill.BACKEND_ROOT", tmp_path)
+    saved = client.put(
+        "/api/agents/justdo/http",
+        json={"url": "http://192.168.1.20:43128", "token": "test-private-token"},
+    )
+    assert saved.status_code == 200
+    assert saved.json() == {
+        "url": "http://192.168.1.20:43128",
+        "token_configured": True,
+        "enabled": True,
+    }
+    loaded = client.get("/api/agents/justdo/http")
+    assert loaded.json() == saved.json()
+    assert "test-private-token" not in loaded.text
+    assert "JUSTDO_HTTP_TOKEN=test-private-token" in (tmp_path / ".env").read_text(encoding="utf-8")
+
+
+def test_justdo_http_settings_require_token(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.api.routes_skill.BACKEND_ROOT", tmp_path)
+    response = client.put(
+        "/api/agents/justdo/http",
+        json={"url": "http://192.168.1.20:43128"},
+    )
+    assert response.status_code == 400
+
+
 def test_database_health_never_exposes_credentials_or_crashes():
     response = client.get("/api/database/health")
     assert response.status_code == 200

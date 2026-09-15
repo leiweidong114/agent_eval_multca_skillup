@@ -15,6 +15,20 @@
           </el-select>
           <div class="help">“模型与 Agent”页面点击测试时，将要求对应 Agent 通过此模型完成一次 HI 请求。</div>
         </el-form-item>
+        <el-divider content-position="left">远程 JustDo</el-divider>
+        <el-form-item label="JustDo HTTP 地址">
+          <el-input v-model="justdo.url" clearable placeholder="例如：http://192.168.1.20:43128" />
+          <div class="help">留空时使用本机 JustDo-agent；填写后，命令行和网页评测都通过该地址调用运行中的 JustDo。</div>
+        </el-form-item>
+        <el-form-item label="访问令牌">
+          <el-input v-model="justdo.token" type="password" show-password clearable :placeholder="justdo.token_configured?'已配置；留空保持不变':'填写 JUSTDO_MULTICA_HTTP_TOKEN'" />
+          <div class="help">令牌仅写入根目录 .env，后端不会向浏览器返回明文。</div>
+        </el-form-item>
+        <div class="justdo-actions">
+          <el-button :loading="savingJustdo" @click="saveJustdo">保存 JustDo 配置</el-button>
+          <el-button :loading="testingJustdo" @click="testJustdo">测试远程桥接</el-button>
+          <el-tag :type="justdo.enabled?'success':'info'">{{justdo.enabled?'已启用远程调用':'使用本机调用'}}</el-tag>
+        </div>
         <el-divider content-position="left">原理图任务配置</el-divider>
         <div class="task-profiles">
           <el-card v-for="task in taskTypes" :key="task.id" shadow="never" class="task-profile">
@@ -43,23 +57,26 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchEvaluators, fetchModels, fetchSchematicTaskTypes, fetchSettings, fetchSkills, saveSettings } from '../api'
+import { fetchEvaluators, fetchJustDoHttp, fetchModels, fetchSchematicTaskTypes, fetchSettings, fetchSkills, saveJustDoHttp, saveSettings, testJustDoHttp } from '../api'
 
 const defaultTaskTypes=[{id:'block_to_schematic',name:'框图生成原理图',input_contract:'block_diagram',output_contract:'schematic_project'},{id:'block_to_signal_list',name:'框图生成信号接口列表',input_contract:'block_diagram',output_contract:'signal_interface_v1'},{id:'signal_list_to_schematic',name:'信号接口列表生成原理图',input_contract:'signal_interface_v1',output_contract:'schematic_project'}]
 const defaultProfiles={block_to_schematic:{skills:['schematic-pipeline','signal-interface-generation','schematic-layout-codegen','schematic-web-apply'],evaluator_id:'schematic-default'},block_to_signal_list:{skills:['signal-interface-generation'],evaluator_id:'schematic-default'},signal_list_to_schematic:{skills:['schematic-layout-codegen','schematic-web-apply'],evaluator_id:'schematic-default'}}
-const loading=ref(false),saving=ref(false),models=ref([]),skills=ref([]),evaluators=ref([]),taskTypes=ref(defaultTaskTypes)
+const loading=ref(false),saving=ref(false),savingJustdo=ref(false),testingJustdo=ref(false),models=ref([]),skills=ref([]),evaluators=ref([]),taskTypes=ref(defaultTaskTypes)
 const form=reactive({judge_model:'',agent_test_model:'',schematic_skills:[],schematic_task_profiles:structuredClone(defaultProfiles)})
+const justdo=reactive({url:'',token:'',token_configured:false,enabled:false})
 const selectableModels=computed(()=>[...models.value].sort((a,b)=>Number(a.connectivity?.available!==true)-Number(b.connectivity?.available!==true)||a.id.localeCompare(b.id)))
 const modelLabel=model=>`${model.id}${model.connectivity?.available===true?' · 已测试可用':model.connectivity?.available===false?' · 测试失败':' · 未测试'}`
 const sourceLabel=source=>source==='built_in'?'内置':source==='bundled'?'项目插件':source==='uploaded'?'已导入':source==='external'||String(source||'').includes(':')?'本机扩展':'外部'
 const contractLabel=value=>({block_diagram:'框图',signal_interface_v1:'信号接口列表',schematic_project:'原理图工程'}[value]||value)
 const profile=id=>{if(!form.schematic_task_profiles[id])form.schematic_task_profiles[id]={skills:[],evaluator_id:''};return form.schematic_task_profiles[id]}
 const compatibleEvaluators=id=>evaluators.value.filter(item=>item.evaluation_types?.includes('schematic')&&(!item.schematic_task_types?.length||item.schematic_task_types.includes(id)))
-async function load(){loading.value=true;try{const[settings,catalog,skillCatalog,evaluatorCatalog,taskCatalog]=await Promise.all([fetchSettings(),fetchModels(),fetchSkills(),fetchEvaluators(),fetchSchematicTaskTypes()]);Object.assign(form,settings);models.value=catalog.models||[];skills.value=skillCatalog.skills||[];evaluators.value=evaluatorCatalog||[];taskTypes.value=taskCatalog?.length?taskCatalog:defaultTaskTypes;for(const task of taskTypes.value)profile(task.id)}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{loading.value=false}}
+async function load(){loading.value=true;try{const[settings,catalog,skillCatalog,evaluatorCatalog,taskCatalog,justdoConfig]=await Promise.all([fetchSettings(),fetchModels(),fetchSkills(),fetchEvaluators(),fetchSchematicTaskTypes(),fetchJustDoHttp()]);Object.assign(form,settings);Object.assign(justdo,justdoConfig,{token:''});models.value=catalog.models||[];skills.value=skillCatalog.skills||[];evaluators.value=evaluatorCatalog||[];taskTypes.value=taskCatalog?.length?taskCatalog:defaultTaskTypes;for(const task of taskTypes.value)profile(task.id)}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{loading.value=false}}
+async function saveJustdo(){savingJustdo.value=true;try{const result=await saveJustDoHttp({url:justdo.url,token:justdo.token||null});Object.assign(justdo,result,{token:''});ElMessage.success('JustDo 调用配置已保存')}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{savingJustdo.value=false}}
+async function testJustdo(){testingJustdo.value=true;try{if(justdo.token||!justdo.token_configured)await saveJustdo();const result=await testJustDoHttp();result.ok?ElMessage.success(`${result.message}${result.version?'：'+result.version:''}`):ElMessage.error(result.message)}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{testingJustdo.value=false}}
 async function save(){if(!form.judge_model||!form.agent_test_model)return ElMessage.warning('请选择两个默认模型');for(const task of taskTypes.value){const item=profile(task.id);if(!item.skills.length)return ElMessage.warning(`请为“${task.name}”选择至少一个 Skill`);if(!item.evaluator_id)return ElMessage.warning(`请为“${task.name}”选择评测插件`)}form.schematic_skills=profile('block_to_schematic').skills;saving.value=true;try{Object.assign(form,await saveSettings({...form}));ElMessage.success('三类原理图任务设置已保存到根目录 .env')}catch(e){ElMessage.error(e.response?.data?.detail||e.message)}finally{saving.value=false}}
 onMounted(load)
 </script>
 
 <style scoped>
-.settings-card{max-width:980px}.settings-card :deep(.el-select){width:100%}.settings-card :deep(.el-form-item){margin-bottom:24px}.help{margin-top:7px;color:var(--muted);font-size:13px;line-height:1.55}.actions{display:flex;gap:10px;margin-top:24px}.task-profiles{display:grid;gap:14px}.task-profile{background:var(--surface-2)}.task-title{display:flex;align-items:center;justify-content:space-between;gap:12px}.task-title>div{display:flex;flex-direction:column;gap:5px}.task-title span,.scan-summary{color:var(--muted);font-size:12px}.scan-summary{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+.settings-card{max-width:980px}.settings-card :deep(.el-select){width:100%}.settings-card :deep(.el-form-item){margin-bottom:24px}.help{margin-top:7px;color:var(--muted);font-size:13px;line-height:1.55}.actions,.justdo-actions{display:flex;align-items:center;gap:10px;margin-top:24px}.justdo-actions{margin-top:-8px;margin-bottom:24px}.task-profiles{display:grid;gap:14px}.task-profile{background:var(--surface-2)}.task-title{display:flex;align-items:center;justify-content:space-between;gap:12px}.task-title>div{display:flex;flex-direction:column;gap:5px}.task-title span,.scan-summary{color:var(--muted);font-size:12px}.scan-summary{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
 </style>

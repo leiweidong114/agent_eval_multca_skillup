@@ -7,6 +7,7 @@
     <el-menu :default-active="activeMenu" router class="navigation">
       <el-menu-item index="/"><el-icon><House /></el-icon><span>首页</span></el-menu-item>
       <el-menu-item index="/evaluations/new"><el-icon><Plus /></el-icon><span>新建评测</span></el-menu-item>
+      <el-menu-item index="/historical-metrics"><el-icon><DataAnalysis /></el-icon><span>历史会话指标计算</span></el-menu-item>
       <el-menu-item index="/schematic-overview"><el-icon><Connection /></el-icon><span>原理图生成总览</span></el-menu-item>
       <el-menu-item index="/benchmarks"><el-icon><Collection /></el-icon><span>题库管理</span></el-menu-item>
       <el-menu-item index="/skills"><el-icon><MagicStick /></el-icon><span>Skill 管理</span></el-menu-item>

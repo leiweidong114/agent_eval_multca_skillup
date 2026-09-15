@@ -1658,3 +1658,58 @@ curl.exe "http://127.0.0.1:8000/api/schematic/interactions?end_user=local&sessio
 ```powershell
 curl.exe "http://127.0.0.1:8000/api/runs/RUN_ID/interactions?page=1&page_size=20&search=sessions_spawn"
 ```
+
+## 29. 历史会话指标、Nacos、MongoDB 与 Redis
+
+原理图总览、会话详情默认只查询最近 24 小时。MongoDB 保存按 `session_id` 计算的会话指标，Redis 只缓存列表和详情；Redis 不可用时自动回源 LiteLLM PostgreSQL。
+
+正常启动会自动建立本地到阿里云基础设施的 SSH 隧道：
+
+```powershell
+.\start-all.ps1
+```
+
+也可以单独管理隧道：
+
+```powershell
+.\scripts\start-infrastructure-tunnel.ps1
+.\scripts\stop-infrastructure-tunnel.ps1
+```
+
+检查 Nacos、MongoDB、Redis、自动指标任务状态：
+
+```powershell
+curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/health"
+curl.exe -b cookies.txt -X POST "http://127.0.0.1:8000/api/session-metrics/scheduler/run"
+```
+
+基础设施凭据位于被 Git 忽略的 `.env`、`.secrets/` 和服务器 `/opt/agent-eval-infra/.env`，不要写入命令文档或提交仓库。
+
+## 30. 本机或局域网远程调用 JustDo
+
+JustDo 启动后同时提供原有本地 IPC 桥和带 Bearer 鉴权的 HTTP 桥。默认只监听 `127.0.0.1:43128`，随机令牌保存在 JustDo 用户数据目录的 `multica/http-bridge.json`。需要允许局域网评测机连接时，在启动 JustDo 前设置：
+
+```powershell
+$env:JUSTDO_MULTICA_HTTP_HOST = "0.0.0.0"
+$env:JUSTDO_MULTICA_HTTP_PORT = "43128"
+$env:JUSTDO_MULTICA_HTTP_TOKEN = "请使用独立的高强度随机令牌"
+& "D:\software\JustDo\JustDo.exe"
+```
+
+然后在评测系统“设置 → 远程 JustDo”填写 `http://JustDo电脑IP:43128` 和同一令牌，或在根目录 `.env` 配置：
+
+```dotenv
+JUSTDO_HTTP_URL=http://192.168.1.20:43128
+JUSTDO_HTTP_TOKEN=本机私密令牌
+```
+
+测试桥接：
+
+```powershell
+curl.exe -b cookies.txt -X POST "http://127.0.0.1:8000/api/agents/justdo/http/test"
+agent-eval check-agent --agent justdo --model glm-4.5-air --prompt "HI" --timeout 120 --database-verify
+```
+
+评测系统使用随离线包构建的 `backend/.runtime/windows/bin/justdo-http-agent.exe`，Multica 无需区分本机或 HTTP JustDo。执行 `.\build_multica_windows.ps1 -Test` 会同时重新构建该代理。
+
+注意：当前 HTTP 模式适用于评测系统与 JustDo 在同一台电脑，或双方能够访问相同工作目录的局域网环境。跨公网、文件系统完全隔离的电脑还需要工作区上传/产物回传或反向 WSS Worker；不能只暴露此明文 HTTP 端口到公网。

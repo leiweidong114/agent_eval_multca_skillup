@@ -9,12 +9,14 @@ import base64
 import mimetypes
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 import httpx
 from pydantic import BaseModel, Field, SecretStr
 
 from agent_eval.database import database_health
+from agent_eval.env_config import effective_environment, update_root_env
 from agent_eval.failure import describe_evaluation_failure
 from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.model_config import (
@@ -77,6 +79,12 @@ class BatchModelTestRequest(BaseModel):
 
 class AgentPathRequest(BaseModel):
     path: str = Field(default="", max_length=4096)
+
+
+class JustDoHttpRequest(BaseModel):
+    url: str = Field(default="", max_length=1000)
+    token: SecretStr | None = None
+    clear_token: bool = False
 
 
 class SchematicTaskProfileRequest(BaseModel):
@@ -169,6 +177,70 @@ def put_agent_path(agent_name: str, request: AgentPathRequest) -> dict[str, obje
         "default_command": command,
         "detected_executable": shutil.which(command),
     }
+
+
+@router.get("/agents/justdo/http")
+def get_justdo_http() -> dict[str, object]:
+    """Return the remote JustDo bridge location without exposing its token."""
+    environment = effective_environment(BACKEND_ROOT)
+    url = str(environment.get("JUSTDO_HTTP_URL") or "").strip()
+    token_configured = bool(str(environment.get("JUSTDO_HTTP_TOKEN") or "").strip())
+    return {"url": url, "token_configured": token_configured, "enabled": bool(url)}
+
+
+@router.put("/agents/justdo/http")
+def put_justdo_http(payload: JustDoHttpRequest) -> dict[str, object]:
+    """Persist the authenticated JustDo HTTP bridge used by Web and CLI runs."""
+    url = payload.url.strip().rstrip("/")
+    if url:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username:
+            raise HTTPException(status_code=400, detail="JustDo 地址必须是无内嵌凭据的 http(s) URL")
+    environment = effective_environment(BACKEND_ROOT)
+    current_token = str(environment.get("JUSTDO_HTTP_TOKEN") or "").strip()
+    supplied_token = payload.token.get_secret_value().strip() if payload.token else ""
+    token = "" if payload.clear_token else (supplied_token or current_token)
+    if url and not token:
+        raise HTTPException(status_code=400, detail="启用远程 JustDo 时必须配置访问令牌")
+    update_root_env(BACKEND_ROOT, {
+        "JUSTDO_HTTP_URL": url or None,
+        "JUSTDO_HTTP_TOKEN": token or None,
+    })
+    return {"url": url, "token_configured": bool(token), "enabled": bool(url)}
+
+
+@router.post("/agents/justdo/http/test")
+def test_justdo_http() -> dict[str, object]:
+    """Test the configured HTTP bridge with an authenticated --version call."""
+    environment = effective_environment(BACKEND_ROOT)
+    url = str(environment.get("JUSTDO_HTTP_URL") or "").strip().rstrip("/")
+    token = str(environment.get("JUSTDO_HTTP_TOKEN") or "").strip()
+    if not url or not token:
+        raise HTTPException(status_code=400, detail="尚未配置远程 JustDo 地址和访问令牌")
+    started = time.perf_counter()
+    try:
+        response = httpx.post(
+            url + "/v1/invoke",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"argv": ["--version"], "cwd": str(BACKEND_ROOT), "env": {}},
+            timeout=15,
+            trust_env=False,
+        )
+        response.raise_for_status()
+        result = response.json()
+        ok = int(result.get("exitCode", 1)) == 0
+        return {
+            "ok": ok,
+            "duration_ms": round((time.perf_counter() - started) * 1000),
+            "version": str(result.get("stdout") or "").strip()[:300],
+            "message": "远程 JustDo 桥接可用" if ok else str(result.get("stderr") or "JustDo 返回失败")[:500],
+        }
+    except (httpx.HTTPError, ValueError) as exc:
+        return {
+            "ok": False,
+            "duration_ms": round((time.perf_counter() - started) * 1000),
+            "message": str(exc)[:500],
+        }
 
 
 @router.post("/agents/{agent_name}/test")

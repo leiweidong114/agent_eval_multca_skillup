@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -21,6 +22,16 @@ from app.auth import employee_from_request
 from app.config import RUNS_ROOT
 
 router = APIRouter(prefix="/api", tags=["runs"])
+
+
+@lru_cache(maxsize=64)
+def _read_interaction_trace(path_text: str, modified_ns: int, size: int) -> list[dict[str, object]]:
+    """Parse an immutable trace snapshot once; mtime and size invalidate the cache."""
+    del modified_ns, size
+    value = json.loads(Path(path_text).read_text(encoding="utf-8"))
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
 
 
 def _load_report(run_dir: Path) -> dict[str, object] | None:
@@ -121,11 +132,11 @@ def get_run_interactions(
     if not trace.is_file():
         return {"run_id": run_id, "items": [], "trace_file": None, "total": 0, "page": page, "page_size": page_size, "summary": summarize_interaction_rows([]), "filtered_summary": summarize_interaction_rows([]), "sessions": [], "subagents": [], "scope_counts": {"all": 0, "main_agent": 0, "subagent": 0}}
     try:
-        items = json.loads(trace.read_text(encoding="utf-8"))
+        trace_stat = trace.stat()
+        items = _read_interaction_trace(str(trace), trace_stat.st_mtime_ns, trace_stat.st_size)
     except (OSError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=500, detail="Model interaction trace is unreadable") from exc
-    all_items = items if isinstance(items, list) else []
-    all_items = [item for item in all_items if isinstance(item, dict)]
+    all_items = [dict(item) for item in items]
     enrich_interaction_rows(all_items)
     summary = summarize_interaction_rows(all_items)
     term = (search or "").strip().casefold()

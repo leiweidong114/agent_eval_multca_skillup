@@ -4,7 +4,7 @@ import json
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -713,6 +713,24 @@ def _conversation_user_filter(user_id: str | None) -> tuple[str, list[Any]]:
     )''', [normalized] * 6
 
 
+def conversation_time_window(
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    *,
+    default_hours: int = 24,
+) -> tuple[datetime, datetime]:
+    """Normalize the bounded UTC window used by conversation-facing queries."""
+    end = end_time or datetime.now(timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    start = start_time or (end - timedelta(hours=default_hours))
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if start >= end:
+        raise ValueError("start_time must be earlier than end_time")
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
+
+
 def _interaction_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize the session lineage LiteLLM records in its JSON columns."""
     metadata = _as_json(row.get("metadata"))
@@ -868,12 +886,15 @@ def search_conversations(
     limit: int = 30,
     offset: int = 0,
     include_interactions: bool = False,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
 ) -> dict[str, Any]:
-    """Return complete root conversations; pagination is applied after grouping."""
+    """Return root conversations in a bounded window; default to the latest 24 hours."""
     if offset < 0:
         raise ValueError("offset must be non-negative")
     if source not in {"all", "evaluation", "non_evaluation"}:
         raise ValueError("source must be all, evaluation or non_evaluation")
+    window_start, window_end = conversation_time_window(start_time, end_time)
     config = resolve_database_config(project_root)
     if not config.enabled:
         return {"status": "disabled", "conversations": [], "total": 0}
@@ -907,11 +928,12 @@ def search_conversations(
         status, agent_id, request_duration_ms,
         prompt_tokens, completion_tokens, total_tokens, spend
         from "LiteLLM_SpendLogs" where {user_clause}
+        and "startTime" >= %s and "startTime" < %s
         order by "startTime" desc, request_id limit %s'''
     psycopg, dict_row = _driver()
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
-            cursor.execute(query, (*parameters, scan_limit + 1))
+            cursor.execute(query, (*parameters, window_start, window_end, scan_limit + 1))
             database_rows = cursor.fetchall()
     scan_truncated = len(database_rows) > scan_limit
     database_rows = database_rows[:scan_limit]
@@ -944,7 +966,14 @@ def search_conversations(
     next_offset = offset + len(page)
     return {
         "status": "ok",
-        "query": {"end_user": end_user or None, "session_id": session_id or None, "model": model or None, "source": source},
+        "query": {
+            "end_user": end_user or None,
+            "session_id": session_id or None,
+            "model": model or None,
+            "source": source,
+            "start_time": window_start.isoformat(),
+            "end_time": window_end.isoformat(),
+        },
         "total": total,
         "count": len(page),
         "conversations": page,
@@ -955,15 +984,31 @@ def search_conversations(
     }
 
 
-def get_conversation(project_root: Path, *, root_session_id: str, user_id: str | None = None) -> dict[str, Any] | None:
-    """Fetch one root and all descendants without rebuilding the entire overview."""
+def get_conversation(
+    project_root: Path,
+    *,
+    root_session_id: str,
+    user_id: str | None = None,
+    include_content: bool = True,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+) -> dict[str, Any] | None:
+    """Fetch one root and descendants; heavy request/response payloads are optional."""
     config = resolve_database_config(project_root)
     if not config.enabled:
         return None
     user_clause, parameters = _conversation_user_filter(user_id)
+    window_start, window_end = conversation_time_window(start_time, end_time)
     psycopg, dict_row = _driver()
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
+            content_columns = (
+                ", logs.messages, logs.response, logs.proxy_server_request, logs.metadata"
+                if include_content else
+                """, null::jsonb as messages, null::jsonb as response,
+                    jsonb_build_object('metadata', logs.proxy_server_request->'metadata') as proxy_server_request,
+                    logs.metadata"""
+            )
             cursor.execute(f'''with recursive session_edges as materialized (
                     select distinct
                         coalesce(session_id, proxy_server_request->'metadata'->>'session_id',
@@ -971,6 +1016,7 @@ def get_conversation(project_root: Path, *, root_session_id: str, user_id: str |
                         coalesce(proxy_server_request->'metadata'->>'parent_session_id',
                             metadata->>'parent_session_id', metadata->'spend_logs_metadata'->>'parent_session_id') as parent_id
                     from "LiteLLM_SpendLogs" where {user_clause}
+                    and "startTime" >= %s and "startTime" < %s
                 ), descendants(session_id) as (
                     select %s::text
                     union
@@ -982,14 +1028,18 @@ def get_conversation(project_root: Path, *, root_session_id: str, user_id: str |
                     logs."startTime" as start_time, logs."endTime" as end_time,
                     logs.model, logs.model_group, logs.custom_llm_provider, logs.session_id,
                     logs.status, logs.agent_id, logs.request_duration_ms, logs.prompt_tokens,
-                    logs.completion_tokens, logs.total_tokens, logs.spend, logs.messages,
-                    logs.response, logs.proxy_server_request, logs.metadata
+                    logs.completion_tokens, logs.total_tokens, logs.spend {content_columns}
                 from "LiteLLM_SpendLogs" logs join descendants found on
                     coalesce(logs.session_id, logs.proxy_server_request->'metadata'->>'session_id',
                         logs.metadata->>'session_id', logs.metadata->'spend_logs_metadata'->>'session_id') = found.session_id
                 where {user_clause}
+                and logs."startTime" >= %s and logs."startTime" < %s
                 order by logs."startTime" asc, logs.request_id''',
-                (*parameters, root_session_id, *parameters))
+                (
+                    *parameters, window_start, window_end,
+                    root_session_id,
+                    *parameters, window_start, window_end,
+                ))
             full_rows = cursor.fetchall()
     if not full_rows:
         return None
@@ -1003,27 +1053,79 @@ def get_conversation(project_root: Path, *, root_session_id: str, user_id: str |
     if conversation is None:
         return None
     conversation["timeline"] = conversation.pop("interactions")
+    conversation["content_loaded"] = include_content
+    conversation["query_window"] = {
+        "start_time": window_start.isoformat(),
+        "end_time": window_end.isoformat(),
+    }
     return conversation
 
 
-def conversation_filter_options(project_root: Path, *, user_id: str | None = None) -> dict[str, Any]:
+def get_interaction_detail(
+    project_root: Path,
+    *,
+    request_id: str,
+    user_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Read one heavy LiteLLM request/response record by its request identifier."""
+    config = resolve_database_config(project_root)
+    if not config.enabled:
+        return None
+    user_clause, parameters = _conversation_user_filter(user_id)
+    psycopg, dict_row = _driver()
+    with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(f'''select request_id, call_type, "user" as user_id, end_user,
+                    "startTime" as start_time, "endTime" as end_time, model, model_group,
+                    custom_llm_provider, session_id, status, agent_id, request_duration_ms,
+                    prompt_tokens, completion_tokens, total_tokens, spend, messages, response,
+                    proxy_server_request, metadata
+                from "LiteLLM_SpendLogs"
+                where {user_clause} and request_id = %s
+                order by "startTime" desc limit 1''', (*parameters, request_id))
+            row = cursor.fetchone()
+    if not row:
+        return None
+    result = _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=None)
+    enrich_interaction_rows([result])
+    result.update(_interaction_metadata(result))
+    return result
+
+
+def conversation_filter_options(
+    project_root: Path,
+    *,
+    user_id: str | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+) -> dict[str, Any]:
     """Return LiteLLM End User and model values for overview dropdowns."""
     config = resolve_database_config(project_root)
     if not config.enabled:
         return {"status": "disabled", "end_users": [], "models": []}
     psycopg, dict_row = _driver()
     user_clause, parameters = _conversation_user_filter(user_id)
+    window_start, window_end = conversation_time_window(start_time, end_time)
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
             cursor.execute(f'''select distinct end_user from "LiteLLM_SpendLogs"
-                where {user_clause} and end_user is not null and end_user <> '' order by end_user limit 500''', parameters)
+                where {user_clause} and "startTime" >= %s and "startTime" < %s
+                and end_user is not null and end_user <> '' order by end_user limit 500''',
+                (*parameters, window_start, window_end))
             end_users = [str(row["end_user"]) for row in cursor.fetchall()]
             cursor.execute(f'''select distinct coalesce(nullif(model_group, ''), model) as model
                 from "LiteLLM_SpendLogs" where {user_clause}
+                and "startTime" >= %s and "startTime" < %s
                 and coalesce(nullif(model_group, ''), model) is not null
-                order by model limit 500''', parameters)
+                order by model limit 500''', (*parameters, window_start, window_end))
             models = [str(row["model"]) for row in cursor.fetchall()]
-    return {"status": "ok", "end_users": end_users, "models": models}
+    return {
+        "status": "ok",
+        "end_users": end_users,
+        "models": models,
+        "start_time": window_start.isoformat(),
+        "end_time": window_end.isoformat(),
+    }
 
 
 def summarize_model_interactions(

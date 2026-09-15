@@ -14,6 +14,7 @@ $checks = @(
     @{ Name='Go'; Path=(Get-AgentEvalConfiguredPath -ProjectRoot $projectRoot -Name 'GO_EXECUTABLE' -Default 'backend/.runtime/windows/go/bin/go.exe') },
     @{ Name='Skill-Up'; Path=(Get-AgentEvalConfiguredPath -ProjectRoot $projectRoot -Name 'SKILLUP_EXECUTABLE' -Default 'backend/.tools/windows/skill-up.exe') },
     @{ Name='Multica runtime'; Path=(Get-AgentEvalConfiguredPath -ProjectRoot $projectRoot -Name 'MULTICA_EXECUTABLE' -Default 'backend/.runtime/windows/bin/multica-eval-runtime.exe') },
+    @{ Name='JustDo HTTP proxy'; Path='backend/.runtime/windows/bin/justdo-http-agent.exe' },
     @{ Name='Frontend modules'; Path=(Join-Path $projectRoot 'frontend\node_modules\vite\bin\vite.js') }
 )
 

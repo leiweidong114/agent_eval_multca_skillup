@@ -94,6 +94,66 @@ def _json_object(text: str) -> dict[str, Any]:
     return value
 
 
+def run_json_judge(
+    *,
+    project_root: Path,
+    system_prompt: str,
+    user_prompt: str,
+    model_override: str | None = None,
+    employee_no: str | None = None,
+    timeout: float = 120,
+) -> dict[str, Any]:
+    """Call the configured LiteLLM judge and require one JSON object.
+
+    This generic entry point is shared by the evaluation scorer and historical
+    session analysis. It intentionally keeps all gateway headers/model
+    resolution in the unified LiteLLM adapter.
+    """
+    runtime_settings = load_runtime_settings(project_root)
+    profile = resolve_model_profile(
+        project_root,
+        model_override=(
+            model_override
+            or runtime_settings.get("judge_model")
+            or resolve_config_secret(project_root, "LITELLM_JUDGE_MODEL")
+            or None
+        ),
+    )
+    if not profile.api_base:
+        raise ValueError("LLM judge must use the unified LiteLLM HTTP endpoint")
+    endpoint = profile.api_base.rstrip("/") + "/chat/completions"
+    body = {
+        "model": profile.model,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+    headers = {
+        "Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}",
+        **gateway_request_headers(project_root, profile, employee_no),
+    }
+    response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout)
+    if response.status_code in {400, 404, 422}:
+        body.pop("response_format", None)
+        response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout)
+    response.raise_for_status()
+    payload = response.json()
+    content = payload["choices"][0]["message"]["content"]
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", str(content).strip(), flags=re.I)
+    value = json.loads(cleaned)
+    if not isinstance(value, dict):
+        raise ValueError("LLM judge did not return a JSON object")
+    return {
+        "result": value,
+        "model": profile.model,
+        "gateway": profile.name,
+        "usage": payload.get("usage") or {},
+    }
+
+
 def run_llm_judge(
     *,
     project_root: Path,

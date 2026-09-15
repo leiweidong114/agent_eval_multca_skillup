@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = $PSScriptRoot
 $RuntimeDirectory = Join-Path $ProjectRoot 'backend\.runtime\service-manager'
 $StateFile = Join-Path $RuntimeDirectory 'services.json'
+$TunnelStopScript = Join-Path $ProjectRoot 'scripts\stop-infrastructure-tunnel.ps1'
 
 function Get-ManagedProcess {
     param([object]$Service)
@@ -88,6 +89,7 @@ function Stop-ManagedProcessTree {
 }
 
 if (-not (Test-Path -LiteralPath $StateFile)) {
+    & $TunnelStopScript -Quiet
     if (-not $Quiet) {
         Write-Host 'No services started by start-all.ps1 were found.' -ForegroundColor Yellow
     }
@@ -113,6 +115,7 @@ foreach ($service in @($State.services)) {
 }
 
 Remove-Item -LiteralPath $StateFile -Force
+& $TunnelStopScript -Quiet
 if (-not $Quiet) {
     if ($Stopped -gt 0) {
         Write-Host 'Agent Eval services stopped.' -ForegroundColor Green

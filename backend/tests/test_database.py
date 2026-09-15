@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -9,6 +9,7 @@ from agent_eval.database import (
     _database_retry,
     _sanitize,
     build_conversation_groups,
+    conversation_time_window,
     enrich_interaction_rows,
     resolve_database_config,
     summarize_interaction_rows,
@@ -16,6 +17,21 @@ from agent_eval.database import (
     verify_requested_model,
     fetch_model_interactions,
 )
+
+
+def test_conversation_time_window_defaults_to_latest_24_hours():
+    before = datetime.now(timezone.utc)
+    start, end = conversation_time_window()
+    after = datetime.now(timezone.utc)
+
+    assert before <= end <= after
+    assert end - start == timedelta(hours=24)
+
+
+def test_conversation_time_window_rejects_reverse_range():
+    now = datetime.now(timezone.utc)
+    with pytest.raises(ValueError, match="start_time"):
+        conversation_time_window(now, now - timedelta(seconds=1))
 
 
 def test_conversation_groups_attach_subagents_to_root_session():
