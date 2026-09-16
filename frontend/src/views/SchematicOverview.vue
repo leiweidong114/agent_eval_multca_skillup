@@ -44,24 +44,9 @@
             <el-tab-pane label="模型交互" name="timeline">
               <div class="interaction-toolbar"><el-input v-model="interactionKeyword" clearable placeholder="搜索提示词、历史、模型输出、工具或请求 ID"/><span>共 {{filteredInteractions.length}} 轮，按时间顺序完整显示</span></div>
               <div v-if="filteredInteractions.length" class="turn-list">
-                <article v-for="(item,index) in filteredInteractions" :key="item.request_id||index" class="turn-card">
-                  <header class="turn-title" @click="toggleInteraction(item)"><span class="sequence">{{index+1}}</span><div><b>{{item.model_group||item.model||'未知模型'}}</b><small>{{formatTime(item.start_time)}} · {{roleName(item)}} · {{item.session_id||'无 session_id'}}</small></div><div class="turn-meta"><el-tag size="small" :type="item.status==='success'?'success':'danger'">{{statusLabel(item.status)}}</el-tag><span>{{duration(item.request_duration_ms)}}</span><span>{{number(item.total_tokens)}} tokens</span><el-button link type="primary">{{isInteractionExpanded(item)?'收起':'展开详情'}}</el-button></div></header>
-                  <div v-if="item._loading" class="turn-loading"><el-skeleton :rows="3" animated/></div>
-                  <div v-else-if="isInteractionExpanded(item)" class="log-detail">
-                    <div class="request-facts"><div><span>REQUEST ID</span><code>{{item.request_id||'—'}}</code></div><div><span>CALL TYPE</span><b>{{item.call_type||'chat.completions'}}</b></div><div><span>PROVIDER</span><b>{{item.custom_llm_provider||'—'}}</b></div><div><span>END USER</span><b>{{item.end_user||item.user_id||'—'}}</b></div><div><span>SESSION</span><code>{{item.session_id||'—'}}</code></div><div><span>TOKENS</span><b>{{number(item.prompt_tokens)}} + {{number(item.completion_tokens)}} = {{number(item.total_tokens)}}</b></div></div>
-                    <div class="io-layout">
-                    <section class="io-panel input-panel"><header><b>INPUT 输入</b><span>{{inputMessageCount(item)}} 条消息</span></header><div class="input-groups">
-                      <div v-if="classifiedInput(item).system.length" class="message-group system-group"><h4>系统提示词 <span>{{classifiedInput(item).system.length}}</span></h4><div v-for="(message,messageIndex) in classifiedInput(item).system" :key="`system-${messageIndex}`" class="message system"><span class="role">{{roleLabel(message.role)}}</span><div><p>{{contentText(message.content)}}</p></div></div></div>
-                      <div v-if="classifiedInput(item).user.length" class="message-group user-group"><h4>当前用户提示词 <span>{{classifiedInput(item).user.length}}</span></h4><div v-for="(message,messageIndex) in classifiedInput(item).user" :key="`user-${messageIndex}`" class="message user"><span class="role">用户</span><div><p>{{contentText(message.content)}}</p></div></div></div>
-                      <div v-if="classifiedInput(item).history.length" class="message-group history-group"><h4>历史消息 <span>{{classifiedInput(item).history.length}}</span></h4><div v-for="(message,messageIndex) in classifiedInput(item).history" :key="`history-${messageIndex}`" class="message history"><span class="role">{{roleLabel(message.role)}}</span><div><p>{{contentText(message.content)}}</p><div v-if="message.tool_calls?.length" class="tool-list"><div v-for="tool in message.tool_calls" :key="tool.id||tool.function?.name"><b>历史工具调用 · {{tool.function?.name||tool.name}}</b><pre>{{readable(tool.function?.arguments||tool.arguments)}}</pre></div></div></div></div></div>
-                      <div v-if="classifiedInput(item).tool.length" class="message-group tool-group"><h4>工具返回 <span>{{classifiedInput(item).tool.length}}</span></h4><div v-for="(message,messageIndex) in classifiedInput(item).tool" :key="`tool-${messageIndex}`" class="message tool"><span class="role">工具</span><div><p>{{contentText(message.content)}}</p></div></div></div>
-                      <el-empty v-if="!inputMessageCount(item)" :image-size="54" description="本轮没有保存输入内容"/>
-                    </div></section>
-                    <section class="io-panel output-panel"><header><b>OUTPUT 输出</b><span>{{responseMessages(item).length}} 条消息</span></header><div v-if="responseMessages(item).length" class="output-content"><div v-for="(message,responseIndex) in responseMessages(item)" :key="`response-${responseIndex}`" class="message assistant"><span class="role">模型</span><div><p>{{contentText(message.content)}}</p><div v-if="message.tool_calls?.length" class="tool-list"><div v-for="tool in message.tool_calls" :key="tool.id||tool.call_id||tool.function?.name"><b>工具调用 · {{tool.function?.name||tool.name}}</b><pre>{{readable(tool.function?.arguments||tool.arguments)}}</pre></div></div></div></div></div><el-empty v-else :image-size="54" description="本轮没有保存模型输出"/><div v-if="errorText(item)" class="message error"><span class="role">错误</span><div><p>{{errorText(item)}}</p></div></div></section>
-                    </div>
-                  </div>
+                <article v-for="(item,index) in filteredInteractions" :key="item.request_id||index" class="turn-card" @click="openInteraction(item,index)">
+                  <header class="turn-title"><span class="sequence">{{index+1}}</span><div><b>{{item.model_group||item.model||'未知模型'}}</b><small>{{formatTime(item.start_time)}} · {{roleName(item)}} · {{item.session_id||'无 session_id'}}</small></div><div class="turn-meta"><el-tag size="small" :type="item.status==='success'?'success':'danger'">{{statusLabel(item.status)}}</el-tag><span>{{duration(item.request_duration_ms)}}</span><span>{{number(item.total_tokens)}} tokens</span><el-button link type="primary" :loading="item._loading">弹窗查看详情</el-button></div></header>
                   <footer class="turn-footer"><span>请求 {{item.request_id||'未记录'}}</span><span>层级 {{item.depth||0}}</span><span>输入 {{number(item.prompt_tokens)}} / 输出 {{number(item.completion_tokens)}}</span><span>工具 {{number(item.tool_call_count)}}</span></footer>
-                  <details v-if="isInteractionExpanded(item)&&!item._loading" class="raw-log"><summary>完整请求 / 响应 / 元数据</summary><pre>{{JSON.stringify(item,null,2)}}</pre></details>
                 </article>
               </div>
               <el-empty v-else description="没有匹配的模型交互"/>
@@ -72,6 +57,7 @@
         <el-empty v-else-if="!detailLoading" description="没有读取到会话详情"/>
       </div>
     </el-dialog>
+    <InteractionDetailDialog v-model="interactionDialogVisible" :item="selectedInteraction" :turn-index="selectedInteractionIndex"/>
   </div>
 </template>
 
@@ -79,10 +65,10 @@
 import {computed,onMounted,ref} from 'vue'
 import {ElMessage} from 'element-plus'
 import {fetchSchematicConversation,fetchSchematicConversations,fetchSchematicInteractionDetail,fetchSchematicInteractionFilters} from '../api'
+import InteractionDetailDialog from '../components/InteractionDetailDialog.vue'
 
-const endUser=ref(''),sessionId=ref(''),selectedModel=ref(''),source=ref('all'),loading=ref(false),detailLoading=ref(false),detailVisible=ref(false),selectedRoot=ref(''),detail=ref(null),detailView=ref('timeline'),interactionKeyword=ref(''),sessionPage=ref(1),sessionPageSize=ref(20)
+const endUser=ref(''),sessionId=ref(''),selectedModel=ref(''),source=ref('all'),loading=ref(false),detailLoading=ref(false),detailVisible=ref(false),selectedRoot=ref(''),detail=ref(null),detailView=ref('timeline'),interactionKeyword=ref(''),sessionPage=ref(1),sessionPageSize=ref(20),interactionDialogVisible=ref(false),selectedInteraction=ref(null),selectedInteractionIndex=ref(0)
 const timeRange=ref([new Date(Date.now()-24*60*60*1000),new Date()])
-const expandedInteractionIds=ref([])
 const data=ref({total:0,conversations:[]}),filterOptions=ref({end_users:[],models:[]})
 const pageInteractions=computed(()=>(data.value.conversations||[]).reduce((sum,item)=>sum+Number(item.interaction_count||0),0))
 const pageTokens=computed(()=>(data.value.conversations||[]).reduce((sum,item)=>sum+Number(item.total_tokens||0),0))
@@ -93,9 +79,8 @@ async function loadConversations(){if(loading.value)return;loading.value=true;tr
 async function search(){sessionPage.value=1;await loadConversations()}
 async function changeSessionPageSize(){sessionPage.value=1;await loadConversations()}
 async function openConversation(conversation){selectedRoot.value=conversation.root_session_id;detailVisible.value=true;detailLoading.value=true;detail.value=null;detailView.value='timeline';interactionKeyword.value='';try{detail.value=await fetchSchematicConversation(conversation.root_session_id,{start_time:timeRange.value?.[0]?.toISOString(),end_time:timeRange.value?.[1]?.toISOString()})}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{detailLoading.value=false}}
-async function toggleInteraction(item){const id=item.request_id;if(!id)return;const open=expandedInteractionIds.value.includes(id);if(open){expandedInteractionIds.value=expandedInteractionIds.value.filter(value=>value!==id);return}expandedInteractionIds.value=[...expandedInteractionIds.value,id];if(item.content_loaded)return;item._loading=true;try{Object.assign(item,await fetchSchematicInteractionDetail(id),{content_loaded:true})}catch(error){expandedInteractionIds.value=expandedInteractionIds.value.filter(value=>value!==id);ElMessage.error(error.response?.data?.detail||error.message)}finally{item._loading=false}}
-const isInteractionExpanded=item=>expandedInteractionIds.value.includes(item.request_id)
-function resetDetail(){detail.value=null;selectedRoot.value='';interactionKeyword.value='';expandedInteractionIds.value=[]}
+async function openInteraction(item,index){if(!item.request_id)return;item._loading=true;try{if(!item.content_loaded)Object.assign(item,await fetchSchematicInteractionDetail(item.request_id),{content_loaded:true});selectedInteraction.value=item;selectedInteractionIndex.value=index+1;interactionDialogVisible.value=true}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{item._loading=false}}
+function resetDetail(){detail.value=null;selectedRoot.value='';interactionKeyword.value=''}
 function objectValue(value){if(typeof value==='string'){try{return JSON.parse(value)}catch{return value}}return value}
 function requestMessages(item){const raw=objectValue(item.proxy_server_request)||{},request=objectValue(raw.body)||raw,messages=objectValue(request.messages||item.messages||request.input);if(Array.isArray(messages))return messages.map(message=>typeof message==='string'?{role:'user',content:message}:message);return typeof messages==='string'?[{role:'user',content:messages}]:[]}
 function responseMessages(item){const response=objectValue(item.response)||{};if(Array.isArray(response.choices))return response.choices.map(choice=>choice.message||choice.delta).filter(Boolean);if(Array.isArray(response.output))return response.output.map(output=>({role:output.role||'assistant',content:output.content||output.summary||(output.type==='function_call'?'':output),tool_calls:output.type==='function_call'?[output]:output.tool_calls}));return response.content?[{role:'assistant',content:response.content}]:[]}

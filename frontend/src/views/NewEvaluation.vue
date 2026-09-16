@@ -52,6 +52,10 @@
             <el-form-item label="参评模型（可多选）"><el-select v-model="form.modelKeys" multiple filterable collapse-tags placeholder="选择多个模型"><el-option v-for="model in availableModels" :key="modelKey(model)" :value="modelKey(model)" :label="model.id"><span class="status-option"><i class="availability-dot" :class="modelAvailable(model)?'available':'unavailable'"/>{{model.id}}<small>{{modelAvailable(model)?'可用':'不可用'}}</small></span></el-option></el-select></el-form-item>
             <el-alert class="combination-note" type="success" :closable="false" show-icon :title="`将创建 ${batchTargets.length} 个 Agent × 模型评测组合`"/>
           </template>
+          <el-form-item v-if="includesJustDo" label="JustDo 调用方式">
+            <el-radio-group v-model="form.justdoTransport"><el-radio-button value="cli">CLI（本机进程）</el-radio-button><el-radio-button value="http">HTTP（本机或远程桥接）</el-radio-button></el-radio-group>
+            <div class="field-help">HTTP 地址和访问令牌在“设置 → JustDo 调用”中配置；该选择只影响 JustDo。</div>
+          </el-form-item>
         </div>
 
         <template v-if="form.type === 'skill'">
@@ -158,7 +162,7 @@ const types = [
   { id: 'skill', name: 'Skill 评测', description: '单 Skill 或多 Skill 联合任务评测', icon: markRaw(MagicStick) },
 ]
 const normalizeType = (value) => ['schematic', 'question', 'skill'].includes(value) ? value : ''
-const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, baseline: true })
+const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, baseline: true, justdoTransport: 'cli' })
 const agents = ref([])
 const models = ref([])
 const skills = ref([])
@@ -201,6 +205,7 @@ const batchTargets = computed(() => {
   if (!form.batchMode) return form.agent && selectedModel.value ? [{ agent: form.agent, model: selectedModel.value.id, profile: selectedModel.value.profile }] : []
   return form.agents.flatMap(agent => selectedModels.value.map(model => ({ agent, model: model.id, profile: model.profile })))
 })
+const includesJustDo=computed(()=>form.batchMode?form.agents.includes('justdo'):form.agent==='justdo')
 
 function selectType(type) { form.type = type; job.value = null; router.replace({ query: { type } }); setDefaults() }
 function agentLabel(agent) { return `${agent.agent}${agent.detected_executable ? ' · 可用' : ' · 未检测到'}` }
@@ -263,7 +268,7 @@ async function submit() {
 }
 async function submitAgentRun() {
   const selectedSkills = form.type === 'schematic' ? schematicSkills.value : form.skills
-  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, benchmark: form.baseline, collect_database_trace: true, require_model_verification: true, llm_judge: true }
+  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, benchmark: form.baseline, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
   if (form.batchMode) {
     const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })
     resultId.value = response.batch_id; resultRouteType.value = 'batch'; job.value = response; pollBatch(response.batch_id)

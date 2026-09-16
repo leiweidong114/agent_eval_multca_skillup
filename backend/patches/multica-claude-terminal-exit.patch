@@ -1,0 +1,48 @@
+diff --git a/pkg/agent/claude.go b/pkg/agent/claude.go
+index c85ed7d..0f917ee 100644
+--- a/pkg/agent/claude.go
++++ b/pkg/agent/claude.go
+@@ -210,6 +210,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
+ 
+ 		scanner := newAgentStreamScanner(stdout)
+ 
++	streamLoop:
+ 		for scanner.Scan() {
+ 			line := strings.TrimSpace(scanner.Text())
+ 			if line == "" {
+@@ -251,6 +252,11 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
+ 					usage = resultUsage
+ 				}
+ 				closeStdin()
++				// A result frame is terminal by Claude's stream-json contract. Some
++				// Windows builds keep the process alive after emitting it (typically
++				// because an MCP descendant still owns a pipe), so waiting for EOF here
++				// can stall an otherwise completed evaluation until its outer timeout.
++				break streamLoop
+ 			case "log":
+ 				if msg.Log != nil {
+ 					trySend(msgCh, Message{
+@@ -273,8 +279,23 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
+ 
+ 		closeStdin()
+ 
++		// Once the terminal frame is captured, no later stdout frame can change
++		// the answer. Reap the whole owned tree rather than waiting indefinitely
++		// for a CLI/MCP pipe leak. This is normal successful teardown, not a
++		// cancellation and not an Agent failure.
++		if sawResult && cmd.Process != nil {
++			signalProcessGroup(cmd, syscall.SIGTERM)
++			if !waitProcessGroupGone(cmd, claudeTerminateGrace()) {
++				signalProcessGroup(cmd, syscall.SIGKILL)
++			}
++			_ = stdout.Close()
++		}
++
+ 		// Wait for process exit, then release the cancellation handler.
+ 		exitErr := cmd.Wait()
++		if sawResult {
++			exitErr = nil // terminal result is authoritative; teardown was intentional
++		}
+ 		close(procDone)
+ 		// The leader is reaped; drop ownership. On Windows that closes the Job
+ 		// Object, which kills anything still inside it — precisely what should

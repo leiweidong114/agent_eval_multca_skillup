@@ -1710,6 +1710,24 @@ curl.exe -b cookies.txt -X POST "http://127.0.0.1:8000/api/agents/justdo/http/te
 agent-eval check-agent --agent justdo --model glm-4.5-air --prompt "HI" --timeout 120 --database-verify
 ```
 
+`check-agent` 是轻量连通性命令，配置了 `JUSTDO_HTTP_URL` 时会自动使用 HTTP。
+正式 Skill/原理图评测可以显式选择传输方式，避免同一台机器同时存在 CLI 和 HTTP
+配置时产生歧义：
+
+```powershell
+# 强制使用本机 CLI / IPC 桥
+agent-eval pipeline-eval --agent justdo --model glm-4.5-air `
+  --justdo-transport cli --prompt "生成一个简易智能路灯原理图" --timeout 1800
+
+# 强制使用本机或远程 HTTP 桥
+agent-eval pipeline-eval --agent justdo --model glm-4.5-air `
+  --justdo-transport http --prompt "生成一个简易智能路灯原理图" --timeout 1800
+```
+
+前端“新建评测”在选中 JustDo 后也会显示“CLI / HTTP”选择项。显式选择
+`http` 时，如果地址、令牌或 `justdo-http-agent` 缺失，任务会直接给出配置错误，
+不会静默回退到 CLI；`auto` 才会在 HTTP 未配置时回退到 CLI。
+
 评测系统使用随离线包构建的 `backend/.runtime/windows/bin/justdo-http-agent.exe`，Multica 无需区分本机或 HTTP JustDo。执行 `.\build_multica_windows.ps1 -Test` 会同时重新构建该代理。
 
 评测系统与 JustDo 不需要共享磁盘。执行正式 `agent` 命令时，代理会把本次隔离任务工作区、Skill 快照和 OpenClaw 配置上传到 JustDo；执行结束后再把产物和更新后的工作区写回评测机。单次最多传输 5,000 个文件、48 MiB，`.git` 和 `node_modules` 不上传。超限会明确报错，不会静默漏文件。

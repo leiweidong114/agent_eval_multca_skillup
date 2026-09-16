@@ -11,6 +11,7 @@ from agent_eval.runtime import (
     agent_capabilities,
     default_agent_command,
     load_agent_paths,
+    justdo_agent_command,
     save_agent_path,
     find_multica_runtime,
     find_skill_up,
@@ -71,6 +72,35 @@ def test_justdo_http_proxy_overrides_local_path_when_enabled(tmp_path):
         stream.write("JUSTDO_HTTP_URL=http://127.0.0.1:43128\n")
 
     assert default_agent_command("justdo", tmp_path) == str(proxy)
+
+
+def test_justdo_transport_can_explicitly_select_cli_or_http(tmp_path):
+    executable = tmp_path / ("local.cmd" if os.name == "nt" else "local")
+    executable.write_text("@echo off\n" if os.name == "nt" else "#!/bin/sh\n", encoding="utf-8")
+    if os.name != "nt":
+        executable.chmod(0o755)
+    save_agent_path("justdo", str(executable), project_root=tmp_path)
+    platform_dir = "windows" if os.name == "nt" else "linux"
+    proxy = tmp_path / ".runtime" / platform_dir / "bin" / (
+        "justdo-http-agent.exe" if os.name == "nt" else "justdo-http-agent"
+    )
+    proxy.parent.mkdir(parents=True)
+    proxy.touch()
+    with (tmp_path / ".env").open("a", encoding="utf-8") as stream:
+        stream.write("JUSTDO_HTTP_URL=http://127.0.0.1:43128\n")
+
+    assert justdo_agent_command(tmp_path, transport="cli") == str(executable.resolve())
+    assert justdo_agent_command(tmp_path, transport="http") == str(proxy)
+
+
+def test_justdo_http_transport_requires_url(tmp_path):
+    with pytest.raises(ValueError, match="JUSTDO_HTTP_URL"):
+        justdo_agent_command(tmp_path, transport="http")
+
+
+def test_justdo_transport_rejects_unknown_mode(tmp_path):
+    with pytest.raises(ValueError, match="auto, cli, or http"):
+        justdo_agent_command(tmp_path, transport="socket")
 
 
 def test_skill_target_matches_agent_native_discovery():

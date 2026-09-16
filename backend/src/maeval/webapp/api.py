@@ -1380,10 +1380,16 @@ def create_app(
     def experiments(request: Request) -> list[dict[str, Any]]:
         user = current_user(request)
         if user["role"] == "admin":
-            rows = db.rows("SELECT * FROM experiments ORDER BY id DESC")
+            rows = db.rows(
+                """SELECT e.*,u.username AS owner_username
+                FROM experiments e LEFT JOIN users u ON u.id=e.owner_user_id
+                ORDER BY e.id DESC"""
+            )
         else:
             rows = db.rows(
-                "SELECT * FROM experiments WHERE owner_user_id=? ORDER BY id DESC",
+                """SELECT e.*,u.username AS owner_username
+                FROM experiments e LEFT JOIN users u ON u.id=e.owner_user_id
+                WHERE e.owner_user_id=? ORDER BY e.id DESC""",
                 (user["id"],),
             )
         return [display_experiment_name(row) for row in rows]

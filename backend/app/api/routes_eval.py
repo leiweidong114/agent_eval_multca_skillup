@@ -47,6 +47,7 @@ class RunRequest(BaseModel):
     must_contain: list[str] = Field(default_factory=list)
     must_not_contain: list[str] = Field(default_factory=list)
     agent_executable: str | None = Field(default=None)
+    justdo_transport: str = Field(default="auto", pattern=r"^(auto|cli|http)$")
     parallelism: int = Field(default=1, ge=1, le=16)
     iterations: int = Field(default=1, ge=1, le=20)
     timeout_seconds: int = Field(default=1800, ge=1)
@@ -155,6 +156,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         selected_skills=request.skills,
         evaluator_id=request.evaluator_id,
         schematic_task_type=request.schematic_task_type,
+        justdo_transport=request.justdo_transport,
     )
     return result
 

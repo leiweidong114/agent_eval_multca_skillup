@@ -245,6 +245,7 @@ class EvaluationJobManager:
                 selected_skills=request.get("skills") or [skill_dir.name],
                 evaluator_id=request.get("evaluator_id"),
                 schematic_task_type=request.get("schematic_task_type"),
+                justdo_transport=request.get("justdo_transport", "auto"),
             )
             status = "completed" if result.get("status", "completed") == "completed" else "failed"
             failure = result.get("failure") if status == "failed" else None

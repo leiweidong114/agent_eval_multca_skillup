@@ -108,6 +108,7 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
     )
     parser.add_argument("--llm-judge", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--evaluator", dest="evaluator_id", help="Installed evaluator id")
+    parser.add_argument("--justdo-transport", choices=("auto", "cli", "http"), default="auto", help="Choose the JustDo local CLI or configured HTTP bridge")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -158,6 +159,7 @@ def _parser() -> argparse.ArgumentParser:
         help="Run the configured LiteLLM judge in addition to deterministic rules",
     )
     run.add_argument("--evaluator", dest="evaluator_id", help="Installed evaluator id")
+    run.add_argument("--justdo-transport", choices=("auto", "cli", "http"), default="auto", help="Choose the JustDo local CLI or configured HTTP bridge")
 
     commands.add_parser("doctor", help="Check the local skill-up and Multica runtime")
     gateway_check = commands.add_parser("check-litellm", help="Check API authentication and optional real inference")
@@ -953,6 +955,7 @@ def _evaluation_batch(
                 selected_skills=selected_skills,
                 evaluator_id=getattr(args, "evaluator_id", None),
                 schematic_task_type=schematic_task_type,
+                justdo_transport=getattr(args, "justdo_transport", "auto"),
             )
             scores = result.get("scores") or {}
             scoring = result.get("scoring") or {}
@@ -1186,6 +1189,7 @@ def main() -> None:
         client_task_id=args.client_task_id,
         run_llm_judge_enabled=args.llm_judge,
         evaluator_id=args.evaluator_id,
+        justdo_transport=args.justdo_transport,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     raise SystemExit(

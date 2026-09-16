@@ -159,33 +159,50 @@ def normalize_agent(value: str) -> str:
     return normalized
 
 
+def justdo_agent_command(
+    project_root: Path | None = None, *, transport: str = "auto"
+) -> str:
+    """Resolve the JustDo executable for an explicit CLI or HTTP invocation."""
+    root = project_root or _default_project_root()
+    normalized_transport = str(transport or "auto").strip().lower()
+    if normalized_transport not in {"auto", "cli", "http"}:
+        raise ValueError("justdo_transport must be auto, cli, or http")
+    environment = effective_environment(root)
+    if normalized_transport in {"auto", "http"} and environment.get("JUSTDO_HTTP_URL", "").strip():
+        platform_dir = "windows" if os.name == "nt" else "linux"
+        binary = "justdo-http-agent.exe" if os.name == "nt" else "justdo-http-agent"
+        proxy = root / ".runtime" / platform_dir / "bin" / binary
+        if proxy.is_file():
+            return str(proxy)
+        if normalized_transport == "http":
+            raise FileNotFoundError(
+                f"JustDo HTTP proxy was not found: {proxy}; run the platform build script"
+            )
+    if normalized_transport == "http":
+        raise ValueError("JUSTDO_HTTP_URL must be configured before using JustDo HTTP")
+    configured_paths = load_agent_paths(root)
+    if "justdo" in configured_paths:
+        return configured_paths["justdo"]
+    configured = environment.get("JUSTDO_AGENT_EXECUTABLE", "").strip()
+    if configured:
+        return configured
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA", "").strip()
+        if appdata:
+            candidate = Path(appdata) / "JustDo" / "multica" / "development" / "JustDo-agent.exe"
+            if candidate.is_file():
+                return str(candidate)
+    return AGENT_COMMANDS["justdo"]
+
+
 def default_agent_command(agent: str, project_root: Path | None = None) -> str:
     normalized = normalize_agent(agent)
     root = project_root or _default_project_root()
     configured_paths = load_agent_paths(project_root)
     if normalized == "justdo":
-        environment = effective_environment(root)
-        if environment.get("JUSTDO_HTTP_URL", "").strip():
-            platform_dir = "windows" if os.name == "nt" else "linux"
-            binary = "justdo-http-agent.exe" if os.name == "nt" else "justdo-http-agent"
-            proxy = root / ".runtime" / platform_dir / "bin" / binary
-            if proxy.is_file():
-                return str(proxy)
+        return justdo_agent_command(root, transport="auto")
     if normalized in configured_paths:
         return configured_paths[normalized]
-    if normalized == "justdo":
-        configured = effective_environment(root).get(
-            "JUSTDO_AGENT_EXECUTABLE", ""
-        ).strip()
-        if configured:
-            return configured
-    if normalized == "justdo":
-        if os.name == "nt":
-            appdata = os.environ.get("APPDATA", "").strip()
-            if appdata:
-                candidate = Path(appdata) / "JustDo" / "multica" / "development" / "JustDo-agent.exe"
-                if candidate.is_file():
-                    return str(candidate)
     return AGENT_COMMANDS.get(normalized, normalized)
 
 

@@ -53,6 +53,7 @@ from agent_eval.runtime import (
     agent_capabilities,
     backend_agent,
     default_agent_command,
+    justdo_agent_command,
     find_multica_runtime,
     find_skill_up,
     normalize_agent,
@@ -409,6 +410,7 @@ def run_evaluation(
     selected_skills: list[str] | None = None,
     evaluator_id: str | None = None,
     schematic_task_type: str | None = None,
+    justdo_transport: str = "auto",
 ) -> dict[str, Any]:
     run_started_at = datetime.now(timezone.utc)
 
@@ -469,7 +471,11 @@ def run_evaluation(
                 category="postgresql_unavailable",
                 retryable=_retryable_infrastructure_message(detail),
             )
-    agent_executable = executable or default_agent_command(requested_agent, project_root)
+    agent_executable = executable or (
+        justdo_agent_command(project_root, transport=justdo_transport)
+        if requested_agent == "justdo"
+        else default_agent_command(requested_agent, project_root)
+    )
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     operation_id = _identity(task_id or run_id or uuid.uuid4().hex, field="task_id")
     canonical_task_id = operation_id
@@ -569,6 +575,8 @@ def run_evaluation(
     env["AGENT_EVAL_AGENT_EXECUTABLE"] = agent_executable
     env["AGENT_EVAL_REQUESTED_AGENT"] = requested_agent
     env["AGENT_EVAL_SUBAGENT_MODEL"] = provider_model
+    if requested_agent == "justdo":
+        env["AGENT_EVAL_JUSTDO_TRANSPORT"] = justdo_transport
 
     progress("validating", 15, "Validating Skill-Up configuration")
     validation = _execute_process(
@@ -594,6 +602,7 @@ def run_evaluation(
             "created_at": datetime.now(timezone.utc).isoformat(),
             "agent": requested_agent,
             "agent_backend": agent,
+            "justdo_transport": justdo_transport if requested_agent == "justdo" else None,
             "agent_capabilities": capabilities,
             "model": model,
             "model_profile": resolved_profile.name,
@@ -1039,6 +1048,7 @@ def run_evaluation(
         "status": evaluation_status,
         "agent": requested_agent,
         "agent_backend": agent,
+        "justdo_transport": justdo_transport if requested_agent == "justdo" else None,
         "agent_capabilities": capabilities,
         "model": model,
         "model_profile": resolved_profile.name,

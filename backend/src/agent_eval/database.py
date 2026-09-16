@@ -795,6 +795,7 @@ def _interaction_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
         "spawned_by": row.get("spawned_by") or first("spawned_by", "spawnedBy"),
         "evaluation_task_id": task_id,
         "evaluation_run_id": run_id,
+        "attributed_user_id": first("agent_eval_user_id", "user_api_key_user_id"),
         "top_level_agent": row.get("top_level_agent") or first("agent_eval_agent") or row.get("agent_id"),
         "requested_model": row.get("requested_model") or first("agent_eval_model"),
         "request_purpose": row.get("request_purpose") or first("request_purpose"),
@@ -879,12 +880,16 @@ def build_conversation_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]
             "root_session_id": root,
             "session_id": root,
             "source_kind": next(iter(source_kinds)) if len(source_kinds) == 1 else "mixed",
-            "user_id": next((item.get("user_id") for item in items if item.get("user_id")), None),
+            "user_id": next(
+                (item.get("attributed_user_id") for item in items if item.get("attributed_user_id")),
+                None,
+            ) or next((item.get("user_id") for item in items if item.get("user_id")), None),
             "end_user": next((item.get("end_user") for item in items if item.get("end_user")), None),
             "agent": next((item.get("top_level_agent") for item in items if item.get("top_level_agent")), None),
             "models": sorted({
-                str(item.get("model_group") or item.get("model"))
-                for item in items if item.get("model_group") or item.get("model")
+                str(item.get("model_group") or item.get("model") or item.get("requested_model"))
+                for item in items
+                if item.get("model_group") or item.get("model") or item.get("requested_model")
             }),
             "evaluation_task_ids": sorted({str(item["evaluation_task_id"]) for item in items if item.get("evaluation_task_id")}),
             "evaluation_run_ids": sorted({str(item["evaluation_run_id"]) for item in items if item.get("evaluation_run_id")}),

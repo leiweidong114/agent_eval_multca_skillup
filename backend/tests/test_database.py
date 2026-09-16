@@ -76,6 +76,22 @@ def test_conversation_groups_do_not_merge_missing_session_ids():
     }
 
 
+def test_conversation_summary_uses_attribution_metadata_fallbacks():
+    conversations = build_conversation_groups([{
+        "request_id": "metadata-only",
+        "metadata": {
+            "session_id": "session-1",
+            "agent_eval_user_id": "E10001",
+            "agent_eval_agent": "justdo",
+            "agent_eval_model": "glm-4.5-air",
+        },
+    }])
+
+    assert conversations[0]["user_id"] == "E10001"
+    assert conversations[0]["agent"] == "justdo"
+    assert conversations[0]["models"] == ["glm-4.5-air"]
+
+
 def test_fetch_interactions_paginates_past_500(monkeypatch, tmp_path):
     config = DatabaseConfig(
         enabled=True, host="db", port=5432, name="litellm", user="reader", password="x",
