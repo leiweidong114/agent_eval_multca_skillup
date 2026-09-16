@@ -421,6 +421,7 @@ def test_batch_queues_unique_agent_model_combinations(monkeypatch):
     assert response.json() == {"batch_id": "batch-test", "total_jobs": 2}
     assert captured["name"] == "matrix"
     assert [item["model"] for item in captured["requests"]] == ["gpt-5.4", "gpt-5.5"]
+    assert {item["user_id"] for item in captured["requests"]} == {"test-worker"}
 
 
 def test_model_profile_api_keeps_api_keys_out_of_responses(tmp_path, monkeypatch):

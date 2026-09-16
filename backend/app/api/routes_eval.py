@@ -222,6 +222,7 @@ def get_job(job_id: str, request: Request) -> dict[str, object]:
 def create_batch(request: BatchRunRequest, http_request: Request) -> dict[str, object]:
     """Queue the Cartesian Agent/model combinations as one comparison batch."""
     try:
+        employee_no = employee_from_request(http_request)
         normalized: list[RunRequest] = []
         seen: set[tuple[str, str, str]] = set()
         for target in request.targets:
@@ -230,6 +231,7 @@ def create_batch(request: BatchRunRequest, http_request: Request) -> dict[str, o
                 continue
             seen.add(key)
             run = RunRequest(**request.base_request, **target.model_dump())
+            run = run.model_copy(update={"user_id": employee_no})
             run = _apply_schematic_skill_settings(run)
             resolve_evaluator(
                 BACKEND_ROOT,
