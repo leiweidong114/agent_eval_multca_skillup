@@ -9,6 +9,7 @@ from typing import Any
 from agent_eval.database import get_conversation
 from app.config import BACKEND_ROOT
 from app.metrics_store import MetricsStore
+from app.schematic_rationality_judge import judge_rationality_result
 from app.session_metrics import calculate_rule_metrics
 from app.session_metric_judge import judge_session_metrics
 
@@ -149,6 +150,98 @@ class MetricJobManager:
                     result["judge"] = {"status": "disabled"}
                     with self._lock:
                         self._append_event(job, "llm_judge_skipped", "本次任务未启用 LLM Judge", session_id=session_id)
+                with self._lock:
+                    job["phase"] = "schematic_rationality"
+                    self._append_event(
+                        job,
+                        "schematic_rationality_loading",
+                        "正在读取原理图合理性分析记录",
+                        session_id=session_id,
+                    )
+                    self._save(job, store)
+                rationality_record, rationality_record_count, rationality_matched_by = (
+                    store.latest_rationality_analysis(
+                        session_id,
+                        correlation_ids=conversation.get("evaluation_run_ids") or [],
+                    )
+                )
+                if rationality_record is None:
+                    result["schematic_rationality"] = {
+                        "status": "not_found",
+                        "source_collection": "HDschematicRationalilyCollection",
+                        "record_count": rationality_record_count,
+                    }
+                    with self._lock:
+                        self._append_event(
+                            job,
+                            "schematic_rationality_not_found",
+                            "该会话没有已完成的原理图合理性分析记录",
+                            session_id=session_id,
+                        )
+                elif job["use_llm_judge"]:
+                    try:
+                        with self._lock:
+                            self._append_event(
+                                job,
+                                "schematic_rationality_judge",
+                                "Judge LLM 正在分析 resultText",
+                                session_id=session_id,
+                            )
+                            self._save(job, store)
+                        analysis = judge_rationality_result(
+                            rationality_record,
+                            employee_no=str(job.get("user_id") or "") or None,
+                        )
+                        result["schematic_rationality"] = {
+                            "source_collection": "HDschematicRationalilyCollection",
+                            "source_record_id": rationality_record.get("_id"),
+                            "source_uuid": rationality_record.get("uuid"),
+                            "source_create_time": rationality_record.get("createTime"),
+                            "check_type": rationality_record.get("checkType"),
+                            "check_message": rationality_record.get("checkMessage"),
+                            "record_count": rationality_record_count,
+                            "matched_by": rationality_matched_by,
+                            "result_text": rationality_record.get("resultText"),
+                            **analysis,
+                        }
+                        with self._lock:
+                            self._append_event(
+                                job,
+                                "schematic_rationality_completed",
+                                "原理图合理性指标分析完成",
+                                session_id=session_id,
+                            )
+                    except Exception as exc:
+                        result["schematic_rationality"] = {
+                            "status": "judge_unavailable",
+                            "source_collection": "HDschematicRationalilyCollection",
+                            "source_record_id": rationality_record.get("_id"),
+                            "source_uuid": rationality_record.get("uuid"),
+                            "source_create_time": rationality_record.get("createTime"),
+                            "record_count": rationality_record_count,
+                            "matched_by": rationality_matched_by,
+                            "result_text": rationality_record.get("resultText"),
+                            "error": str(exc),
+                        }
+                        with self._lock:
+                            self._append_event(
+                                job,
+                                "schematic_rationality_judge_unavailable",
+                                "原理图合理性 Judge 不可用，保留原始记录",
+                                session_id=session_id,
+                                detail=str(exc),
+                            )
+                else:
+                    result["schematic_rationality"] = {
+                        "status": "judge_disabled",
+                        "source_collection": "HDschematicRationalilyCollection",
+                        "source_record_id": rationality_record.get("_id"),
+                        "source_uuid": rationality_record.get("uuid"),
+                        "source_create_time": rationality_record.get("createTime"),
+                        "record_count": rationality_record_count,
+                        "matched_by": rationality_matched_by,
+                        "result_text": rationality_record.get("resultText"),
+                    }
                 with self._lock:
                     job["phase"] = "saving_metrics"
                     self._append_event(job, "saving_metrics", "正在写入 MongoDB 指标库", session_id=session_id)

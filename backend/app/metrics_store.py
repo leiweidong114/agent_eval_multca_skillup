@@ -22,6 +22,7 @@ class MetricsStore:
         self._latest = self._database["session_metrics_latest"]
         self._versions = self._database["session_metrics_versions"]
         self._jobs = self._database["metric_calculation_jobs"]
+        self._rationality = self._database["HDschematicRationalilyCollection"]
         self._client.admin.command("ping")
         self._latest.create_index([("calculated_at", DESCENDING)])
         self._latest.create_index([("task_type", ASCENDING), ("finished_at", DESCENDING)])
@@ -32,6 +33,8 @@ class MetricsStore:
             [("session_id", ASCENDING), ("metric_definition_version", ASCENDING), ("source_fingerprint", ASCENDING)],
             unique=True,
         )
+        self._rationality.create_index([("uuid", ASCENDING)], unique=True)
+        self._rationality.create_index([("sessionId", ASCENDING), ("createTime", DESCENDING)])
 
     def upsert_metrics(self, result: dict[str, Any]) -> None:
         session_id = str(result["session_id"])
@@ -105,6 +108,29 @@ class MetricsStore:
         if value is not None:
             value["session_id"] = str(value.pop("_id"))
         return value
+
+    def latest_rationality_analysis(
+        self, session_id: str, *, correlation_ids: Iterable[str] = ()
+    ) -> tuple[dict[str, Any] | None, int, str | None]:
+        """Return the newest analysis matched by root session or evaluation run id."""
+        identifiers = list(dict.fromkeys(
+            value for value in [str(session_id), *(str(item) for item in correlation_ids)] if value
+        ))
+        query = {"sessionId": {"$in": identifiers}}
+        total = self._rationality.count_documents(query)
+        value = self._rationality.find_one(
+            {**query, "status": {"$in": ["completed", "success", "ok"]}},
+            sort=[("createTime", -1)],
+        )
+        if value is not None:
+            value["_id"] = str(value.get("_id") or "")
+            create_time = value.get("createTime")
+            if isinstance(create_time, datetime):
+                value["createTime"] = create_time.isoformat()
+        matched_by = None
+        if value is not None:
+            matched_by = "root_session_id" if value.get("sessionId") == session_id else "evaluation_run_id"
+        return value, total, matched_by
 
     def summary(self, *, start_time: datetime, end_time: datetime) -> dict[str, Any]:
         query = {"finished_at": {"$gte": start_time, "$lt": end_time}}

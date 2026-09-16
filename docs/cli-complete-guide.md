@@ -1478,7 +1478,15 @@ python .\auto_layout_service\tools\start_service.py
 curl.exe --noproxy "*" http://127.0.0.1:8631/api/auto_layout/health
 curl.exe --noproxy "*" http://127.0.0.1:8631/api/apply_schematic/health
 curl.exe --noproxy "*" http://127.0.0.1:8631/api/auto_layout/devices
+curl.exe --noproxy "*" http://127.0.0.1:8631/api/schematicRationalityAnalysis/health
 ```
+
+第三个接口 `schematicRationalityAnalysis` 负责把原理图质量证据写入 MongoDB 集合
+`HDschematicRationalilyCollection`。它与评测系统共用 Nacos 中的 `mongodb.uri` 和
+`mongodb.database`；启动进程前需提供 `NACOS_SERVER_ADDR`、`NACOS_DATA_ID`、
+`NACOS_GROUP` 等引导变量，或显式设置 `SCHEMATIC_MONGODB_URI` 和
+`SCHEMATIC_MONGODB_DATABASE`。仓库不保存数据库密码。完整请求示例见自动布局项目的
+`auto_layout_service/docs/api_reference.md`。
 
 完整 HTTP 冒烟测试：
 
