@@ -420,6 +420,16 @@ sh backend/scripts/setup_linux.sh
 
 Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `backend/.runtime/linux`、`backend/.tools/linux`。整个项目目录可迁移，但 Windows 与 Linux 的本地二进制目录彼此独立；在目标系统首次运行对应的 setup 脚本即可。
 
+一键启动和停止 Linux 前后端（自动选择空闲端口）：
+
+```sh
+sh ./start-all.sh
+sh ./stop-all.sh
+```
+
+需要单独重编译时，可运行 `sh build_skillup_linux.sh --test`、
+`sh build_multica_linux.sh --test` 和 `sh build_frontend_linux.sh`。
+
 ## CLI 使用
 
 检查运行层：

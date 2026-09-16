@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 import shutil
+import sys
 
 from fastapi.testclient import TestClient
 
@@ -290,7 +291,13 @@ def test_run_interactions_and_open_folder_are_scoped_to_result_dir(tmp_path, mon
     )
     opened = []
     monkeypatch.setattr("app.api.routes_runs.RUNS_ROOT", tmp_path)
-    monkeypatch.setattr("app.api.routes_runs.os.startfile", lambda path: opened.append(path))
+    if sys.platform == "win32":
+        monkeypatch.setattr("app.api.routes_runs.os.startfile", lambda path: opened.append(path))
+    else:
+        monkeypatch.setattr(
+            "app.api.routes_runs.subprocess.Popen",
+            lambda command: opened.append(command[-1]),
+        )
 
     response = client.get("/api/runs/run-safe/interactions")
     assert response.status_code == 200

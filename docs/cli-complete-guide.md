@@ -1558,11 +1558,22 @@ npm ci
 npm run dist:linux
 ```
 
-标准输出目录 `release/` 中会生成 AppImage、DEB 和 `linux-unpacked/`。在目标 Linux 上：
+`dist:linux` 会先构建目标平台 OpenClaw runtime，再生成并校验 AppImage、Deb、解包目录、
+独立 Agent 启动器和 SHA-256 清单：
+
+```text
+release/JustDo-<version>.AppImage
+release/justdo_<version>_amd64.deb
+release/JustDo-agent-linux-x64
+release/linux-unpacked/JustDo-agent
+release/SHA256SUMS-linux.txt
+```
+
+推荐安装 Deb；它会将 Agent 命令链接到 `/usr/bin/JustDo-agent`：
 
 ```bash
-chmod +x ./JustDo-*.AppImage
-export JUSTDO_AGENT_EXECUTABLE="$PWD/JustDo-2026.8.27.AppImage"
+sudo apt install ./justdo_*_amd64.deb
+JustDo-agent --version
 
 agent-eval check-agent \
   --agent justdo \
@@ -1571,6 +1582,16 @@ agent-eval check-agent \
   --timeout 120 \
   --database-verify
 ```
+
+不安装 Deb 时，将 AppImage 和 companion launcher 放在同一目录：
+
+```bash
+chmod +x JustDo-*.AppImage JustDo-agent-linux-x64
+export JUSTDO_AGENT_EXECUTABLE="$PWD/JustDo-agent-linux-x64"
+```
+
+`JustDo-agent-linux-x64` 不是独立应用，它会启动同目录的 AppImage 并进入
+`--justdo-multica-bridge` 模式。
 
 ### 25.3 仅在 Windows 上生成可搬运的 Linux 目录
 
@@ -1598,6 +1619,42 @@ export JUSTDO_AGENT_EXECUTABLE=/opt/JustDo/JustDo
 ```
 
 然后即可使用相同的 `agent-eval check-agent --agent justdo ...` 命令。
+
+### 25.4 Linux 构建和启动完整评测系统
+
+在 Ubuntu 22.04/24.04 x86_64（或受支持的 arm64 Linux）中，从项目根目录执行：
+
+```bash
+sh backend/scripts/setup_linux.sh
+```
+
+脚本会在项目内部安装固定版本的 Go 和 Node.js，检出固定版本的 Multica 与 Skill-Up，
+应用本项目的 Multica 适配补丁，编译 `multica-eval-runtime`、`justdo-http-agent` 和
+`skill-up`，建立 Python venv，安装后端依赖、构建前端并运行测试。私密 `.env` 不会写入 Git；
+如果它不存在，只会从 `.env.example` 创建模板。
+
+后续单独重编译和启动：
+
+```bash
+sh ./build_skillup_linux.sh --test
+sh ./build_multica_linux.sh --test
+sh ./build_frontend_linux.sh
+sh ./start-all.sh
+```
+
+`start-all.sh` 自动寻找空闲的后端和前端端口，并把 PID、URL 和日志保存在
+`backend/.runtime/service-manager-linux/`。停止服务：
+
+```bash
+sh ./stop-all.sh
+```
+
+Linux CLI 位于：
+
+```bash
+./backend/.runtime/linux/python/bin/agent-eval doctor
+./backend/.runtime/linux/python/bin/agent-eval agents
+```
 
 ## 26. 题库评测瞬间显示 0/N 失败
 

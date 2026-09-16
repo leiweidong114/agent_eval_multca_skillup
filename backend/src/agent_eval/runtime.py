@@ -181,10 +181,10 @@ def justdo_agent_command(
     if normalized_transport == "http":
         raise ValueError("JUSTDO_HTTP_URL must be configured before using JustDo HTTP")
     configured_paths = load_agent_paths(root)
-    if "justdo" in configured_paths:
+    if "justdo" in configured_paths and shutil.which(configured_paths["justdo"]):
         return configured_paths["justdo"]
     configured = environment.get("JUSTDO_AGENT_EXECUTABLE", "").strip()
-    if configured:
+    if configured and shutil.which(configured):
         return configured
     if os.name == "nt":
         appdata = os.environ.get("APPDATA", "").strip()
@@ -201,7 +201,7 @@ def default_agent_command(agent: str, project_root: Path | None = None) -> str:
     configured_paths = load_agent_paths(project_root)
     if normalized == "justdo":
         return justdo_agent_command(root, transport="auto")
-    if normalized in configured_paths:
+    if normalized in configured_paths and shutil.which(configured_paths[normalized]):
         return configured_paths[normalized]
     return AGENT_COMMANDS.get(normalized, normalized)
 

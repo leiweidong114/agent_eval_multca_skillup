@@ -56,6 +56,18 @@ def test_empty_saved_agent_path_restores_automatic_discovery(tmp_path):
     assert save_agent_path("justdo", "", project_root=tmp_path) == {}
 
 
+def test_stale_cross_platform_agent_path_falls_back_to_platform_command(tmp_path):
+    (tmp_path / ".env").write_text(
+        'AGENT_PATHS_JSON={"justdo":"C:/missing/JustDo-agent.exe"}\n'
+        'JUSTDO_AGENT_EXECUTABLE=C:/missing/JustDo-agent.exe\n',
+        encoding="utf-8",
+    )
+
+    resolved = default_agent_command("justdo", tmp_path)
+    assert resolved != "C:/missing/JustDo-agent.exe"
+    assert resolved == "JustDo-agent" or os.path.isfile(resolved)
+
+
 def test_justdo_http_proxy_overrides_local_path_when_enabled(tmp_path):
     executable = tmp_path / ("local.cmd" if os.name == "nt" else "local")
     executable.write_text("@echo off\n" if os.name == "nt" else "#!/bin/sh\n", encoding="utf-8")
