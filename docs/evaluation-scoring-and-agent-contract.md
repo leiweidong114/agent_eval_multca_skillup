@@ -4,10 +4,10 @@
 
 当前项目没有启动 Multica Server 调度器，只复用了 Multica 的 Agent backend。并发由两层组成：
 
-1. FastAPI 任务池：`AGENT_EVAL_WORKERS`，默认 2，可同时执行不同 Agent 的任务。
+1. FastAPI 任务池：`AGENT_EVAL_WORKERS`，默认 6，可同时执行当前六个不同 Agent 的任务。
 2. 单任务 Skill-Up 用例池：请求字段 `parallelism`，范围 1–16。
 
-因此默认最多有 2 个顶层任务同时运行，而每个任务又可并发执行多条 case。总 Agent 进程数近似为 `AGENT_EVAL_WORKERS × parallelism`，还要乘 benchmark 的 with/without Skill 变体；生产配置必须按 CPU、内存、Agent CLI 限流和模型网关限流设定。`GET /api/capacity` 返回当前两层容量。
+因此默认最多有 6 个顶层任务同时运行，而每个任务又可并发执行多条 case。总 Agent 进程数近似为 `AGENT_EVAL_WORKERS × parallelism`，还要乘 benchmark 的 with/without Skill 变体；生产配置必须按 CPU、内存、Agent CLI 限流和模型网关限流设定。`GET /api/capacity` 返回当前两层容量。批次中的单个任务失败只影响该组合，不会取消或阻塞其他组合；全部结束后批次会根据结果标记为 `completed`、`partial_failed` 或 `failed`。
 
 ## Skill 安装与 eval.yaml 所有权
 

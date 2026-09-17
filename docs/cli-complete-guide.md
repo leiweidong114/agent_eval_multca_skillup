@@ -866,7 +866,7 @@ curl.exe --json $runBody "$API/run"
 | `POST /api/validate` | 校验同一请求，不执行完整评测 |
 | `GET /api/capacity` | 查看任务池和 case 并发容量 |
 | `GET /api/jobs?user_id=...` | 查看任务，可选按用户过滤 |
-| `GET /api/jobs/{job_id}` | 查询状态、进度、实时 `events`、模型交互和最终结果 |
+| `GET /api/jobs/{job_id}` | 查询状态、进度、逐轮实时 `live_interactions` 和最终结果 |
 | `POST /api/jobs/{job_id}/cancel` | 请求取消任务 |
 | `GET /api/runs?user_id=...` | 列出已经生成报告的运行 |
 | `GET /api/runs/{run_id}` | 读取完整 `evaluation-report.json` |
@@ -891,7 +891,10 @@ curl.exe "$API/runs/$RUN_ID"
 ### 19.4 多 Agent/模型批量评测
 
 `POST /api/batches` 接收 2–32 个目标，重复的 `(agent, model, profile)` 会去重。
-批次内部的实际并发由 `/api/capacity` 和后端任务池控制。
+批次内部的实际并发由 `/api/capacity` 和后端任务池控制。默认
+`AGENT_EVAL_WORKERS=6`，因此当前六个不同 Agent 可以同时启动；小型主机可以在 `.env`
+中调低该值。一个 Agent 失败不会取消其他子任务，全部子任务结束后批次状态分别为
+`completed`（全部成功）、`partial_failed`（部分成功）或 `failed`（全部失败）。
 
 | 方法与路径 | 作用 |
 |---|---|

@@ -25,7 +25,10 @@ class EvaluationJobManager:
         self._jobs: dict[str, dict[str, Any]] = {}
         self._batches: dict[str, dict[str, Any]] = {}
         self._cancel: dict[str, threading.Event] = {}
-        self._max_workers = max(1, int(os.environ.get("AGENT_EVAL_WORKERS", "2")))
+        # A comparison batch normally targets the six supported local Agents.
+        # Keep one top-level worker per Agent by default so unrelated Agents do
+        # not wait for each other. Operators can still lower this on small hosts.
+        self._max_workers = max(1, int(os.environ.get("AGENT_EVAL_WORKERS", "6")))
         self._executor = ThreadPoolExecutor(
             max_workers=self._max_workers,
             thread_name_prefix="agent-eval",

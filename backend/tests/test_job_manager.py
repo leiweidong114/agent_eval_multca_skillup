@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import threading
+import time
 
+import app.job_manager as job_manager_module
 from app.job_manager import EvaluationJobManager
 
 
@@ -124,3 +126,63 @@ def test_live_interaction_updates_one_turn_in_place():
     assert rows[0]["status"] == "success"
     assert rows[0]["turn_index"] == 1
     assert rows[0]["total_tokens"] == 12
+
+
+def test_batch_runs_in_parallel_and_one_failure_does_not_cancel_others(
+    monkeypatch, tmp_path
+):
+    active = 0
+    maximum_active = 0
+    lock = threading.Lock()
+
+    def fake_run_evaluation(**kwargs):
+        nonlocal active, maximum_active
+        with lock:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        try:
+            time.sleep(0.12)
+            if kwargs["agent"] == "broken-agent":
+                raise RuntimeError("intentional agent failure")
+            return {
+                "status": "completed",
+                "provider_model": kwargs.get("model"),
+                "scores": {"overall_score": 0.8},
+                "scoring": {"valid_for_ranking": True},
+            }
+        finally:
+            with lock:
+                active -= 1
+
+    monkeypatch.setenv("AGENT_EVAL_WORKERS", "3")
+    monkeypatch.setattr(job_manager_module, "RUNS_ROOT", tmp_path / "runs")
+    monkeypatch.setattr(job_manager_module, "BACKEND_ROOT", tmp_path)
+    monkeypatch.setattr(job_manager_module, "run_evaluation", fake_run_evaluation)
+    skill_dir = tmp_path / "skill"
+    skill_dir.mkdir()
+    manager = EvaluationJobManager()
+    try:
+        batch = manager.submit_batch(
+            [
+                {"agent": "agent-a", "model": "test-model", "user_id": "tester"},
+                {"agent": "broken-agent", "model": "test-model", "user_id": "tester"},
+                {"agent": "agent-c", "model": "test-model", "user_id": "tester"},
+            ],
+            skill_dir,
+            name="parallel fault isolation",
+        )
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            batch = manager.get_batch(batch["batch_id"])
+            if batch and batch["completed_jobs"] == 3:
+                break
+            time.sleep(0.02)
+
+        assert batch is not None
+        assert maximum_active == 3
+        assert batch["status"] == "partial_failed"
+        assert sorted(row["status"] for row in batch["results"]) == [
+            "completed", "completed", "failed"
+        ]
+    finally:
+        manager._executor.shutdown(wait=True)

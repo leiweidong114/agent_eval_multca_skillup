@@ -137,7 +137,7 @@ def collect_legacy_values() -> dict[str, str]:
         if field in scoring:
             value = scoring[field]
             updates.setdefault(variable, str(value).lower() if isinstance(value, bool) else str(value))
-    updates.setdefault("AGENT_EVAL_WORKERS", "2")
+    updates.setdefault("AGENT_EVAL_WORKERS", "6")
     updates.setdefault("MODEL_AGENT_EVAL_DATA_DIR", "")
     updates.setdefault("PRISM_ADMIN_USERNAME", "admin")
     updates.setdefault("PRISM_ADMIN_PASSWORD", "")
