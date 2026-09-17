@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.routes_eval import RunRequest, _apply_schematic_skill_settings
+from app.api.routes_skill import _cli_subprocess_environment
 
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -33,6 +34,17 @@ def test_openapi_schema_is_available():
     response = client.get("/openapi.json")
     assert response.status_code == 200
     assert "/api/runs" in response.json()["paths"]
+
+
+def test_cli_subprocess_environment_includes_current_source_tree(monkeypatch):
+    monkeypatch.setenv("PYTHONPATH", "D:\\stale-copy\\backend\\src")
+
+    environment = _cli_subprocess_environment()
+    entries = environment["PYTHONPATH"].split(os.pathsep)
+
+    assert entries[0] == str(BACKEND / "src")
+    assert entries[1] == str(BACKEND)
+    assert entries[2] == "D:\\stale-copy\\backend\\src"
 
 
 def test_health_and_discovery_endpoints(monkeypatch):

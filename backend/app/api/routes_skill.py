@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import json
@@ -57,6 +58,17 @@ from app.skill_registry import (
 from app.retention import cleanup_expired_runs, expired_runs
 
 router = APIRouter(prefix="/api", tags=["discovery"])
+
+
+def _cli_subprocess_environment() -> dict[str, str]:
+    """Make source-tree CLI subprocesses portable even without an editable install."""
+    environment = os.environ.copy()
+    required = [str(BACKEND_ROOT / "src"), str(BACKEND_ROOT)]
+    existing = str(environment.get("PYTHONPATH") or "").strip()
+    if existing:
+        required.append(existing)
+    environment["PYTHONPATH"] = os.pathsep.join(required)
+    return environment
 
 
 class CleanupRequest(BaseModel):
@@ -268,6 +280,8 @@ def test_agent(agent_name: str) -> dict[str, object]:
             text=True,
             timeout=150,
             check=False,
+            cwd=BACKEND_ROOT,
+            env=_cli_subprocess_environment(),
             encoding="utf-8",
             errors="replace",
         )

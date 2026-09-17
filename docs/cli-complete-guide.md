@@ -2,6 +2,18 @@
 
 本文档覆盖当前 `agent-eval` 的全部命令，重点支持：模型、Agent、Skill 和结果查看，多 Agent 同 Prompt、多 Agent 同任务评测，以及原理图生成四 Skill pipeline 一键评测。
 
+> 如果项目目录复制到另一台 Windows 电脑后出现
+> `ModuleNotFoundError: No module named 'agent_eval'`，说明内置虚拟环境尚未注册新目录，
+> 或 editable install 仍指向旧电脑的绝对路径。在项目根目录离线重新注册即可：
+>
+> ```powershell
+> & .\backend\.runtime\windows\python\Scripts\python.exe -m pip install --no-deps -e .\backend
+> & .\backend\.runtime\windows\python\Scripts\python.exe -c "import agent_eval; print(agent_eval.__file__)"
+> ```
+>
+> 完整离线包应优先重新运行 `install_windows.ps1`，它还会校验并安装全部依赖。Web
+> 页面中的 Agent 可用性测试已额外注入当前仓库的 `backend/src`，不再依赖旧路径。
+
 ## 1. 运行前准备
 
 项目路径：

@@ -195,6 +195,13 @@ $StartedProcesses = [System.Collections.Generic.List[System.Diagnostics.Process]
 
 try {
     $BackendProcess = Invoke-WithAgentEvalPythonIsolation {
+        # Editable-install .pth files contain absolute paths and become stale
+        # when an offline project directory is copied to another computer.
+        # Export only this checkout so backend child processes remain portable.
+        $env:PYTHONPATH = @(
+            (Join-Path $ProjectRoot 'backend\src'),
+            (Join-Path $ProjectRoot 'backend')
+        ) -join [IO.Path]::PathSeparator
         Start-Process `
             -FilePath $PythonExecutable `
             -ArgumentList @(

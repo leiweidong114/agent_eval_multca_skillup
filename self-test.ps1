@@ -197,6 +197,14 @@ function Invoke-AgentEvalJson {
     $ProcessInfo.RedirectStandardError = $true
     $ProcessInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
     $ProcessInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+    foreach ($VariableName in @('PYTHONPATH', 'PYTHONHOME', 'PYTHONUSERBASE')) {
+        $ProcessInfo.Environment.Remove($VariableName)
+    }
+    $ProcessInfo.Environment['PYTHONNOUSERSITE'] = '1'
+    $ProcessInfo.Environment['PYTHONPATH'] = @(
+        (Join-Path $ProjectRoot 'backend\src'),
+        (Join-Path $ProjectRoot 'backend')
+    ) -join [IO.Path]::PathSeparator
 
     $Process = [System.Diagnostics.Process]::new()
     $Process.StartInfo = $ProcessInfo

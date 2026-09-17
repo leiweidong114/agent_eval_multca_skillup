@@ -44,6 +44,10 @@ if ($RequireConfiguration) {
 if ($failed) { throw 'Environment check failed.' }
 $python = Get-AgentEvalConfiguredPath -ProjectRoot $projectRoot -Name 'PYTHON_EXECUTABLE' -Default 'backend/.runtime/windows/python/Scripts/python.exe'
 Invoke-WithAgentEvalPythonIsolation {
+    $env:PYTHONPATH = @(
+        (Join-Path $projectRoot 'backend\src'),
+        (Join-Path $projectRoot 'backend')
+    ) -join [IO.Path]::PathSeparator
     Invoke-AgentEvalCommand -FilePath $python -WorkingDirectory (Join-Path $projectRoot 'backend') -ArgumentList @('-m', 'agent_eval.cli', 'doctor')
 }
 Write-Host 'ENVIRONMENT_DOCTOR_OK' -ForegroundColor Green
