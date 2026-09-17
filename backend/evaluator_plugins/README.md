@@ -5,5 +5,6 @@
 扫描和校验。
 
 - `schematic-default/`：三类原理图任务的公共默认评测插件。
+- `skill-default/`：普通 Skill 的默认评测插件；按 Skill 类型验证真实交付物结构，而不是只相信最终文本。
 - `../evaluator_plugins.example/`：只供复制参考，不会自动加载。
 - `../extensions/evaluators/`：本机或内网私有插件，默认不提交 Git。

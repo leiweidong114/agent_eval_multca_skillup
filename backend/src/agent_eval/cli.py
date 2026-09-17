@@ -600,7 +600,15 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         and (trace_key is None or trace_key_cleanup["status"] == "deleted")
         and (not verify_subagent or subagent_verification["verified"] is True)
     )
-    error_text = result.get("stderr") or (f"Detected error marker: {marker}" if marker else None)
+    diagnostic_parts = [
+        str(value).strip()
+        for value in (result.get("stderr"), process.stderr, process.stdout)
+        if str(value or "").strip()
+    ]
+    error_text = (
+        "\n".join(dict.fromkeys(diagnostic_parts))
+        or (f"Detected error marker: {marker}" if marker else None)
+    )
     failure = None if ok else describe_evaluation_failure(
         combined or str(error_text or "Agent connectivity check failed"),
         returncode=int(result.get("exit_code") or process.returncode or 1),

@@ -136,10 +136,16 @@ def resolve_evaluator(
     if evaluation_type not in {"skill", "schematic"}:
         raise ValueError(f"Unsupported evaluation_type: {evaluation_type}")
     environment = effective_environment(project_root)
-    selected = evaluator_id or str(environment.get(
-        "DEFAULT_SCHEMATIC_EVALUATOR" if evaluation_type == "schematic" else "DEFAULT_SKILL_EVALUATOR"
-    ) or ("schematic-default" if evaluation_type == "schematic" else "generic")).strip()
     plugins = _plugins(project_root)
+    configured = str(environment.get(
+        "DEFAULT_SCHEMATIC_EVALUATOR" if evaluation_type == "schematic" else "DEFAULT_SKILL_EVALUATOR"
+    ) or "").strip()
+    fallback = (
+        "schematic-default"
+        if evaluation_type == "schematic"
+        else ("skill-default" if "skill-default" in plugins else "generic")
+    )
+    selected = evaluator_id or configured or fallback
     if selected not in plugins:
         raise ValueError(f"Evaluator is not installed: {selected}")
     plugin = plugins[selected][0]

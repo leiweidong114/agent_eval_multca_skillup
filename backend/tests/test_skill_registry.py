@@ -1,9 +1,24 @@
 import io
 import zipfile
+from pathlib import Path
 
 import pytest
+import yaml
 
 import app.skill_registry as registry
+
+
+def test_all_bundled_eval_cases_have_skill_up_input_contract():
+    skills_root = Path(__file__).resolve().parents[1] / "skills"
+    cases = sorted(skills_root.glob("*/evals/cases/*.yaml"))
+
+    assert cases
+    for case_path in cases:
+        payload = yaml.safe_load(case_path.read_text(encoding="utf-8"))
+        assert isinstance(payload, dict), case_path
+        case_input = payload.get("input")
+        assert isinstance(case_input, dict), case_path
+        assert case_input.get("prompt") or case_input.get("turns"), case_path
 
 
 def bundle(files):

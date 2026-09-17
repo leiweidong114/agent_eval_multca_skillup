@@ -7,6 +7,7 @@ from verify_system import acceptance_checks
 parser = argparse.ArgumentParser(__doc__)
 parser.add_argument('directories', nargs='+', type=Path)
 parser.add_argument('--output', required=True, type=Path)
+parser.add_argument('--no-judge', action='store_true')
 args = parser.parse_args()
 rows = []
 for directory in args.directories:
@@ -16,7 +17,7 @@ for directory in args.directories:
         result = json.loads(file.read_text(encoding='utf-8'))
         if not result.get('agent'):
             continue
-        checks = acceptance_checks(result, 'evaluation')
+        checks = acceptance_checks(result, 'evaluation', require_judge=not args.no_judge)
         scoring = result.get('scoring') or {}
         weighted = sum(d['score'] * d['weights']['dimension'] for d in scoring.get('dimensions', {}).values() if d['score'] is not None)
         checks['score_math'] = abs(weighted - (scoring.get('overall_score') or 0)) < 0.011

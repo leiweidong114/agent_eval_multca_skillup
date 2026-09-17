@@ -1,12 +1,20 @@
 id: schematic-rationality-analysis-writer-smoke
-name: 原理图合理性分析写入链路
-prompt: >-
-  使用已安装的 schematic-rationality-analysis-writer Skill，生成一份明确标记为 synthetic test
-  的原理图质量指标，并真实调用 schematicRationalityAnalysis 接口写入当前会话。返回接口生成的
-  id、uuid 和 sessionId。
-expected:
-  required_skill_markers:
-    - schematic-rationality-analysis-writer
-  required_output_patterns:
+title: 原理图合理性分析写入链路
+description: 验证 Skill 生成结构化质量数据并写入合理性分析接口。
+input:
+  prompt: >-
+    使用已安装的 schematic-rationality-analysis-writer Skill，生成一份明确标记为 synthetic test
+    的原理图质量指标，并真实调用 schematicRationalityAnalysis 接口写入当前会话。返回接口生成的
+    id、uuid 和 sessionId。
+constraints:
+  timeout_seconds: 600
+  max_turns: 12
+expect:
+  exit_code: 0
+  output_contains:
     - status
     - stored
+judge:
+  type: rule_based
+  success:
+    - exit_code: 0

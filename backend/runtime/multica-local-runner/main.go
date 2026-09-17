@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -275,7 +276,14 @@ func installOpenclawSubagentGuidance(workspace string) error {
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_EVAL_REQUESTED_AGENT")), "justdo") {
 		return os.WriteFile(path, append(data, []byte(justdoNativeSubagentGuidanceTemplate)...), 0o644)
 	}
-	command := `openclaw agent exec --state-dir .agent-eval/subagent-state --cwd . --json "<complete subtask prompt>"`
+	// OpenClaw intentionally scrubs real provider secrets from exec-tool
+	// children. The generated config points at the evaluator's loopback proxy,
+	// which owns the real run-scoped key, so the child only needs a non-secret
+	// placeholder to resolve ${LITELLM_API_KEY} locally.
+	command := `LITELLM_API_KEY=agent-eval-loopback openclaw agent exec --state-dir .agent-eval/subagent-state --cwd . --json "<complete subtask prompt>"`
+	if runtime.GOOS == "windows" {
+		command = `set "LITELLM_API_KEY=agent-eval-loopback" && openclaw agent exec --state-dir .agent-eval/subagent-state --cwd . --json "<complete subtask prompt>"`
+	}
 	guidance := fmt.Sprintf(openclawSubagentGuidanceTemplate, command)
 	return os.WriteFile(path, append(data, []byte(guidance)...), 0o644)
 }
