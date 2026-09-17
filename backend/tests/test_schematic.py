@@ -49,7 +49,7 @@ def test_schematic_interaction_search_rejects_negative_offset():
     assert response.status_code == 422
 
 
-def test_schematic_conversation_list_forwards_single_turn_filter(monkeypatch):
+def test_schematic_conversation_list_forwards_single_turn_exclusion(monkeypatch):
     captured = {}
 
     def fake_search(_root, **kwargs):
@@ -62,7 +62,7 @@ def test_schematic_conversation_list_forwards_single_turn_filter(monkeypatch):
     client = TestClient(app)
     client.post("/api/auth/login", json={"employee_no": "schematic-user", "password": "x"})
 
-    response = client.get("/api/schematic/conversations?interaction_count=1")
+    response = client.get("/api/schematic/conversations?exclude_single_turn=true")
 
     assert response.status_code == 200
-    assert captured["interaction_count"] == 1
+    assert captured["exclude_single_turn"] is True

@@ -912,7 +912,7 @@ def search_conversations(
     end_user: str | None = None,
     session_id: str | None = None,
     model: str | None = None,
-    interaction_count: int | None = None,
+    exclude_single_turn: bool = False,
     source: str = "all",
     limit: int = 30,
     offset: int = 0,
@@ -923,8 +923,6 @@ def search_conversations(
     """Return root conversations in a bounded window; default to the latest 24 hours."""
     if offset < 0:
         raise ValueError("offset must be non-negative")
-    if interaction_count is not None and interaction_count < 1:
-        raise ValueError("interaction_count must be positive")
     if source not in {"all", "evaluation", "non_evaluation"}:
         raise ValueError("source must be all, evaluation or non_evaluation")
     window_start, window_end = conversation_time_window(start_time, end_time)
@@ -992,7 +990,7 @@ def search_conversations(
             continue
         if model and model not in conversation["models"]:
             continue
-        if interaction_count is not None and int(conversation.get("interaction_count") or 0) != interaction_count:
+        if exclude_single_turn and int(conversation.get("interaction_count") or 0) == 1:
             continue
         filtered.append(conversation)
     total = len(filtered)
@@ -1007,7 +1005,7 @@ def search_conversations(
             "end_user": end_user or None,
             "session_id": session_id or None,
             "model": model or None,
-            "interaction_count": interaction_count,
+            "exclude_single_turn": exclude_single_turn,
             "source": source,
             "start_time": window_start.isoformat(),
             "end_time": window_end.isoformat(),

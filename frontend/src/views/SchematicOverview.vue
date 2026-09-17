@@ -9,7 +9,7 @@
         <el-form-item label="LiteLLM End User"><el-select v-model="endUser" filterable clearable allow-create placeholder="全部 End User"><el-option v-for="item in filterOptions.end_users" :key="item" :label="item" :value="item"/></el-select></el-form-item>
         <el-form-item label="会话 ID"><el-input v-model="sessionId" clearable placeholder="主会话或 Subagent session_id" @keyup.enter="search()"/></el-form-item>
         <el-form-item label="模型"><el-select v-model="selectedModel" filterable clearable placeholder="全部模型"><el-option v-for="item in filterOptions.models" :key="item" :label="item" :value="item"/></el-select></el-form-item>
-        <el-form-item label="交互轮次"><el-button :type="singleTurnOnly?'primary':''" :plain="!singleTurnOnly" @click="toggleSingleTurn">仅一轮交互</el-button></el-form-item>
+        <el-form-item label="交互轮次"><el-button :type="hideSingleTurn?'primary':''" :plain="!hideSingleTurn" @click="toggleSingleTurn">隐藏单轮会话</el-button></el-form-item>
         <el-form-item label="检索"><el-button native-type="submit" type="primary" :loading="loading">搜索</el-button></el-form-item>
       </div></el-form>
       <p class="search-note">默认只查询最近 24 小时。数据按根会话分页，一个主 Agent 及其全部 Subagent 不会被拆分。<span v-if="data.scan_truncated"> 当前列表基于时间范围内最近 {{number(data.scanned_interactions)}} 次调用。</span></p>
@@ -68,7 +68,7 @@ import {ElMessage} from 'element-plus'
 import {fetchSchematicConversation,fetchSchematicConversations,fetchSchematicInteractionDetail,fetchSchematicInteractionFilters} from '../api'
 import InteractionDetailDialog from '../components/InteractionDetailDialog.vue'
 
-const endUser=ref(''),sessionId=ref(''),selectedModel=ref(''),singleTurnOnly=ref(false),source=ref('all'),loading=ref(false),detailLoading=ref(false),detailVisible=ref(false),selectedRoot=ref(''),detail=ref(null),detailView=ref('timeline'),interactionKeyword=ref(''),sessionPage=ref(1),sessionPageSize=ref(20),interactionDialogVisible=ref(false),selectedInteraction=ref(null),selectedInteractionIndex=ref(0)
+const endUser=ref(''),sessionId=ref(''),selectedModel=ref(''),hideSingleTurn=ref(true),source=ref('all'),loading=ref(false),detailLoading=ref(false),detailVisible=ref(false),selectedRoot=ref(''),detail=ref(null),detailView=ref('timeline'),interactionKeyword=ref(''),sessionPage=ref(1),sessionPageSize=ref(20),interactionDialogVisible=ref(false),selectedInteraction=ref(null),selectedInteractionIndex=ref(0)
 const timeRange=ref([new Date(Date.now()-24*60*60*1000),new Date()])
 const data=ref({total:0,conversations:[]}),filterOptions=ref({end_users:[],models:[]})
 const pageInteractions=computed(()=>(data.value.conversations||[]).reduce((sum,item)=>sum+Number(item.interaction_count||0),0))
@@ -76,9 +76,9 @@ const pageTokens=computed(()=>(data.value.conversations||[]).reduce((sum,item)=>
 const pageSubagents=computed(()=>(data.value.conversations||[]).reduce((sum,item)=>sum+Number(item.subagent_count||0),0))
 const filteredInteractions=computed(()=>{const rows=detail.value?.timeline||[],keyword=interactionKeyword.value.trim().toLocaleLowerCase();return keyword?rows.filter(item=>JSON.stringify(item).toLocaleLowerCase().includes(keyword)):rows})
 
-async function loadConversations(){if(loading.value)return;loading.value=true;try{data.value=await fetchSchematicConversations({end_user:endUser.value.trim()||undefined,session_id:sessionId.value.trim()||undefined,model:selectedModel.value||undefined,interaction_count:singleTurnOnly.value?1:undefined,source:source.value,limit:sessionPageSize.value,offset:(sessionPage.value-1)*sessionPageSize.value,start_time:timeRange.value?.[0]?.toISOString(),end_time:timeRange.value?.[1]?.toISOString()})}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{loading.value=false}}
+async function loadConversations(){if(loading.value)return;loading.value=true;try{data.value=await fetchSchematicConversations({end_user:endUser.value.trim()||undefined,session_id:sessionId.value.trim()||undefined,model:selectedModel.value||undefined,exclude_single_turn:hideSingleTurn.value||undefined,source:source.value,limit:sessionPageSize.value,offset:(sessionPage.value-1)*sessionPageSize.value,start_time:timeRange.value?.[0]?.toISOString(),end_time:timeRange.value?.[1]?.toISOString()})}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{loading.value=false}}
 async function search(){sessionPage.value=1;await loadConversations()}
-async function toggleSingleTurn(){singleTurnOnly.value=!singleTurnOnly.value;await search()}
+async function toggleSingleTurn(){hideSingleTurn.value=!hideSingleTurn.value;await search()}
 async function changeSessionPageSize(){sessionPage.value=1;await loadConversations()}
 async function openConversation(conversation){selectedRoot.value=conversation.root_session_id;detailVisible.value=true;detailLoading.value=true;detail.value=null;detailView.value='timeline';interactionKeyword.value='';try{detail.value=await fetchSchematicConversation(conversation.root_session_id,{start_time:timeRange.value?.[0]?.toISOString(),end_time:timeRange.value?.[1]?.toISOString()})}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{detailLoading.value=false}}
 async function openInteraction(item,index){if(!item.request_id)return;item._loading=true;try{if(!item.content_loaded)Object.assign(item,await fetchSchematicInteractionDetail(item.request_id),{content_loaded:true});selectedInteraction.value=item;selectedInteractionIndex.value=index+1;interactionDialogVisible.value=true}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{item._loading=false}}
