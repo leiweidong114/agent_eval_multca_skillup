@@ -92,6 +92,13 @@ def test_conversation_summary_uses_attribution_metadata_fallbacks():
     assert conversations[0]["models"] == ["glm-4.5-air"]
 
 
+def test_search_conversations_rejects_non_positive_interaction_count(tmp_path):
+    from agent_eval.database import search_conversations
+
+    with pytest.raises(ValueError, match="interaction_count"):
+        search_conversations(tmp_path, interaction_count=0)
+
+
 def test_fetch_interactions_paginates_past_500(monkeypatch, tmp_path):
     config = DatabaseConfig(
         enabled=True, host="db", port=5432, name="litellm", user="reader", password="x",

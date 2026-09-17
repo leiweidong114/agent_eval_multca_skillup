@@ -82,6 +82,7 @@ def conversation_list(
     end_user: str | None = None,
     session_id: str | None = None,
     model: str | None = None,
+    interaction_count: int | None = Query(None, ge=1),
     source: str = Query("all", pattern="^(all|evaluation|non_evaluation)$"),
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -90,6 +91,7 @@ def conversation_list(
 ) -> dict[str, Any]:
     key = cache_key("schematic-conversations-v2", {
         "end_user": end_user, "session_id": session_id, "model": model,
+        "interaction_count": interaction_count,
         "source": source, "limit": limit, "offset": offset,
         "start_time": start_time, "end_time": end_time,
     })
@@ -104,6 +106,7 @@ def conversation_list(
             end_user=end_user,
             session_id=session_id,
             model=model,
+            interaction_count=interaction_count,
             source=source,
             limit=limit,
             offset=offset,

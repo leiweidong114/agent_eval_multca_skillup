@@ -47,3 +47,22 @@ def test_schematic_interaction_search_rejects_negative_offset():
     client.post("/api/auth/login", json={"employee_no": "schematic-user", "password": "x"})
     response = client.get("/api/schematic/interactions?offset=-1")
     assert response.status_code == 422
+
+
+def test_schematic_conversation_list_forwards_single_turn_filter(monkeypatch):
+    captured = {}
+
+    def fake_search(_root, **kwargs):
+        captured.update(kwargs)
+        return {"status": "ok", "total": 0, "conversations": []}
+
+    monkeypatch.setattr("app.api.routes_schematic.get_cached_json", lambda _key: None)
+    monkeypatch.setattr("app.api.routes_schematic.set_cached_json", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("app.api.routes_schematic.search_conversations", fake_search)
+    client = TestClient(app)
+    client.post("/api/auth/login", json={"employee_no": "schematic-user", "password": "x"})
+
+    response = client.get("/api/schematic/conversations?interaction_count=1")
+
+    assert response.status_code == 200
+    assert captured["interaction_count"] == 1
