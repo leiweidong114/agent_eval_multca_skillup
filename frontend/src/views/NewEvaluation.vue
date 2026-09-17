@@ -138,7 +138,7 @@
     <el-card v-if="job" shadow="never" class="panel progress-panel">
       <div class="progress-head"><div><span class="eyebrow">RUN STATUS</span><h3>{{ job.phase || statusText(job.status) }}</h3><p>{{ job.message || '任务已提交，正在等待执行。' }}</p></div><el-tag :type="statusType(job.status)" size="large">{{ statusText(job.status) }}</el-tag></div>
       <el-progress :percentage="Number(job.progress || 0)" :status="job.status === 'failed' ? 'exception' : job.status === 'completed' ? 'success' : ''" />
-      <div v-if="resultId && resultRouteType !== 'question'" class="result-actions"><el-button type="primary" plain @click="openResult">{{isTerminal?'查看评测结果':'查看实时运行过程'}}</el-button><el-button v-if="running" type="danger" plain @click="cancelCurrentEvaluation">取消评测</el-button></div>
+      <div v-if="resultId && resultRouteType !== 'question'" class="result-actions"><el-button type="primary" plain @click="openResult">{{isTerminal?'查看评测结果':'查看实时运行过程'}}</el-button><el-button v-if="canPrioritizeCurrent" type="warning" plain @click="prioritizeCurrentEvaluation">插队评测</el-button><el-button v-if="running" type="danger" plain @click="cancelCurrentEvaluation">取消评测</el-button></div>
       <div v-else-if="resultId && running" class="result-actions"><el-button type="danger" plain @click="cancelCurrentEvaluation">取消评测</el-button></div>
       <div v-if="isTerminal" class="result-actions">
         <el-button v-if="resultRouteType === 'question'" type="primary" @click="openResult">查看评测结果</el-button>
@@ -153,7 +153,7 @@ import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } f
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Cpu, DataAnalysis, MagicStick } from '@element-plus/icons-vue'
-import { cancelBatch, cancelExperiment, cancelJob, fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModelConfig, fetchModels, fetchSettings, fetchSkillCases, fetchSkills, fetchSchematicTaskTypes, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun } from '../api'
+import { cancelBatch, cancelExperiment, cancelJob, fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModelConfig, fetchModels, fetchSettings, fetchSkillCases, fetchSkills, fetchSchematicTaskTypes, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun, prioritizeBatch, prioritizeJob } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -202,6 +202,12 @@ const availableAgents = computed(() => {
   return [direct, ...agents.value.filter(item => item.agent === 'codex')]
 })
 const isTerminal = computed(() => ['completed', 'partial_failed', 'failed', 'cancelled', 'canceled'].includes(job.value?.status))
+const canPrioritizeCurrent = computed(() => resultRouteType.value !== 'question' && (
+  job.value?.status === 'queued' || (
+    resultRouteType.value === 'batch' && job.value?.status === 'running' &&
+    (job.value?.results || []).some(item => item.status === 'queued')
+  )
+))
 const batchTargets = computed(() => {
   if (!form.batchMode) return form.agent && selectedModel.value ? [{ agent: form.agent, model: selectedModel.value.id, profile: selectedModel.value.profile }] : []
   return form.agents.flatMap(agent => selectedModels.value.map(model => ({ agent, model: model.id, profile: model.profile })))
@@ -292,6 +298,17 @@ async function pollExperiment(id) { try { const data = await fetchExperiment(id)
 function statusText(status) { return ({ queued: '排队中', running: '运行中', cancelling: '正在取消', completed: '已完成', partial_failed: '部分失败', failed: '失败', cancelled: '已取消', canceled: '已取消' })[status] || status || '准备中' }
 function statusType(status) { return status === 'completed' ? 'success' : status === 'failed' ? 'danger' : status?.includes('cancel') ? 'info' : 'warning' }
 function openResult() { router.push(`/results/${resultRouteType.value||form.type}/${resultId.value}`) }
+async function prioritizeCurrentEvaluation() {
+  try {
+    const result = resultRouteType.value === 'batch'
+      ? await prioritizeBatch(resultId.value)
+      : await prioritizeJob(resultId.value)
+    const count = Number(result?.prioritized_jobs)
+    ElMessage.success(resultRouteType.value === 'batch' ? `已将 ${count || 0} 个等待中的子任务移到队列前面` : '任务已移到等待队列前面')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || error.message)
+  }
+}
 async function cancelCurrentEvaluation() {
   try {
     await ElMessageBox.confirm(resultRouteType.value === 'batch' ? '将取消批次中所有尚未结束的评测，已完成结果会保留。' : '将终止当前评测，已经生成的运行文件会保留。', '确认取消评测', { type: 'warning', confirmButtonText: '取消评测', cancelButtonText: '继续运行' })

@@ -4,7 +4,7 @@ import json
 import os
 import threading
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +16,7 @@ from agent_eval.runner import (
 )
 from agent_eval.database import enrich_interaction_rows
 from app.config import BACKEND_ROOT, RUNS_ROOT
+from app.priority_executor import PriorityExecutor
 from agent_eval.failure import describe_evaluation_failure
 
 
@@ -29,10 +30,12 @@ class EvaluationJobManager:
         # Keep one top-level worker per Agent by default so unrelated Agents do
         # not wait for each other. Operators can still lower this on small hosts.
         self._max_workers = max(1, int(os.environ.get("AGENT_EVAL_WORKERS", "6")))
-        self._executor = ThreadPoolExecutor(
+        self._executor = PriorityExecutor(
             max_workers=self._max_workers,
             thread_name_prefix="agent-eval",
         )
+        self._futures: dict[str, Future[Any]] = {}
+        self._pending: dict[str, tuple[dict[str, Any], Path, threading.Event]] = {}
         self._state_dir = RUNS_ROOT / "_jobs"
         self._state_dir.mkdir(parents=True, exist_ok=True)
         self._batch_dir = RUNS_ROOT / "_batches"
@@ -92,7 +95,12 @@ class EvaluationJobManager:
             self._jobs[job_id] = job
             self._cancel[job_id] = cancel
             self._save(job)
-        self._executor.submit(self._run, job_id, request, skill_dir, cancel)
+        pending = (dict(request), skill_dir, cancel)
+        with self._lock:
+            self._pending[job_id] = pending
+        future = self._executor.submit(self._run, job_id, *pending)
+        with self._lock:
+            self._futures[job_id] = future
         return dict(job)
 
     def submit_batch(
@@ -234,6 +242,8 @@ class EvaluationJobManager:
                 return
 
     def _run(self, job_id: str, request: dict[str, Any], skill_dir: Path, cancel: threading.Event) -> None:
+        with self._lock:
+            self._pending.pop(job_id, None)
         self._update(
             job_id,
             status="running",
@@ -448,9 +458,64 @@ class EvaluationJobManager:
             if job["status"] not in {"queued", "running"}:
                 return dict(job)
             self._cancel[job_id].set()
-            job.update(status="cancelling", phase="cancelling", message="Cancellation requested")
+            future = self._futures.get(job_id)
+            cancelled_before_start = job["status"] == "queued" and future is not None and future.cancel()
+            if cancelled_before_start:
+                self._pending.pop(job_id, None)
+                job.update(
+                    status="cancelled", phase="cancelled", progress=0,
+                    message="Evaluation cancelled before it started",
+                )
+            else:
+                job.update(status="cancelling", phase="cancelling", message="Cancellation requested")
             self._save(job)
             return dict(job)
+
+    def prioritize(self, job_id: str) -> dict[str, Any] | None:
+        """Move a queued job ahead of normal-priority work without preempting running jobs."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            if job.get("status") != "queued":
+                raise ValueError("Only queued evaluations can be prioritized")
+            pending = self._pending.get(job_id)
+            future = self._futures.get(job_id)
+            if pending is None or future is None or not future.cancel():
+                raise ValueError("Evaluation has already started and cannot be prioritized")
+            request, skill_dir, cancel = pending
+            promoted = self._executor.submit(
+                self._run, job_id, request, skill_dir, cancel, queue_priority=0
+            )
+            self._futures[job_id] = promoted
+            job.update(
+                prioritized=True,
+                prioritized_at=datetime.now().isoformat(),
+                message="Prioritized; waiting for the next available worker",
+                updated_at=datetime.now().isoformat(),
+            )
+            self._save(job)
+            return dict(job)
+
+    def prioritize_batch(self, batch_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            batch = self._batches.get(batch_id)
+            if batch is None:
+                return None
+            job_ids = list(batch.get("job_ids") or [])
+            batch["prioritized_at"] = datetime.now().isoformat()
+            self._save_batch(batch)
+        prioritized_jobs = 0
+        for job_id in job_ids:
+            try:
+                job = self.prioritize(job_id)
+                prioritized_jobs += int(job is not None)
+            except ValueError:
+                continue
+        result = self.get_batch(batch_id)
+        if result is not None:
+            result["prioritized_jobs"] = prioritized_jobs
+        return result
 
     def cancel_batch(self, batch_id: str) -> dict[str, Any] | None:
         """Request cancellation for every queued or running job in a batch."""

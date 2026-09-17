@@ -11,6 +11,8 @@ def _manager_with_jobs(jobs: dict[str, dict]) -> EvaluationJobManager:
     manager = EvaluationJobManager.__new__(EvaluationJobManager)
     manager._lock = threading.RLock()
     manager._jobs = jobs
+    manager._futures = {}
+    manager._pending = {}
     manager._batches = {
         "batch-test": {
             "batch_id": "batch-test",
@@ -219,3 +221,47 @@ def test_cancel_batch_marks_each_active_job_and_batch_as_cancelling():
     finished = manager.get_batch("batch-test")
     assert finished is not None
     assert finished["status"] == "cancelled"
+
+
+def test_prioritized_job_runs_before_jobs_already_waiting_in_queue(monkeypatch, tmp_path):
+    started: list[str] = []
+    first_started = threading.Event()
+    release_first = threading.Event()
+
+    def fake_run_evaluation(**kwargs):
+        started.append(kwargs["agent"])
+        if kwargs["agent"] == "first":
+            first_started.set()
+            assert release_first.wait(2)
+        return {"status": "completed", "scores": {"overall_score": 1}}
+
+    monkeypatch.setenv("AGENT_EVAL_WORKERS", "1")
+    monkeypatch.setattr(job_manager_module, "RUNS_ROOT", tmp_path / "runs")
+    monkeypatch.setattr(job_manager_module, "BACKEND_ROOT", tmp_path)
+    monkeypatch.setattr(job_manager_module, "run_evaluation", fake_run_evaluation)
+    skill_dir = tmp_path / "skill"
+    skill_dir.mkdir()
+    manager = EvaluationJobManager()
+    try:
+        first = manager.submit({"agent": "first"}, skill_dir)
+        assert first_started.wait(1)
+        normal = manager.submit({"agent": "normal"}, skill_dir)
+        priority = manager.submit({"agent": "priority"}, skill_dir)
+
+        promoted = manager.prioritize(priority["job_id"])
+        assert promoted is not None
+        assert promoted["prioritized"] is True
+        release_first.set()
+
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if all(
+                manager.get(job["job_id"])["status"] == "completed"
+                for job in (first, normal, priority)
+            ):
+                break
+            time.sleep(0.02)
+        assert started == ["first", "priority", "normal"]
+    finally:
+        release_first.set()
+        manager._executor.shutdown(wait=True)

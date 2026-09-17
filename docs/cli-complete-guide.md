@@ -868,6 +868,7 @@ curl.exe --json $runBody "$API/run"
 | `GET /api/jobs?user_id=...` | 查看任务，可选按用户过滤 |
 | `GET /api/jobs/{job_id}` | 查询状态、进度、逐轮实时 `live_interactions` 和最终结果 |
 | `POST /api/jobs/{job_id}/cancel` | 请求取消任务 |
+| `POST /api/jobs/{job_id}/prioritize` | 将尚未开始的任务提升到等待队列最前面 |
 | `GET /api/runs?user_id=...` | 列出已经生成报告的运行 |
 | `GET /api/runs/{run_id}` | 读取完整 `evaluation-report.json` |
 
@@ -902,6 +903,7 @@ curl.exe "$API/runs/$RUN_ID"
 | `GET /api/batches?user_id=...` | 列出批次，可选按用户过滤 |
 | `GET /api/batches/{batch_id}` | 查询批次及其子任务状态 |
 | `POST /api/batches/{batch_id}/cancel` | 取消批次中所有尚未结束的子任务，保留已完成结果 |
+| `POST /api/batches/{batch_id}/prioritize` | 将批次中所有等待中的子任务提升到队列前面 |
 
 ```powershell
 $batchBody = @{

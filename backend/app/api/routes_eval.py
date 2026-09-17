@@ -280,12 +280,37 @@ def cancel_batch(batch_id: str, request: Request) -> dict[str, object]:
     return batch
 
 
+@router.post("/batches/{batch_id}/prioritize")
+def prioritize_batch(batch_id: str, request: Request) -> dict[str, object]:
+    existing = job_manager.get_batch(batch_id)
+    if existing is None or existing.get("user_id") != employee_from_request(request):
+        raise HTTPException(status_code=404, detail="Batch not found")
+    batch = job_manager.prioritize_batch(batch_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return batch
+
+
 @router.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str, request: Request) -> dict[str, object]:
     existing = job_manager.get(job_id)
     if existing is None or existing.get("user_id") != employee_from_request(request):
         raise HTTPException(status_code=404, detail="Job not found")
     job = job_manager.cancel(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@router.post("/jobs/{job_id}/prioritize")
+def prioritize_job(job_id: str, request: Request) -> dict[str, object]:
+    existing = job_manager.get(job_id)
+    if existing is None or existing.get("user_id") != employee_from_request(request):
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        job = job_manager.prioritize(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
