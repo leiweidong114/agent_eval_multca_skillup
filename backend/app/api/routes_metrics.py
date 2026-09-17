@@ -14,6 +14,7 @@ from app.metric_job_manager import metric_job_manager
 from app.metric_scheduler import metric_scheduler
 from app.metrics_store import MetricsStore, metrics_store_health
 from app.response_cache import response_cache_health
+from app.schematic_data_client import schematic_data_health
 
 
 router = APIRouter(prefix="/api/session-metrics", tags=["session-metrics"])
@@ -41,6 +42,7 @@ def health(request: Request) -> dict[str, Any]:
         "configuration": infrastructure_health(),
         "store": metrics_store_health(),
         "cache": response_cache_health(),
+        "schematic_data_api": schematic_data_health(),
         "scheduler": {"enabled": metric_scheduler.enabled},
     }
 

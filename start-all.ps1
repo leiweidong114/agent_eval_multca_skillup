@@ -136,7 +136,6 @@ if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot 'frontend\package.json'
 }
 
 New-Item -ItemType Directory -Path $RuntimeDirectory -Force | Out-Null
-& (Join-Path $ProjectRoot 'scripts\start-infrastructure-tunnel.ps1') -Quiet
 
 if (Test-Path -LiteralPath $StateFile) {
     try {
@@ -267,7 +266,6 @@ catch {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         }
     }
-    & (Join-Path $ProjectRoot 'scripts\stop-infrastructure-tunnel.ps1') -Quiet
     Write-Error $_
     Write-Host "Backend log:  $BackendStderr"
     Write-Host "Frontend log: $FrontendStderr"

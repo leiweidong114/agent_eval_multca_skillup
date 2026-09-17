@@ -168,7 +168,7 @@ class MetricJobManager:
                 if rationality_record is None:
                     result["schematic_rationality"] = {
                         "status": "not_found",
-                        "source_collection": "HDschematicRationalilyCollection",
+                        "source_collection": "HDschematicRationalityCollection",
                         "record_count": rationality_record_count,
                     }
                     with self._lock:
@@ -193,7 +193,7 @@ class MetricJobManager:
                             employee_no=str(job.get("user_id") or "") or None,
                         )
                         result["schematic_rationality"] = {
-                            "source_collection": "HDschematicRationalilyCollection",
+                            "source_collection": "HDschematicRationalityCollection",
                             "source_record_id": rationality_record.get("_id"),
                             "source_uuid": rationality_record.get("uuid"),
                             "source_create_time": rationality_record.get("createTime"),
@@ -214,7 +214,7 @@ class MetricJobManager:
                     except Exception as exc:
                         result["schematic_rationality"] = {
                             "status": "judge_unavailable",
-                            "source_collection": "HDschematicRationalilyCollection",
+                            "source_collection": "HDschematicRationalityCollection",
                             "source_record_id": rationality_record.get("_id"),
                             "source_uuid": rationality_record.get("uuid"),
                             "source_create_time": rationality_record.get("createTime"),
@@ -234,7 +234,7 @@ class MetricJobManager:
                 else:
                     result["schematic_rationality"] = {
                         "status": "judge_disabled",
-                        "source_collection": "HDschematicRationalilyCollection",
+                        "source_collection": "HDschematicRationalityCollection",
                         "source_record_id": rationality_record.get("_id"),
                         "source_uuid": rationality_record.get("uuid"),
                         "source_create_time": rationality_record.get("createTime"),
@@ -244,7 +244,7 @@ class MetricJobManager:
                     }
                 with self._lock:
                     job["phase"] = "saving_metrics"
-                    self._append_event(job, "saving_metrics", "正在写入 MongoDB 指标库", session_id=session_id)
+                    self._append_event(job, "saving_metrics", "正在写入本地 SQLite 指标库", session_id=session_id)
                     self._save(job, store)
                 store.upsert_metrics(result)
                 with self._lock:

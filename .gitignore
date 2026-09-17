@@ -17,6 +17,9 @@ backend/skills/.registry/
 backend/extensions/skills/
 backend/extensions/evaluators/
 backend/model_eval_data/
+backend/data/*.sqlite3
+backend/data/*.sqlite3-shm
+backend/data/*.sqlite3-wal
 frontend/vite.stdout.log
 frontend/vite.stderr.log
 

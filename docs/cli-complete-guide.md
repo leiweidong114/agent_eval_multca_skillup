@@ -1481,12 +1481,10 @@ curl.exe --noproxy "*" http://127.0.0.1:8631/api/auto_layout/devices
 curl.exe --noproxy "*" http://127.0.0.1:8631/api/schematicRationalityAnalysis/health
 ```
 
-第三个接口 `schematicRationalityAnalysis` 负责把原理图质量证据写入 MongoDB 集合
-`HDschematicRationalilyCollection`。它与评测系统共用 Nacos 中的 `mongodb.uri` 和
-`mongodb.database`；启动进程前需提供 `NACOS_SERVER_ADDR`、`NACOS_DATA_ID`、
-`NACOS_GROUP` 等引导变量，或显式设置 `SCHEMATIC_MONGODB_URI` 和
-`SCHEMATIC_MONGODB_DATABASE`。仓库不保存数据库密码。完整请求示例见自动布局项目的
-`auto_layout_service/docs/api_reference.md`。
+第三个接口 `schematicRationalityAnalysis` 负责产生原理图质量证据。评测系统不再
+直连 MongoDB，而是通过 `.env` 中的 `SCHEMATIC_DATA_API_BASE_URL` 加上
+`/schematic/schematicData/query` 查询 `HDschematicRationalityCollection`。完整配置见
+`docs/historical-session-metrics.md`。
 
 完整 HTTP 冒烟测试：
 
@@ -1724,31 +1722,24 @@ curl.exe "http://127.0.0.1:8000/api/schematic/interactions?end_user=local&sessio
 curl.exe "http://127.0.0.1:8000/api/runs/RUN_ID/interactions?page=1&page_size=20&search=sessions_spawn"
 ```
 
-## 29. 历史会话指标、Nacos、MongoDB 与 Redis
+## 29. 历史会话指标、SQLite 与 TTL/LRU
 
-原理图总览、会话详情默认只查询最近 24 小时。MongoDB 保存按 `session_id` 计算的会话指标，Redis 只缓存列表和详情；Redis 不可用时自动回源 LiteLLM PostgreSQL。
+原理图总览、会话详情默认只查询最近 24 小时。衍生指标和任务保存在项目内 SQLite；页面查询使用后端进程内 TTL/LRU。系统不需要 Nacos、Redis、MongoDB 驱动或基础设施 SSH 隧道。
 
-正常启动会自动建立本地到阿里云基础设施的 SSH 隧道：
+正常启动前后端：
 
 ```powershell
 .\start-all.ps1
 ```
 
-也可以单独管理隧道：
-
-```powershell
-.\scripts\start-infrastructure-tunnel.ps1
-.\scripts\stop-infrastructure-tunnel.ps1
-```
-
-检查 Nacos、MongoDB、Redis、自动指标任务状态：
+检查 SQLite、TTL/LRU、外部原理图数据查询接口和自动指标任务状态：
 
 ```powershell
 curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/health"
 curl.exe -b cookies.txt -X POST "http://127.0.0.1:8000/api/session-metrics/scheduler/run"
 ```
 
-基础设施凭据位于被 Git 忽略的 `.env`、`.secrets/` 和服务器 `/opt/agent-eval-infra/.env`，不要写入命令文档或提交仓库。
+外部接口的服务器地址位于被 Git 忽略的 `.env`，不要把内网地址或鉴权信息提交仓库。
 
 ## 30. 本机或局域网远程调用 JustDo
 

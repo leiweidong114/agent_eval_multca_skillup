@@ -57,30 +57,20 @@ def test_text_source_uses_only_judge_extracted_metrics(monkeypatch):
     assert result["metrics"] == {"warning_count": 2}
 
 
-class FakeCollection:
-    def __init__(self, value):
-        self.value = value
-        self.count_query = None
-        self.find_query = None
-
-    def count_documents(self, query):
-        self.count_query = query
-        return 1
-
-    def find_one(self, query, sort=None):
-        self.find_query = query
-        return dict(self.value)
+class FakeDataClient:
+    def find_rationality_records(self, identifiers):
+        assert identifiers == ["root-session", "run-42"]
+        return [{
+            "_id": "mongo-1",
+            "sessionId": "run-42",
+            "status": "completed",
+            "resultText": "{}",
+        }]
 
 
-def test_store_can_join_rationality_record_by_evaluation_run_id():
+def test_store_can_join_rationality_record_by_evaluation_run_id(monkeypatch):
+    monkeypatch.setattr("app.metrics_store.SchematicDataClient", FakeDataClient)
     store = MetricsStore.__new__(MetricsStore)
-    collection = FakeCollection({
-        "_id": "mongo-1",
-        "sessionId": "run-42",
-        "status": "completed",
-        "resultText": "{}",
-    })
-    store._rationality = collection
 
     record, count, matched_by = store.latest_rationality_analysis(
         "root-session", correlation_ids=["run-42"]
@@ -89,4 +79,3 @@ def test_store_can_join_rationality_record_by_evaluation_run_id():
     assert count == 1
     assert record["_id"] == "mongo-1"
     assert matched_by == "evaluation_run_id"
-    assert collection.count_query == {"sessionId": {"$in": ["root-session", "run-42"]}}
