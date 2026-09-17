@@ -14,6 +14,7 @@ from agent_eval.runner import (
     EvaluationInfrastructureError,
     run_evaluation,
 )
+from agent_eval.database import enrich_interaction_rows
 from app.config import BACKEND_ROOT, RUNS_ROOT
 from agent_eval.failure import describe_evaluation_failure
 
@@ -43,6 +44,7 @@ class EvaluationJobManager:
                     job.update(status="interrupted", message="Service restarted during evaluation")
                 job.setdefault("events", [])
                 job.setdefault("event_seq", len(job["events"]))
+                job.setdefault("live_interactions", [])
                 self._jobs[job["job_id"]] = job
             except (OSError, ValueError, KeyError):
                 continue
@@ -80,13 +82,13 @@ class EvaluationJobManager:
             "task_name": request.get("task_name") or skill_dir.name,
             "model": request.get("model"), "profile": request.get("profile"),
             "result": None, "error": None, "events": [], "event_seq": 0,
+            "live_interactions": [],
         }
         cancel = threading.Event()
         with self._lock:
             self._jobs[job_id] = job
             self._cancel[job_id] = cancel
             self._save(job)
-        self._append_event(job_id, "phase", "任务已进入评测队列", phase="queued")
         self._executor.submit(self._run, job_id, request, skill_dir, cancel)
         return dict(job)
 
@@ -142,6 +144,39 @@ class EvaluationJobManager:
             events.append(event)
             job["events"] = events[-1000:]
             job["updated_at"] = event["timestamp"]
+            self._save(job)
+
+    def _upsert_live_interaction(self, job_id: str, interaction: dict[str, Any]) -> None:
+        """Store one complete LiteLLM turn, replacing partial snapshots in place."""
+        request_id = str(interaction.get("request_id") or "").strip()
+        fallback = "|".join(str(interaction.get(name) or "") for name in (
+            "session_id", "start_time", "model_group", "model"
+        ))
+        identity = request_id or fallback
+        if not identity.strip("|"):
+            return
+        with self._lock:
+            job = self._jobs[job_id]
+            rows = [dict(item) for item in job.get("live_interactions") or []]
+            replaced = False
+            for index, item in enumerate(rows):
+                item_identity = str(item.get("request_id") or "").strip() or "|".join(
+                    str(item.get(name) or "") for name in (
+                        "session_id", "start_time", "model_group", "model"
+                    )
+                )
+                if item_identity == identity:
+                    rows[index] = dict(interaction)
+                    replaced = True
+                    break
+            if not replaced:
+                rows.append(dict(interaction))
+            rows.sort(key=lambda item: (
+                str(item.get("start_time") or ""), str(item.get("request_id") or "")
+            ))
+            enrich_interaction_rows(rows)
+            job["live_interactions"] = rows
+            job["updated_at"] = datetime.now().isoformat()
             self._save(job)
 
     @staticmethod
@@ -203,22 +238,18 @@ class EvaluationJobManager:
             progress=1,
             started_at=datetime.now().isoformat(),
         )
-        self._append_event(job_id, "phase", "评测 Worker 已启动", phase="preparing")
-
         def on_progress(phase: str, percent: int, message: str) -> None:
             self._update(job_id, phase=phase, progress=percent, message=message)
 
         def on_event(kind: str, content: str) -> None:
-            self._append_event(job_id, kind, content)
-
-        monitor_stop = threading.Event()
-        monitor = threading.Thread(
-            target=self._monitor_transcripts,
-            args=(job_id, monitor_stop),
-            name=f"agent-eval-trace-{job_id[:8]}",
-            daemon=True,
-        )
-        monitor.start()
+            if kind != "model_interaction":
+                return
+            try:
+                interaction = json.loads(content)
+            except ValueError:
+                return
+            if isinstance(interaction, dict):
+                self._upsert_live_interaction(job_id, interaction)
 
         try:
             result = run_evaluation(
@@ -280,9 +311,6 @@ class EvaluationJobManager:
                 message=(failure or {}).get("detail") or "Evaluation failed",
                 error=(failure or {}).get("detail") or str(exc), failure=failure,
             )
-        finally:
-            monitor_stop.set()
-            monitor.join(timeout=2)
 
     def list(self, user_id: str | None = None) -> list[dict[str, Any]]:
         with self._lock:
@@ -293,7 +321,7 @@ class EvaluationJobManager:
                 scoring = result.get("scoring") if isinstance(result.get("scoring"), dict) else {}
                 summary = {
                     key: value for key, value in item.items()
-                    if key not in {"events", "result"}
+                    if key not in {"events", "live_interactions", "result"}
                 }
                 summary.update({
                     "event_count": len(item.get("events") or []),

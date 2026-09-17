@@ -96,3 +96,31 @@ def test_transcript_messages_expose_model_and_tool_interactions():
     assert events[0][:2] == ("assistant", "I will inspect the file.")
     assert events[1][0] == "tool_call"
     assert events[1][2]["tool"] == "read_file"
+
+
+def test_live_interaction_updates_one_turn_in_place():
+    manager = _manager_with_jobs({"job": {"job_id": "job", "live_interactions": []}})
+    manager._save = lambda _job: None
+    request = {
+        "request_id": "request-1",
+        "start_time": "2026-09-17T09:00:00",
+        "status": "started",
+        "model_group": "glm-4.5-air",
+        "proxy_server_request": {"messages": [{"role": "user", "content": "hi"}]},
+    }
+    response = {
+        **request,
+        "status": "success",
+        "total_tokens": 12,
+        "response": {"choices": [{"message": {"role": "assistant", "content": "hello"}}]},
+    }
+
+    manager._upsert_live_interaction("job", request)
+    manager._upsert_live_interaction("job", response)
+
+    rows = manager.get("job")["live_interactions"]
+    assert len(rows) == 1
+    assert rows[0]["request_id"] == "request-1"
+    assert rows[0]["status"] == "success"
+    assert rows[0]["turn_index"] == 1
+    assert rows[0]["total_tokens"] == 12

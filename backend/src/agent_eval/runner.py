@@ -20,6 +20,7 @@ import yaml
 from agent_eval.codebuddy_proxy import CodeBuddyCompatibilityProxy
 from agent_eval.database import (
     database_health,
+    enrich_interaction_rows,
     fetch_model_interactions,
     wait_for_model_interactions,
     summarize_model_interactions,
@@ -701,6 +702,7 @@ def run_evaluation(
                         model=provider_model,
                         key_alias=trace_key.alias,
                     )
+                    enrich_interaction_rows(live_rows)
                     for row in live_rows:
                         identity = (
                             str(row.get("request_id") or ""),
@@ -710,18 +712,10 @@ def run_evaluation(
                         if identity in seen:
                             continue
                         seen.add(identity)
-                        request_content = row.get("messages") or row.get("proxy_server_request")
-                        response_content = row.get("response")
-                        if request_content:
-                            event_callback(
-                                "model_request",
-                                json.dumps(request_content, ensure_ascii=False, default=str),
-                            )
-                        if response_content:
-                            event_callback(
-                                "model_response",
-                                json.dumps(response_content, ensure_ascii=False, default=str),
-                            )
+                        event_callback(
+                            "model_interaction",
+                            json.dumps(row, ensure_ascii=False, default=str),
+                        )
                 except Exception:
                     # Live display is best effort; final trace collection remains authoritative.
                     pass
