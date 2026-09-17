@@ -69,6 +69,23 @@ class SchematicDataClient:
         size: int | None = None,
         use_cache: bool = True,
     ) -> tuple[list[dict[str, Any]], int | None]:
+        payload = self.query_payload(
+            collection_name=collection_name,
+            page=page,
+            size=size,
+            use_cache=use_cache,
+        )
+        return _records(payload)
+
+    def query_payload(
+        self,
+        *,
+        collection_name: str,
+        page: int = 1,
+        size: int | None = None,
+        use_cache: bool = True,
+    ) -> Any:
+        """Return the Java query API JSON without changing its response envelope."""
         actual_size = size or self.settings.schematic_data_query_page_size
         params = {"collectionName": collection_name, "page": page, "size": actual_size}
         key = cache_key("schematic-data-query", {"url": self.query_url, **params})
@@ -86,7 +103,7 @@ class SchematicDataClient:
             except (httpx.HTTPError, ValueError) as exc:
                 raise InfrastructureConfigurationError(f"原理图数据查询接口调用失败: {exc}") from exc
             set_cached_json(key, payload, ttl_seconds=self.settings.cache_default_ttl_seconds)
-        return _records(payload)
+        return payload
 
     def find_rationality_records(self, identifiers: Iterable[str]) -> list[dict[str, Any]]:
         expected = {str(item) for item in identifiers if str(item)}

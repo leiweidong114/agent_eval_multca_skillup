@@ -420,6 +420,10 @@ sh backend/scripts/setup_linux.sh
 
 Linux 使用同版本 Multica、Skill-Up 和 Go，产物保存在 `backend/.runtime/linux`、`backend/.tools/linux`。整个项目目录可迁移，但 Windows 与 Linux 的本地二进制目录彼此独立；在目标系统首次运行对应的 setup 脚本即可。
 
+完全离线安装使用 GitHub Release 中的 Linux x64 portable runtime，并执行
+`sh ./install_linux.sh --release-root <解压目录>`。制作、内容与校验说明见
+[`docs/linux-offline-migration.md`](docs/linux-offline-migration.md)。
+
 一键启动和停止 Linux 前后端（自动选择空闲端口）：
 
 ```sh

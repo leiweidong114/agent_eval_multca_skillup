@@ -37,14 +37,15 @@ def test_openapi_schema_is_available():
 
 
 def test_cli_subprocess_environment_includes_current_source_tree(monkeypatch):
-    monkeypatch.setenv("PYTHONPATH", "D:\\stale-copy\\backend\\src")
+    stale_source = str(BACKEND.parent / "stale-copy" / "backend" / "src")
+    monkeypatch.setenv("PYTHONPATH", stale_source)
 
     environment = _cli_subprocess_environment()
     entries = environment["PYTHONPATH"].split(os.pathsep)
 
     assert entries[0] == str(BACKEND / "src")
     assert entries[1] == str(BACKEND)
-    assert entries[2] == "D:\\stale-copy\\backend\\src"
+    assert entries[2] == stale_source
 
 
 def test_health_and_discovery_endpoints(monkeypatch):
