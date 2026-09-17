@@ -901,6 +901,7 @@ curl.exe "$API/runs/$RUN_ID"
 | `POST /api/batches` | 创建多 Agent/模型比较批次 |
 | `GET /api/batches?user_id=...` | 列出批次，可选按用户过滤 |
 | `GET /api/batches/{batch_id}` | 查询批次及其子任务状态 |
+| `POST /api/batches/{batch_id}/cancel` | 取消批次中所有尚未结束的子任务，保留已完成结果 |
 
 ```powershell
 $batchBody = @{

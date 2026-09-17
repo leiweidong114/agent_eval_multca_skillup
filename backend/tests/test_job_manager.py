@@ -186,3 +186,36 @@ def test_batch_runs_in_parallel_and_one_failure_does_not_cancel_others(
         ]
     finally:
         manager._executor.shutdown(wait=True)
+
+
+def test_cancel_batch_marks_each_active_job_and_batch_as_cancelling():
+    manager = _manager_with_jobs(
+        {
+            "running": {"job_id": "running", "status": "running", "progress": 20},
+            "queued": {"job_id": "queued", "status": "queued", "progress": 0},
+            "completed": {"job_id": "completed", "status": "completed", "progress": 100},
+        }
+    )
+    manager._cancel = {
+        "running": threading.Event(),
+        "queued": threading.Event(),
+        "completed": threading.Event(),
+    }
+    manager._save = lambda _job: None
+    manager._save_batch = lambda _batch: None
+
+    batch = manager.cancel_batch("batch-test")
+
+    assert batch is not None
+    assert batch["status"] == "cancelling"
+    assert manager.get("running")["status"] == "cancelling"
+    assert manager.get("queued")["status"] == "cancelling"
+    assert manager.get("completed")["status"] == "completed"
+    assert manager._cancel["running"].is_set()
+    assert manager._cancel["queued"].is_set()
+
+    manager._jobs["running"]["status"] = "cancelled"
+    manager._jobs["queued"]["status"] = "cancelled"
+    finished = manager.get_batch("batch-test")
+    assert finished is not None
+    assert finished["status"] == "cancelled"

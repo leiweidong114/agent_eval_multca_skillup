@@ -431,6 +431,22 @@ def test_batch_queues_unique_agent_model_combinations(monkeypatch):
     assert {item["user_id"] for item in captured["requests"]} == {"test-worker"}
 
 
+def test_batch_cancel_endpoint_cancels_owned_batch(monkeypatch):
+    monkeypatch.setattr(
+        "app.api.routes_eval.job_manager.get_batch",
+        lambda batch_id: {"batch_id": batch_id, "user_id": "test-worker", "status": "running"},
+    )
+    monkeypatch.setattr(
+        "app.api.routes_eval.job_manager.cancel_batch",
+        lambda batch_id: {"batch_id": batch_id, "user_id": "test-worker", "status": "cancelling"},
+    )
+
+    response = client.post("/api/batches/batch-test/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelling"
+
+
 def test_model_profile_api_keeps_api_keys_out_of_responses(tmp_path, monkeypatch):
     config = tmp_path / "config"
     config.mkdir()

@@ -269,6 +269,17 @@ def get_batch(batch_id: str, request: Request) -> dict[str, object]:
     return batch
 
 
+@router.post("/batches/{batch_id}/cancel")
+def cancel_batch(batch_id: str, request: Request) -> dict[str, object]:
+    existing = job_manager.get_batch(batch_id)
+    if existing is None or existing.get("user_id") != employee_from_request(request):
+        raise HTTPException(status_code=404, detail="Batch not found")
+    batch = job_manager.cancel_batch(batch_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return batch
+
+
 @router.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str, request: Request) -> dict[str, object]:
     existing = job_manager.get(job_id)
