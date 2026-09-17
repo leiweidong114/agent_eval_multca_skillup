@@ -170,8 +170,8 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
     )
     for task_type, task_profile in profiles.items():
         profile_skills = task_profile["skills"]
-        if not profile_skills or len(profile_skills) > 8:
-            raise ValueError(f"{task_type}.skills must contain 1 to 8 Skill identifiers")
+        if not profile_skills:
+            raise ValueError(f"{task_type}.skills must contain at least one Skill identifier")
         if any(
             len(item) > 300 or any(char in item for char in "\r\n\0")
             for item in profile_skills
@@ -184,8 +184,8 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
     if not isinstance(raw_skills, list) or not raw_skills:
         raise ValueError("schematic_skills is required")
     schematic_skills = list(dict.fromkeys(str(item).strip() for item in raw_skills if str(item).strip()))
-    if not schematic_skills or len(schematic_skills) > 8:
-        raise ValueError("schematic_skills must contain 1 to 8 Skill identifiers")
+    if not schematic_skills:
+        raise ValueError("schematic_skills must contain at least one Skill identifier")
     if any(len(item) > 300 or any(char in item for char in "\r\n\0") for item in schematic_skills):
         raise ValueError("Invalid schematic_skills")
     settings["schematic_skills"] = schematic_skills

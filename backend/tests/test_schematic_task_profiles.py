@@ -39,3 +39,22 @@ def test_web_settings_persist_all_three_schematic_task_profiles(tmp_path):
     environment = load_root_env(backend)
     assert environment["SCHEMATIC_TASK_PROFILES_JSON"]
     assert load_runtime_settings(backend)["schematic_task_profiles"] == profiles
+
+
+def test_schematic_profile_skill_count_has_no_artificial_upper_limit(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    many_skills = [f"skill-{index}" for index in range(1, 33)]
+    profiles = {
+        task_type: {"skills": list(many_skills), "evaluator_id": "schematic-default"}
+        for task_type in SCHEMATIC_TASK_TYPES
+    }
+
+    saved = save_runtime_settings(backend, {
+        "judge_model": "judge",
+        "agent_test_model": "agent",
+        "schematic_task_profiles": profiles,
+    })
+
+    assert saved["schematic_task_profiles"]["block_to_schematic"]["skills"] == many_skills
+    assert load_runtime_settings(backend)["schematic_task_profiles"]["block_to_schematic"]["skills"] == many_skills
