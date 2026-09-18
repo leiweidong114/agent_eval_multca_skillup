@@ -36,6 +36,98 @@ REQUIRED_SPEND_LOG_COLUMNS = (
 )
 
 
+def database_content_issues(spend_format: dict[str, Any]) -> list[dict[str, Any]]:
+    """Describe whether recent SpendLogs can drive trace verification and the UI.
+
+    Only aggregate counts and key names are inspected. Prompt, response and metadata
+    values are deliberately excluded from this diagnostic path.
+    """
+    if not spend_format.get("exists") or not spend_format.get("selectable"):
+        return []
+    sample = spend_format.get("latest_sample") or {}
+    sampled_rows = int(sample.get("sampled_rows") or 0)
+    issues: list[dict[str, Any]] = []
+    if sampled_rows == 0:
+        return [{
+            "severity": "error",
+            "category": "database_trace_table_empty",
+            "summary": "LiteLLM_SpendLogs contains no interactions",
+            "detail": (
+                "The database connection and schema work, but there are no rows for model "
+                "verification, the schematic overview, or conversation details."
+            ),
+            "suggested_action": (
+                "Confirm that LiteLLM writes to this same PostgreSQL database, make one real "
+                "model call, then rerun self-test.ps1 -Strict."
+            ),
+            "configuration_changes": [],
+        }]
+
+    def missing(field: str) -> bool:
+        return int(sample.get(field) or 0) == 0
+
+    if missing("model_rows"):
+        issues.append({
+            "severity": "error",
+            "category": "database_model_content_missing",
+            "summary": "Recent SpendLogs rows contain no model identity",
+            "detail": "Model attribution and model filters cannot work without model values.",
+            "suggested_action": "Check LiteLLM spend-log writing and the database migration version.",
+            "configuration_changes": [],
+        })
+    if missing("messages_rows"):
+        issues.append({
+            "severity": "warning",
+            "category": "database_messages_content_missing",
+            "summary": "Recent SpendLogs rows contain no stored input messages",
+            "detail": "The UI can list calls, but cannot reconstruct System/History/User input.",
+            "suggested_action": "Check LiteLLM content logging and privacy/redaction settings.",
+            "configuration_changes": [],
+        })
+    if missing("response_rows"):
+        issues.append({
+            "severity": "warning",
+            "category": "database_response_content_missing",
+            "summary": "Recent SpendLogs rows contain no stored model responses",
+            "detail": "The UI can list calls, but cannot display model output.",
+            "suggested_action": "Check LiteLLM content logging and privacy/redaction settings.",
+            "configuration_changes": [],
+        })
+    if missing("session_rows"):
+        issues.append({
+            "severity": "warning",
+            "category": "database_session_content_missing",
+            "summary": "Recent SpendLogs rows contain no session_id",
+            "detail": "Calls cannot be grouped reliably into multi-turn Agent sessions.",
+            "suggested_action": (
+                "Confirm that the Agent adapter sends session_id in the request body or metadata."
+            ),
+            "configuration_changes": [],
+        })
+    if missing("end_user_rows"):
+        issues.append({
+            "severity": "warning",
+            "category": "database_end_user_content_missing",
+            "summary": "Recent SpendLogs rows contain no end_user",
+            "detail": "The schematic overview cannot filter these interactions by employee/user.",
+            "suggested_action": (
+                "Confirm that gateway requests include LiteLLM end_user/user and that the "
+                "Agent adapter forwards the configured employee number."
+            ),
+            "configuration_changes": [],
+        })
+    if missing("token_rows"):
+        issues.append({
+            "severity": "warning",
+            "category": "database_token_content_missing",
+            "summary": "Recent SpendLogs rows contain no positive token totals",
+            "detail": "Token statistics in overview and evaluation reports will be incomplete.",
+            "suggested_action": "Confirm that the upstream provider returns usage and LiteLLM stores it.",
+            "configuration_changes": [],
+        })
+    return issues
+
+
 def _json_safe(value: Any) -> Any:
     if isinstance(value, (date, datetime)):
         return value.isoformat()
@@ -366,7 +458,8 @@ def audit_database_schema(
                             cursor.execute("""
                                 with sample as (
                                     select metadata, proxy_server_request, messages, response,
-                                           status, call_type
+                                           status, call_type, "startTime", session_id, model,
+                                           end_user, total_tokens
                                     from "LiteLLM_SpendLogs"
                                     order by "startTime" desc limit 1000
                                 )
@@ -374,7 +467,13 @@ def audit_database_schema(
                                        count(*) filter (where metadata is not null) as metadata_rows,
                                        count(*) filter (where proxy_server_request is not null) as proxy_rows,
                                        count(*) filter (where messages is not null) as messages_rows,
-                                       count(*) filter (where response is not null) as response_rows
+                                       count(*) filter (where response is not null) as response_rows,
+                                       count(*) filter (where session_id is not null and session_id <> '') as session_rows,
+                                       count(*) filter (where model is not null and model <> '') as model_rows,
+                                       count(*) filter (where end_user is not null and end_user <> '') as end_user_rows,
+                                       count(*) filter (where coalesce(total_tokens, 0) > 0) as token_rows,
+                                       min("startTime") as oldest_sample_time,
+                                       max("startTime") as latest_sample_time
                                 from sample
                             """)
                             spend_format["latest_sample"] = dict(cursor.fetchone() or {})
@@ -441,16 +540,7 @@ def audit_database_schema(
         issues = list(comparison["issues"])
         spend_format = inspected["inventory"].get("spend_log_format") or {}
         if spend_format.get("exists") and spend_format.get("selectable"):
-            sample = spend_format.get("latest_sample") or {}
-            if int(sample.get("sampled_rows") or 0) == 0:
-                issues.append({
-                    "severity": "warning",
-                    "category": "database_trace_table_empty",
-                    "summary": "LiteLLM_SpendLogs contains no sampled interactions",
-                    "detail": "Schema is compatible, but model attribution cannot be proven without logs.",
-                    "suggested_action": "Enable LiteLLM spend logging, make one model call, and rerun self-test.ps1 -Strict.",
-                    "configuration_changes": [],
-                })
+            issues.extend(database_content_issues(spend_format))
             if not spend_format.get("required_query_compatible"):
                 issues.append({
                     "severity": "error",

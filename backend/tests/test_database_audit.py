@@ -1,4 +1,4 @@
-from agent_eval.database_audit import compare_database_schema
+from agent_eval.database_audit import compare_database_schema, database_content_issues
 
 
 def _table(*, selectable=True, columns=None, indexes=None):
@@ -56,3 +56,55 @@ def test_schema_comparison_reports_column_permission_and_index_differences():
     difference = result["table_differences"][0]
     assert difference["missing_columns"] == ["model"]
     assert difference["missing_indexes"] == ["required_idx"]
+
+
+def test_database_content_reports_empty_trace_table_as_error():
+    issues = database_content_issues({
+        "exists": True,
+        "selectable": True,
+        "latest_sample": {"sampled_rows": 0},
+    })
+
+    assert issues[0]["severity"] == "error"
+    assert issues[0]["category"] == "database_trace_table_empty"
+
+
+def test_database_content_reports_missing_ui_and_attribution_fields():
+    issues = database_content_issues({
+        "exists": True,
+        "selectable": True,
+        "latest_sample": {
+            "sampled_rows": 10,
+            "model_rows": 10,
+            "messages_rows": 0,
+            "response_rows": 0,
+            "session_rows": 0,
+            "end_user_rows": 0,
+            "token_rows": 0,
+        },
+    })
+
+    assert {item["category"] for item in issues} == {
+        "database_messages_content_missing",
+        "database_response_content_missing",
+        "database_session_content_missing",
+        "database_end_user_content_missing",
+        "database_token_content_missing",
+    }
+    assert all(item["severity"] == "warning" for item in issues)
+
+
+def test_database_content_is_ready_when_required_recent_values_exist():
+    assert database_content_issues({
+        "exists": True,
+        "selectable": True,
+        "latest_sample": {
+            "sampled_rows": 10,
+            "model_rows": 10,
+            "messages_rows": 10,
+            "response_rows": 10,
+            "session_rows": 10,
+            "end_user_rows": 10,
+            "token_rows": 10,
+        },
+    }) == []

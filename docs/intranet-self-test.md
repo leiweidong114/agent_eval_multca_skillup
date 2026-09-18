@@ -6,8 +6,9 @@
 2. 根目录 `.env` 的必要配置（报告不保存密码或 Key）；
 3. LiteLLM 模型目录和指定模型的真实推理；
 4. PostgreSQL 连接、完整表/字段/索引清单及 `LiteLLM_SpendLogs` 只读权限；
-5. 本机 Agent 发现和真实 `Agent + 模型 + Prompt` 调用；
-6. 可选的临时 Trace Key、数据库归因和指定模型严格核验。
+5. 最近最多 1000 条数据库记录的内容可用性：模型、会话 ID、输入消息、模型响应和 Token；
+6. 本机 Agent 发现和真实 `Agent + 模型 + Prompt` 调用；
+7. 可选的临时 Trace Key、数据库归因和指定模型严格核验。
 
 ## 基本用法
 
@@ -111,6 +112,21 @@ backend/.runtime/self-test/<时间>/
 - `metadata` 与 `proxy_server_request.metadata` 的键名和出现次数，不包含值；
 - 相对当前环境基线缺少/新增/类型变化的字段以及缺少的索引；
 - 是否能够执行评测系统实际使用的 JSON 操作符和查询字段。
+
+数据库检查会明确区分以下情况：
+
+- 连接失败：网络、端口、TLS、账号或密码问题；
+- 能连接但没有表：连接到了错误数据库，或 LiteLLM migration 未执行；
+- 有表但没有 SELECT 权限：数据库账号权限不足；
+- 表结构不兼容：LiteLLM 服务和数据库 migration 版本不一致；
+- 表为空：LiteLLM 没有向该数据库写日志，原理图总览和模型归因不可用；
+- 有记录但缺少 `session_id`：无法可靠合并多轮会话；
+- 有记录但缺少 `end_user`：原理图总览无法按工号/用户筛选；
+- 有记录但缺少 `messages` / `response`：页面能列出调用，但无法显示完整交互；
+- 有记录但 Token 为零：上游没有返回 usage，或 LiteLLM 未保存 usage。
+
+`self-test-summary.txt` 会列出每个检查步骤的 `OK / DONE / FAILED`、耗时和问题处理建议；
+每个命令的原始脱敏 JSON 与 stderr 仍单独保存在同一报告目录中，便于继续定位。
 
 数据库结构不一致时，优先让内网 LiteLLM 使用与基线环境匹配的版本并执行对应的
 官方数据库迁移。不要为了让检查通过而手工创建一张空的

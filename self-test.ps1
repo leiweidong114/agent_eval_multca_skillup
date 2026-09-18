@@ -198,7 +198,7 @@ function Invoke-AgentEvalJson {
     $ProcessInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
     $ProcessInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
     foreach ($VariableName in @('PYTHONPATH', 'PYTHONHOME', 'PYTHONUSERBASE')) {
-        $ProcessInfo.Environment.Remove($VariableName)
+        $ProcessInfo.Environment.Remove($VariableName) | Out-Null
     }
     $ProcessInfo.Environment['PYTHONNOUSERSITE'] = '1'
     $ProcessInfo.Environment['PYTHONPATH'] = @(
@@ -259,7 +259,7 @@ function Add-StepFailureIssue {
         [Parameter(Mandatory)]$Step,
         [string]$FallbackAction = 'Inspect the saved command stdout/stderr files.'
     )
-    if ($Step.success) { return }
+    if ([bool](Get-DiagnosticProperty -InputObject $Step -Name 'success')) { return }
     $Failure = $null
     $StepData = Get-DiagnosticProperty -InputObject $Step -Name 'data'
     $Failure = Get-DiagnosticProperty -InputObject $StepData -Name 'failure'
@@ -432,8 +432,10 @@ if ($PythonExecutable -and (Test-Path -LiteralPath $PythonExecutable)) {
 
     $Steps['database'] = Invoke-AgentEvalJson -Name 'database' `
         -Arguments @('check-database')
-    if (-not $Steps['database'].success -or `
-        ($Steps['database'].data -and $Steps['database'].data.status -ne 'ok')) {
+    $DatabaseStepSuccess = [bool](Get-DiagnosticProperty -InputObject $Steps['database'] -Name 'success')
+    $DatabaseStepData = Get-DiagnosticProperty -InputObject $Steps['database'] -Name 'data'
+    if (-not $DatabaseStepSuccess -or `
+        ($DatabaseStepData -and (Get-DiagnosticProperty -InputObject $DatabaseStepData -Name 'status') -ne 'ok')) {
         Add-StepFailureIssue -Component 'database' -Step $Steps['database'] `
             -FallbackAction 'Check DATABASE_URL or DATABASE_HOST/PORT/NAME/USER/PASSWORD, SSL mode and LiteLLM_SpendLogs read permission.'
     }
@@ -453,7 +455,7 @@ if ($PythonExecutable -and (Test-Path -LiteralPath $PythonExecutable)) {
                 -SuggestedAction ([string](Get-DiagnosticProperty -InputObject $AuditIssue -Name 'suggested_action')) `
                 -ConfigurationChanges @(Get-DiagnosticProperty -InputObject $AuditIssue -Name 'configuration_changes')
         }
-    } elseif (-not $Steps['database_schema'].success) {
+    } elseif (-not [bool](Get-DiagnosticProperty -InputObject $Steps['database_schema'] -Name 'success')) {
         Add-StepFailureIssue -Component 'database-schema' -Step $Steps['database_schema'] `
             -FallbackAction 'Compare the intranet LiteLLM database migration version with backend/config/database-schema-baseline.json.'
     }
@@ -469,8 +471,9 @@ if ($PythonExecutable -and (Test-Path -LiteralPath $PythonExecutable)) {
             $AgentsToTest.Add($Value.Trim().ToLowerInvariant())
         }
     }
-    if ($AgentsToTest.Count -eq 0 -and $Steps['agent_catalog'].data) {
-        foreach ($Row in @($Steps['agent_catalog'].data)) {
+    $AgentCatalogData = Get-DiagnosticProperty -InputObject $Steps['agent_catalog'] -Name 'data'
+    if ($AgentsToTest.Count -eq 0 -and $AgentCatalogData) {
+        foreach ($Row in @($AgentCatalogData)) {
             if ($Row.availability -and $Row.availability.available -eq $true) {
                 $Value = [string]$Row.agent
                 if ($Value -and -not $AgentsToTest.Contains($Value)) { $AgentsToTest.Add($Value) }
@@ -490,8 +493,10 @@ if ($PythonExecutable -and (Test-Path -LiteralPath $PythonExecutable)) {
                 '--prompt', '只回复 AGENT_SELF_TEST_OK', '--timeout', [string]$Timeout,
                 '--no-database-verify'
             )
-            $Connected = $Steps[$Name].success -and $Steps[$Name].data -and `
-                $Steps[$Name].data.status -eq 'connected'
+            $AgentStepSuccess = [bool](Get-DiagnosticProperty -InputObject $Steps[$Name] -Name 'success')
+            $AgentStepData = Get-DiagnosticProperty -InputObject $Steps[$Name] -Name 'data'
+            $Connected = $AgentStepSuccess -and $AgentStepData -and `
+                (Get-DiagnosticProperty -InputObject $AgentStepData -Name 'status') -eq 'connected'
             if (-not $Connected) {
                 Add-StepFailureIssue -Component "agent:$SelectedAgent" -Step $Steps[$Name] `
                     -FallbackAction 'Check the executable path, Agent version, model protocol and the saved stderr output.'
@@ -499,15 +504,17 @@ if ($PythonExecutable -and (Test-Path -LiteralPath $PythonExecutable)) {
 
             if ($Strict) {
                 $StrictName = "agent-$SelectedAgent-strict"
-                if ($MasterKeyPresent -and $Steps['database'].data -and `
-                    $Steps['database'].data.status -eq 'ok') {
+                if ($MasterKeyPresent -and $DatabaseStepData -and `
+                    (Get-DiagnosticProperty -InputObject $DatabaseStepData -Name 'status') -eq 'ok') {
                     $Steps[$StrictName] = Invoke-AgentEvalJson -Name $StrictName -Arguments @(
                         'check-agent', '--agent', $SelectedAgent, '--model', $AgentModel,
                         '--prompt', '只回复 AGENT_STRICT_SELF_TEST_OK',
                         '--timeout', [string]$Timeout, '--database-verify'
                     )
-                    $StrictConnected = $Steps[$StrictName].success -and `
-                        $Steps[$StrictName].data -and $Steps[$StrictName].data.status -eq 'connected'
+                    $StrictStepSuccess = [bool](Get-DiagnosticProperty -InputObject $Steps[$StrictName] -Name 'success')
+                    $StrictStepData = Get-DiagnosticProperty -InputObject $Steps[$StrictName] -Name 'data'
+                    $StrictConnected = $StrictStepSuccess -and $StrictStepData -and `
+                        (Get-DiagnosticProperty -InputObject $StrictStepData -Name 'status') -eq 'connected'
                     if (-not $StrictConnected) {
                         Add-StepFailureIssue -Component "agent-strict:$SelectedAgent" `
                             -Step $Steps[$StrictName] `
@@ -572,6 +579,20 @@ $Lines.Add('')
 $Lines.Add('Runtime:')
 foreach ($Item in $RuntimeChecks) {
     $Lines.Add("  [$($Item.status.ToUpperInvariant())] $($Item.name): $($Item.path)")
+}
+$Lines.Add('')
+$Lines.Add('Checks:')
+foreach ($Entry in $Steps.GetEnumerator()) {
+    $Step = $Entry.Value
+    $StepData = Get-DiagnosticProperty -InputObject $Step -Name 'data'
+    $ApplicationStatus = Get-DiagnosticProperty -InputObject $StepData -Name 'status'
+    $Successful = [bool](Get-DiagnosticProperty -InputObject $Step -Name 'success')
+    $Marker = if ($Successful -and (!$ApplicationStatus -or $ApplicationStatus -in @('ok', 'connected'))) {
+        'OK'
+    } elseif ($Successful) { 'DONE' } else { 'FAILED' }
+    $Duration = Get-DiagnosticProperty -InputObject $Step -Name 'duration_ms'
+    $StatusSuffix = if ($ApplicationStatus) { "; status=$ApplicationStatus" } else { '' }
+    $Lines.Add("  [$Marker] $($Entry.Key): $Duration ms$StatusSuffix")
 }
 $Lines.Add('')
 $Lines.Add('Issues:')
