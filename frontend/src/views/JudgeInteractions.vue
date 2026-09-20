@@ -17,15 +17,7 @@
       <el-empty v-if="!loading&&!items.length" description="暂无 Judge 交互；新发起的 Judge 请求会自动记录在这里"/>
       <el-pagination v-if="total" class="pagination" background layout="total, sizes, prev, pager, next" :total="total" v-model:current-page="page" v-model:page-size="pageSize" :page-sizes="[20,50,100]" @current-change="load" @size-change="resetAndLoad"/>
     </el-card>
-    <el-dialog v-model="detailVisible" width="min(1180px,94vw)" top="4vh" destroy-on-close>
-      <template #header><div class="dialog-title"><div><b>Judge LLM 交互详情</b><small>{{detail?.interaction_id}}</small></div><el-tag :type="detail?.status==='success'?'success':'danger'">{{detail?.status==='success'?'成功':'失败'}}</el-tag></div></template>
-      <div v-loading="detailLoading" class="judge-detail" v-if="detail">
-        <div class="facts"><div><span>用途</span><b>{{purposeLabel(detail.purpose)}}</b></div><div><span>模型</span><b>{{detail.model}}</b></div><div><span>任务 / Session</span><b>{{detail.context_id||'未记录'}}</b></div><div><span>耗时 / Token</span><b>{{duration(detail.duration_ms)}} / {{number(detail.usage?.total_tokens)}}</b></div></div>
-        <section class="io input"><header><span>INPUT</span><b>Judge 模型输入</b></header><div class="input-grid"><article v-for="group in inputGroups" :key="group.key"><header><b>{{group.label}}</b><span>{{group.items.length}} 条</span></header><div class="messages"><pre v-for="(message,index) in group.items" :key="index">{{content(message)}}</pre></div></article></div></section>
-        <section class="io output"><header><span>OUTPUT</span><b>Judge 模型输出</b></header><pre>{{detail.output?.content||detail.error||'没有输出内容'}}</pre></section>
-        <details><summary>查看原始响应</summary><pre>{{pretty(detail.output?.response||{})}}</pre></details>
-      </div>
-    </el-dialog>
+    <InteractionDetailDialog v-model="detailVisible" :item="detailItem" :turn-index="1" :loading="detailLoading" eyebrow="JUDGE INTERACTION" dialog-title="Judge LLM 交互详情" context-label="任务 / Session" :actor-label-override="detail?purposeLabel(detail.purpose):'Judge LLM'"/>
   </div>
 </template>
 
@@ -34,13 +26,14 @@ import {computed,onMounted,ref} from 'vue'
 import {useRoute} from 'vue-router'
 import {ElMessage} from 'element-plus'
 import {fetchJudgeInteraction,fetchJudgeInteractions} from '../api'
+import InteractionDetailDialog from '../components/InteractionDetailDialog.vue'
 const route=useRoute()
 const items=ref([]),total=ref(0),page=ref(1),pageSize=ref(20),loading=ref(false),purpose=ref(''),model=ref(''),contextId=ref(String(route.query.context_id||'')),detailVisible=ref(false),detailLoading=ref(false),detail=ref(null)
-const inputGroups=computed(()=>[{key:'system',label:'System',items:detail.value?.input?.system||[]},{key:'user',label:'User',items:detail.value?.input?.user||[]},{key:'history',label:'History',items:detail.value?.input?.history||[]},{key:'tool',label:'Tool',items:detail.value?.input?.tool||[]}].filter(group=>group.items.length))
+const detailItem=computed(()=>{const value=detail.value;if(!value)return null;const input=value.input||{},system=input.system||[],history=input.history||[],tools=input.tool||[],users=input.user||[],messages=[...system,...history,...tools,...users];const rawResponse=value.output?.response;const response=rawResponse&&Object.keys(rawResponse).length?rawResponse:(value.output?.content?{content:value.output.content}:{});return{request_id:value.interaction_id,model:value.model,model_group:value.model,session_id:value.context_id,start_time:value.started_at,request_duration_ms:value.duration_ms,prompt_tokens:value.usage?.prompt_tokens,completion_tokens:value.usage?.completion_tokens,total_tokens:value.usage?.total_tokens,status:value.status,error:value.error,proxy_server_request:{body:{messages}},current_input_messages:[...tools,...users],history_message_count:system.length+history.length,response}})
 async function load(){loading.value=true;try{const data=await fetchJudgeInteractions({limit:pageSize.value,offset:(page.value-1)*pageSize.value,purpose:purpose.value||undefined,model:model.value.trim()||undefined,context_id:contextId.value.trim()||undefined});items.value=data.items||[];total.value=data.total||0}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{loading.value=false}}
 function resetAndLoad(){page.value=1;load()}
 async function openDetail(row){detailVisible.value=true;detailLoading.value=true;detail.value=null;try{detail.value=await fetchJudgeInteraction(row.interaction_id)}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{detailLoading.value=false}}
-const purposeLabel=value=>({evaluation_judge:'评测结果 Judge',session_metric_judge:'历史指标 Judge'}[value]||value||'未记录'),formatTime=value=>value?new Date(value).toLocaleString('zh-CN'):'—',number=value=>Number(value||0).toLocaleString(),duration=value=>value==null?'—':Number(value)<1000?`${Math.round(value)} ms`:`${(Number(value)/1000).toFixed(2)} s`,pretty=value=>JSON.stringify(value,null,2),content=message=>typeof message?.content==='string'?message.content:pretty(message?.content??message)
+const purposeLabel=value=>({evaluation_judge:'评测结果 Judge',session_metric_judge:'历史指标 Judge',session_task_classification:'会话任务分类 Judge',schematic_rationality_judge:'原理图合理性 Judge'}[value]||value||'未记录'),formatTime=value=>value?new Date(value).toLocaleString('zh-CN'):'—',number=value=>Number(value||0).toLocaleString(),duration=value=>value==null?'—':Number(value)<1000?`${Math.round(value)} ms`:`${(Number(value)/1000).toFixed(2)} s`
 onMounted(load)
 </script>
 
