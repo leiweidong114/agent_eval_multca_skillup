@@ -302,6 +302,22 @@ def cancel_job(job_id: str, request: Request) -> dict[str, object]:
     return job
 
 
+@router.get("/jobs/{job_id}/status")
+def get_job_status(job_id: str, request: Request) -> dict[str, object]:
+    """Return only scheduling state, avoiding large completed report payloads."""
+    job = job_manager.get(job_id)
+    if job is None or job.get("user_id") != employee_from_request(request):
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {
+        key: job.get(key)
+        for key in (
+            "job_id", "task_id", "status", "phase", "progress", "message",
+            "created_at", "started_at", "updated_at", "user_id", "task_name",
+            "evaluation_type", "schematic_task_type", "agent", "model", "failure", "error",
+        )
+    }
+
+
 @router.post("/jobs/{job_id}/prioritize")
 def prioritize_job(job_id: str, request: Request) -> dict[str, object]:
     existing = job_manager.get(job_id)

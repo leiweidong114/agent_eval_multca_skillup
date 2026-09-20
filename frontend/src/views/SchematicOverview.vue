@@ -6,10 +6,10 @@
       <el-tabs v-model="source"><el-tab-pane label="全部会话" name="all"/><el-tab-pane label="评测会话" name="evaluation"/><el-tab-pane label="非评测会话" name="non_evaluation"/></el-tabs>
       <el-form label-position="top" @submit.prevent="search()"><div class="search-grid">
         <el-form-item label="时间范围"><el-select v-model="timeRangePreset"><el-option v-for="item in timeRangeOptions" :key="item.value" :label="item.label" :value="item.value"/></el-select></el-form-item>
-        <el-form-item label="工号（End User）"><el-select v-model="endUser" filterable clearable allow-create placeholder="输入或选择工号"><el-option v-for="item in filterOptions.end_users" :key="item" :label="item" :value="item"/></el-select></el-form-item>
+        <el-form-item label="工号（End User）"><el-select v-model="endUser" filterable clearable allow-create :loading="filterOptionsLoading" placeholder="输入或选择工号" @visible-change="loadFilterOptions"><el-option v-for="item in filterOptions.end_users" :key="item" :label="item" :value="item"/></el-select></el-form-item>
         <el-form-item label="会话 ID"><el-input v-model="sessionId" clearable placeholder="主会话或 Subagent session_id" @keyup.enter="search()"/></el-form-item>
         <el-form-item label="请求 ID"><el-input v-model="requestId" clearable placeholder="LiteLLM request_id" @keyup.enter="search()"/></el-form-item>
-        <el-form-item label="模型"><el-select v-model="selectedModel" filterable clearable placeholder="全部模型"><el-option v-for="item in filterOptions.models" :key="item" :label="item" :value="item"/></el-select></el-form-item>
+        <el-form-item label="模型"><el-select v-model="selectedModel" filterable clearable :loading="filterOptionsLoading" placeholder="全部模型" @visible-change="loadFilterOptions"><el-option v-for="item in filterOptions.models" :key="item" :label="item" :value="item"/></el-select></el-form-item>
         <el-form-item label="任务分类"><el-select v-model="taskClassification" clearable placeholder="全部分类"><el-option v-for="item in taskClassificationOptions" :key="item.value" :label="item.label" :value="item.value"/></el-select></el-form-item>
         <el-form-item label="交互轮次"><el-button :type="hideSingleTurn?'primary':''" :plain="!hideSingleTurn" @click="toggleSingleTurn">隐藏单轮会话</el-button></el-form-item>
         <el-form-item label="检索"><el-button native-type="submit" type="primary" :loading="loading">搜索</el-button></el-form-item>
@@ -73,7 +73,7 @@
 </template>
 
 <script setup>
-import {computed,onMounted,ref} from 'vue'
+import {computed,ref} from 'vue'
 import {ElMessage} from 'element-plus'
 import {fetchSchematicConversation,fetchSchematicConversations,fetchSchematicInteractionDetail,fetchSchematicInteractionFilters} from '../api'
 import InteractionDetailDialog from '../components/InteractionDetailDialog.vue'
@@ -82,7 +82,7 @@ const endUser=ref(''),sessionId=ref(''),requestId=ref(''),selectedModel=ref(''),
 const timeRangeOptions=[{label:'最近 1 天',value:'1d',days:1},{label:'最近 1 周',value:'7d',days:7},{label:'最近 1 个月',value:'30d',days:30},{label:'不限时间',value:'all',days:null}]
 const taskClassificationOptions=[{label:'原理图生成任务（全部）',value:'schematic_generation'},{label:'框图生成原理图',value:'block_to_schematic'},{label:'框图生成信号接口列表',value:'block_to_signal_list'},{label:'信号接口列表生成原理图',value:'signal_list_to_schematic'},{label:'原理图应用到天枢',value:'schematic_apply_to_tianshu'},{label:'原理图调整任务',value:'schematic_adjustment'},{label:'其他原理图任务',value:'other_schematic'},{label:'其他任务',value:'other'}]
 const timeRangePreset=ref('1d')
-const data=ref({total:0,conversations:[]}),filterOptions=ref({end_users:[],models:[]})
+const data=ref({total:0,conversations:[]}),filterOptions=ref({end_users:[],models:[]}),filterOptionsLoading=ref(false),filterOptionsLoaded=ref(false)
 const timeRangeLabel=computed(()=>timeRangeOptions.find(item=>item.value===timeRangePreset.value)?.label||'最近 1 天')
 const pageInteractions=computed(()=>(data.value.conversations||[]).reduce((sum,item)=>sum+Number(item.interaction_count||0),0))
 const pageTokens=computed(()=>(data.value.conversations||[]).reduce((sum,item)=>sum+Number(item.total_tokens||0),0))
@@ -90,6 +90,7 @@ const pageSubagents=computed(()=>(data.value.conversations||[]).reduce((sum,item
 const filteredInteractions=computed(()=>{let rows=detail.value?.timeline||[];if(selectedSessionId.value!=='all')rows=rows.filter(item=>item.session_id===selectedSessionId.value);const keyword=interactionKeyword.value.trim().toLocaleLowerCase();return keyword?rows.filter(item=>JSON.stringify(item).toLocaleLowerCase().includes(keyword)):rows})
 
 function timeRangeParams(){const option=timeRangeOptions.find(item=>item.value===timeRangePreset.value);if(!option?.days)return{start_time:new Date(0).toISOString(),end_time:new Date().toISOString()};const end=new Date();return{start_time:new Date(end.getTime()-option.days*24*60*60*1000).toISOString(),end_time:end.toISOString()}}
+async function loadFilterOptions(open){if(!open||filterOptionsLoaded.value||filterOptionsLoading.value)return;filterOptionsLoading.value=true;try{filterOptions.value=await fetchSchematicInteractionFilters();filterOptionsLoaded.value=true}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{filterOptionsLoading.value=false}}
 async function loadConversations(){if(loading.value)return;loading.value=true;try{data.value=await fetchSchematicConversations({end_user:endUser.value.trim()||undefined,session_id:sessionId.value.trim()||undefined,request_id:requestId.value.trim()||undefined,model:selectedModel.value||undefined,task_classification:taskClassification.value||undefined,exclude_single_turn:hideSingleTurn.value||undefined,source:source.value,limit:sessionPageSize.value,offset:(sessionPage.value-1)*sessionPageSize.value,...timeRangeParams()})}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{loading.value=false}}
 async function search(){sessionPage.value=1;hasSearched.value=true;await loadConversations()}
 function toggleSingleTurn(){hideSingleTurn.value=!hideSingleTurn.value}
@@ -115,7 +116,6 @@ const sourceType=value=>value==='evaluation'?'warning':value==='mixed'?'info':'s
 const taskTypeLabel=value=>({block_to_schematic:'框图生成原理图',block_to_signal_list:'框图生成信号接口列表',signal_list_to_schematic:'信号接口列表生成原理图',schematic_apply_to_tianshu:'原理图应用到天枢',schematic_adjustment:'原理图调整任务',other_schematic:'其他原理图任务',other:'其他任务'}[value]||'未计算')
 const statusLabel=value=>({success:'成功',failure:'失败',failed:'失败'}[String(value||'').toLowerCase()]||value||'未知')
 const number=value=>value==null?'—':Number(value).toLocaleString(),duration=value=>value==null?'—':Number(value)>=1000?`${(Number(value)/1000).toFixed(1)} 秒`:`${value} ms`,formatTime=value=>value?new Date(value).toLocaleString('zh-CN'):'未记录'
-onMounted(async()=>{try{filterOptions.value=await fetchSchematicInteractionFilters()}catch{}})
 </script>
 
 <style scoped>

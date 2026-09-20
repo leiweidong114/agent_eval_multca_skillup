@@ -14,6 +14,7 @@ from app.metric_job_manager import metric_job_manager
 from app.metric_scheduler import metric_scheduler
 from app.metrics_store import MetricsStore, metrics_store_health
 from app.response_cache import response_cache_health
+from app.response_cache import cache_key, get_cached_json, set_cached_json
 from app.schematic_data_client import schematic_data_health
 
 
@@ -59,6 +60,14 @@ def sessions(
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
     employee_from_request(request)
+    key = cache_key("metric-sessions-v1", {
+        "start_time": start_time, "end_time": end_time, "end_user": end_user,
+        "session_id": session_id, "model": model, "limit": limit, "offset": offset,
+    })
+    cached = get_cached_json(key)
+    if cached is not None:
+        cached["cache"] = "hit"
+        return cached
     try:
         result = search_conversations(
             BACKEND_ROOT,
@@ -80,6 +89,8 @@ def sessions(
             item["metric_status"] = metric.get("status") if metric else "not_calculated"
             item["metric_calculated_at"] = metric.get("calculated_at") if metric else None
             item["metric_definition_version"] = metric.get("metric_definition_version") if metric else None
+        result["cache"] = "miss"
+        set_cached_json(key, result, ttl_seconds=60)
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

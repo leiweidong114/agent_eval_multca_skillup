@@ -18,7 +18,7 @@ class SchematicDefaultEvaluator:
     """Public default plugin shared by all supported schematic task types."""
 
     id = "schematic-default"
-    version = "2"
+    version = "3"
     api_version = EVALUATOR_API_VERSION
     evaluation_types = ("schematic",)
     schematic_task_types = (
@@ -40,14 +40,16 @@ class SchematicDefaultEvaluator:
             skill_quality=evidence.skill_quality,
             config=scoring_config,
         )
+        trace_evidence = evaluate_trace(evidence)
         result_evidence = evaluate_result(
-            evidence, task_type=context.schematic_task_type or "block_to_schematic"
+            evidence,
+            task_type=context.schematic_task_type or "block_to_schematic",
+            trace_evidence=trace_evidence,
         )
         dimensions["result"] = {
             "score": result_evidence["score"],
             "evidence": result_evidence,
         }
-        trace_evidence = evaluate_trace(evidence)
         judge_evidence = {
             "task": {
                 "task_id": context.task_id,

@@ -64,7 +64,10 @@ def _response_text(evidence: EvaluationEvidence) -> str:
 
 
 def evaluate_result(
-    evidence: EvaluationEvidence, *, task_type: str = "block_to_schematic"
+    evidence: EvaluationEvidence,
+    *,
+    task_type: str = "block_to_schematic",
+    trace_evidence: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     """Strictly validate delivered schematic artifacts, not process exit alone."""
     sheets_path, sheets = _artifact(evidence, "/out/sheets.json")
@@ -116,6 +119,16 @@ def evaluate_result(
         and evidence.skill_usage.get("all_selected_skills_observed")
     )
     subagent_used = int(evidence.process_metrics.get("subagent_calls") or 0) > 0
+    trace_evidence = trace_evidence or {}
+    stage_assertions = trace_evidence.get("assertions") or []
+    required_stage_assertions = [
+        item for item in stage_assertions
+        if str(item.get("name") or "").startswith("script_")
+        or item.get("name") in {"all_selected_skills_observed", "subagent_completed"}
+    ]
+    process_stages_valid = bool(required_stage_assertions) and all(
+        item.get("passed") for item in required_stage_assertions
+    )
 
     if task_type == "block_to_signal_list":
         checks = [
@@ -130,12 +143,18 @@ def evaluate_result(
             {"name": "selected_skills_executed", "passed": skill_used, "required": True, "weight": 10},
             {"name": "sheets_json_valid", "passed": sheets_valid, "required": sheet_required, "weight": 15 if sheet_required else 0, "path": sheets_path},
             {"name": "subagent_execution_verified", "passed": subagent_used, "required": True, "weight": 15 if sheet_required else 20},
-            {"name": "layout_artifacts_valid", "passed": layout_valid, "required": True, "weight": 20 if sheet_required else 25, "paths": [path for path, _ in layouts]},
-            {"name": "apply_result_valid", "passed": apply_valid, "required": True, "weight": 15 if sheet_required else 20, "path": apply_path},
+            {"name": "pipeline_stage_assertions", "passed": process_stages_valid, "required": sheet_required, "weight": 10 if sheet_required else 0, "assertions": required_stage_assertions},
+            {"name": "layout_artifacts_valid", "passed": layout_valid, "required": True, "weight": 15 if sheet_required else 25, "paths": [path for path, _ in layouts]},
+            {"name": "apply_result_valid", "passed": apply_valid, "required": True, "weight": 10 if sheet_required else 20, "path": apply_path},
             {"name": "schematic_url_verified", "passed": url_verified, "required": True, "weight": 15, "url": url or None},
         ]
     score = round(sum(item["weight"] for item in checks if item["passed"]), 2)
     accepted = all(item["passed"] for item in checks if item["required"])
+    pipeline_artifact_count = sum(
+        "/with_skill/outputs/workspace/out/"
+        in f"/{str(item.get('path') or '').replace(chr(92), '/').lower()}"
+        for item in evidence.artifact_manifest
+    )
     return {
         "accepted": accepted,
         "score": score,
@@ -146,7 +165,8 @@ def evaluate_result(
             if item["required"] and not item["passed"]
         ],
         "iteration_count": len(evidence.results),
-        "artifact_count": len(evidence.artifact_manifest),
+        "artifact_count": pipeline_artifact_count,
+        "workspace_file_count": len(evidence.artifact_manifest),
         "url": url or None,
         "task_type": task_type,
     }

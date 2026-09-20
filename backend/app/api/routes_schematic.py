@@ -72,9 +72,17 @@ def search_interactions(
 
 @router.get("/interaction-filters")
 def interaction_filters(request: Request) -> dict[str, Any]:
+    key = cache_key("schematic-interaction-filters-v1", {"window": "default-24h"})
+    cached = get_cached_json(key)
+    if cached is not None:
+        cached["cache"] = "hit"
+        return cached
     try:
         employee_from_request(request)
-        return conversation_filter_options(BACKEND_ROOT)
+        result = conversation_filter_options(BACKEND_ROOT)
+        result["cache"] = "miss"
+        set_cached_json(key, result, ttl_seconds=300)
+        return result
     except Exception as exc:
         raise HTTPException(status_code=503, detail="数据库查询失败，请运行 agent-eval check-database 检查连接") from exc
 

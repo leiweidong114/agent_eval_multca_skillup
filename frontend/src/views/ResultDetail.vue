@@ -83,11 +83,25 @@
 
         <el-card shadow="never" class="panel"><template #header><div class="section-head"><div><b>评测过程与轨迹分析</b><span>从任务执行、工具调用和模型轨迹中提取</span></div><el-tag :type="traceStatus.type" effect="plain">{{traceStatus.label}}</el-tag></div></template>
           <div class="trajectory-grid">
-            <div><span>工具调用</span><b>{{process.tool_calls??0}}</b><small>完成率 {{percent(process.tool_completion_rate)}}</small></div>
-            <div><span>子 Agent 调用</span><b>{{process.subagent_calls??0}}</b><small>{{process.subagent_detection==='best_effort_tool_name_heuristic'?'启发式识别':'运行时记录'}}</small></div>
+            <div><span>工具调用</span><b>{{displayToolCalls}}</b><small>语义成功率 {{percent(displayToolCompletionRate)}}</small></div>
+            <div><span>子 Agent 调用</span><b>{{displaySubagentCalls}}</b><small>{{process.subagent_detection==='best_effort_tool_name_heuristic'?'启发式识别':'运行时记录'}}</small></div>
             <div><span>模型调用</span><b>{{process.model_call_count??'—'}}</b><small>成功率 {{percent(process.model_call_success_rate)}}</small></div>
-            <div><span>错误事件</span><b>{{process.error_event_count??0}}</b><small>工具失败 {{process.tool_failures??0}}</small></div>
+            <div><span>错误事件</span><b>{{process.error_event_count??0}}</b><small>工具语义失败 {{displayToolFailures}}</small></div>
           </div>
+          <template v-if="detail.evaluation_type==='schematic'&&schematicTrace.assertions?.length">
+            <div class="schematic-metric-grid">
+              <div><span>阶段断言完成度</span><b>{{percent(schematicTrace.assertion_completion_rate)}}</b><small>{{schematicTrace.assertion_passed}} / {{schematicTrace.assertion_total}} 项</small></div>
+              <div><span>脚本调用成功率</span><b>{{percent(schematicTrace.script_success_rate)}}</b><small>成功 {{schematicTrace.script_successes??0}} / 调用 {{schematicTrace.script_calls??0}}</small></div>
+              <div><span>脚本重试</span><b>{{schematicTrace.script_retry_count??0}}</b><small>结构化失败 {{schematicTrace.structured_tool_result_failures??0}}</small></div>
+              <div><span>产物数量</span><b>{{schematicTrace.artifact_count??0}}</b><small>由评测产物清单验证</small></div>
+            </div>
+            <el-collapse class="assertion-list">
+              <el-collapse-item name="pipeline-assertions">
+                <template #title><div class="assertion-title"><b>原理图流程断言</b><span>点击查看 {{schematicTrace.assertion_total}} 项证据</span></div></template>
+                <div class="assertion-rows"><article v-for="item in schematicTrace.assertions" :key="item.name" :class="{passed:item.passed}"><el-icon><CircleCheckFilled v-if="item.passed"/><CircleCloseFilled v-else/></el-icon><div><b>{{item.label||item.name}}</b><small>{{assertionEvidence(item.evidence)}}</small></div><el-tag size="small" :type="item.passed?'success':'danger'">{{item.passed?'通过':'失败'}}</el-tag></article></div>
+              </el-collapse-item>
+            </el-collapse>
+          </template>
           <el-timeline class="run-timeline">
             <el-timeline-item v-for="(item,index) in caseRows" :key="`${item.case_id}-${index}`" :type="caseType(item.status)" :timestamp="durationText(item.duration_ms)" placement="top">
               <div class="timeline-card"><div class="timeline-title"><b>{{item.title||item.case_id||`用例 ${index+1}`}}</b><el-tag size="small" :type="caseType(item.status)">{{caseStatus(item.status)}}</el-tag></div><div class="case-stats"><span>{{item.turns||0}} 轮</span><span>{{number(item.input_tokens)}} 输入 tokens</span><span>{{number(item.output_tokens)}} 输出 tokens</span><span>{{item.configuration==='without_skill'?'无 Skill 基线':'使用 Skill'}}</span></div><p><b>过程评测：</b>{{processEvaluationText(item)}}</p></div>
@@ -130,7 +144,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { cancelBatch, cancelExperiment, cancelJob, fetchBatch, fetchExperiment, fetchExperimentComparison, fetchExperimentResults, fetchJob, fetchRun, fetchRunInteractions, openRunFolder, prioritizeBatch, prioritizeJob } from '../api'
+import { cancelBatch, cancelExperiment, cancelJob, fetchBatch, fetchExperiment, fetchExperimentComparison, fetchExperimentResults, fetchJob, fetchJobStatus, fetchRun, fetchRunInteractions, openRunFolder, prioritizeBatch, prioritizeJob } from '../api'
 import InteractionDetailDialog from '../components/InteractionDetailDialog.vue'
 
 const route=useRoute(),loading=ref(false),detail=ref(null),results=ref([]),comparison=ref({}),error=ref(''),interactions=ref([]),interactionsLoaded=ref(false),openingFolder=ref(false),cancelling=ref(false),prioritizing=ref(false),interactionPage=ref(1),interactionPageSize=ref(20),interactionSearch=ref(''),interactionTotal=ref(0),interactionFilteredSummary=ref({}),interactionSubagents=ref([]),interactionScope=ref('all'),interactionSubagent=ref(''),interactionScopeCounts=ref({all:0,main_agent:0,subagent:0}),interactionDialogVisible=ref(false),selectedInteraction=ref(null),selectedInteractionIndex=ref(0)
@@ -142,8 +156,13 @@ const summaryRows=computed(()=>Array.isArray(comparison.value?.summary)?comparis
 const pairedRows=computed(()=>Array.isArray(comparison.value?.paired)?comparison.value.paired:[])
 const questionMetrics=computed(()=>{const x=summaryRows.value.reduce((acc,row)=>({count:acc.count+Number(row.completed||0),passed:acc.passed+Number(row.passed||0),errors:acc.errors+Number(row.error_rate||0)*Number(row.completed||0),tokens:acc.tokens+Number(row.tokens||0)}),{count:0,passed:0,errors:0,tokens:0});return{...x,score:x.count?x.passed/x.count:0,error_rate:x.count?x.errors/x.count:0}})
 const dimensions=computed(()=>detail.value?.scoring?.dimensions||{})
-const evaluatorExtensions=computed(()=>Object.entries(detail.value?.scoring?.extensions||{}).map(([name,value])=>({name,value})))
+const evaluatorExtensions=computed(()=>Object.entries(detail.value?.scoring?.extensions||{}).filter(([name])=>name!=='schematic').map(([name,value])=>({name,value})))
 const process=computed(()=>detail.value?.process_metrics||{})
+const schematicTrace=computed(()=>detail.value?.scoring?.extensions?.schematic?.trace||{})
+const displayToolCalls=computed(()=>schematicTrace.value.tool_calls??process.value.tool_calls??0)
+const displayToolCompletionRate=computed(()=>schematicTrace.value.tool_completion_rate??process.value.tool_completion_rate)
+const displayToolFailures=computed(()=>schematicTrace.value.tool_failures??process.value.tool_failures??0)
+const displaySubagentCalls=computed(()=>schematicTrace.value.subagent_calls??process.value.subagent_calls??0)
 const skillUsage=computed(()=>detail.value?.skill_usage||{})
 const failure=computed(()=>detail.value?.failure||null)
 const isDiagnostic=computed(()=>detail.value?.scoring?.valid_for_ranking===false||detail.value?.scoring?.diagnostic_only===true)
@@ -163,7 +182,7 @@ const interactionScopeOptions=computed(()=>[
   {label:`Subagent ${interactionScopeCounts.value.subagent||0}`,value:'subagent'},
 ])
 
-async function load(silent=false){if(!silent)loading.value=true;error.value='';try{if(route.params.type==='question'){[detail.value,results.value,comparison.value]=await Promise.all([fetchExperiment(route.params.id),fetchExperimentResults(route.params.id),fetchExperimentComparison(route.params.id)])}else if(route.params.type==='batch')detail.value=await fetchBatch(route.params.id);else{let job=null;try{job=await fetchJob(route.params.id)}catch{}if(job)detail.value=job.result?{...job.result,status:job.status,progress:job.progress,live_interactions:job.live_interactions||[],created_at:job.created_at}:job;else detail.value=await fetchRun(route.params.id);if(!['queued','running','cancelling'].includes(detail.value?.status)&&!interactionsLoaded.value)await loadInteractions()}clearTimeout(refreshTimer);if(['queued','running','cancelling'].includes(detail.value?.status))refreshTimer=setTimeout(()=>load(true),800)}catch(e){detail.value=null;error.value=e.response?.data?.detail||e.message;if(!silent)ElMessage.error(error.value)}finally{loading.value=false}}
+async function load(silent=false){if(!silent)loading.value=true;error.value='';try{if(route.params.type==='question'){[detail.value,results.value,comparison.value]=await Promise.all([fetchExperiment(route.params.id),fetchExperimentResults(route.params.id),fetchExperimentComparison(route.params.id)])}else if(route.params.type==='batch')detail.value=await fetchBatch(route.params.id);else{let jobStatus=null;try{jobStatus=await fetchJobStatus(route.params.id)}catch{}if(jobStatus&&['queued','running','cancelling'].includes(jobStatus.status)){const job=await fetchJob(route.params.id);detail.value=job.result?{...job.result,status:job.status,progress:job.progress,live_interactions:job.live_interactions||[],created_at:job.created_at}:job}else{try{detail.value=await fetchRun(route.params.id)}catch{detail.value=jobStatus}}if(!['queued','running','cancelling'].includes(detail.value?.status)&&!interactionsLoaded.value)await loadInteractions()}clearTimeout(refreshTimer);if(['queued','running','cancelling'].includes(detail.value?.status))refreshTimer=setTimeout(()=>load(true),1200)}catch(e){detail.value=null;error.value=e.response?.data?.detail||e.message;if(!silent)ElMessage.error(error.value)}finally{loading.value=false}}
 async function loadInteractions(){try{const response=await fetchRunInteractions(route.params.id,{page:interactionPage.value,page_size:interactionPageSize.value,search:interactionSearch.value.trim()||undefined,scope:interactionScope.value,subagent:interactionScope.value==='subagent'?(interactionSubagent.value||undefined):undefined});interactions.value=response.items||[];interactionTotal.value=Number(response.total||0);interactionFilteredSummary.value=response.filtered_summary||response.summary||{};interactionSubagents.value=response.subagents||[];interactionScopeCounts.value=response.scope_counts||{all:interactionTotal.value,main_agent:interactionTotal.value,subagent:0}}catch{interactions.value=[];interactionTotal.value=0;interactionFilteredSummary.value={};interactionSubagents.value=[]}finally{interactionsLoaded.value=true}}
 async function searchInteractions(){interactionPage.value=1;await loadInteractions()}
 async function changeInteractionScope(){interactionPage.value=1;if(interactionScope.value!=='subagent')interactionSubagent.value='';await loadInteractions()}
@@ -225,6 +244,7 @@ const evidenceLabel=s=>({insufficient:'样本不足',exploratory:'探索性',ade
 const qualityLabel=k=>({skill_md:'SKILL.md 完整性',name:'名称定义',description:'能力描述',workflow:'工作流程',constraints:'约束条件',output_contract:'输出契约',error_handling:'异常处理',verification:'验证方法'}[k]||k)
 const qualityDescription=item=>({skill_md:'Skill 主说明文件存在且非空',name:'元数据中定义了明确名称',description:'元数据中描述了适用场景',workflow:'包含清晰的执行步骤',constraints:'明确说明边界与约束',output_contract:'定义输出或产物格式',error_handling:'说明失败与异常处理方式',verification:'说明如何验证执行结果'}[item.check]||item.description)
 const schematicTaskLabel=value=>({block_to_schematic:'框图生成原理图',block_to_signal_list:'框图生成信号接口列表',signal_list_to_schematic:'信号接口列表生成原理图'}[value]||value||'通用评测')
+const assertionEvidence=value=>{if(value==null||value==='')return'无额外证据';if(typeof value==='string')return value;if(Array.isArray(value))return value.join('、')||'无额外证据';if(typeof value==='object')return Object.entries(value).map(([key,item])=>`${key}: ${Array.isArray(item)?item.join(', '):item??'—'}`).join(' · ');return String(value)}
 const formatTime=value=>value?new Date(value).toLocaleString():'时间未记录'
 onMounted(()=>load());onBeforeUnmount(()=>clearTimeout(refreshTimer))
 </script>
@@ -245,4 +265,5 @@ onMounted(()=>load());onBeforeUnmount(()=>clearTimeout(refreshTimer))
 @media(max-width:1050px){.interaction-controls{grid-template-columns:1fr 1fr}.interaction-controls>.el-input:last-child{grid-column:1/-1}.interaction-log-row{grid-template-columns:34px minmax(0,1fr)}.interaction-log-meta{grid-column:2;align-items:flex-start}.interaction-detail{grid-template-columns:1fr}}
 @media(max-width:650px){.interaction-controls,.interaction-summary,.input-groups{grid-template-columns:1fr}.interaction-controls>.el-input:last-child{grid-column:auto}.subagent-overview-title{align-items:flex-start;flex-direction:column}.interaction-log-main>div{align-items:flex-start;flex-wrap:wrap}.interaction-log-main p{white-space:normal}.interaction-detail-meta,.io-card-header,.input-group>header{align-items:flex-start;flex-direction:column;gap:5px}.interaction-pagination{overflow-x:auto;justify-content:flex-start}}
 .interaction-log-button{display:block;width:100%;padding:0 12px;border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;cursor:pointer;text-align:left}.interaction-log-button:hover{background:var(--surface-2)}.interaction-log-meta em{color:var(--brand);font-style:normal;font-weight:650}
+.schematic-metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:-12px 0 18px}.schematic-metric-grid>div{display:flex;flex-direction:column;gap:5px;padding:14px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}.schematic-metric-grid span,.schematic-metric-grid small,.assertion-title span,.assertion-rows small{color:var(--muted);font-size:11px}.schematic-metric-grid b{font-size:20px}.assertion-list{margin-bottom:24px;border:1px solid var(--line);border-radius:9px;overflow:hidden}.assertion-list :deep(.el-collapse-item__header){padding:0 14px;background:var(--surface-2)}.assertion-list :deep(.el-collapse-item__content){padding:0}.assertion-title{display:flex;align-items:center;justify-content:space-between;width:100%;padding-right:12px}.assertion-rows{display:grid}.assertion-rows article{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:start;gap:9px;padding:11px 14px;border-top:1px solid var(--line);color:var(--danger)}.assertion-rows article.passed{color:var(--accent)}.assertion-rows article>div{display:flex;min-width:0;flex-direction:column;gap:4px;color:var(--text)}.assertion-rows small{overflow-wrap:anywhere}@media(max-width:900px){.schematic-metric-grid{grid-template-columns:1fr 1fr}}@media(max-width:520px){.schematic-metric-grid{grid-template-columns:1fr}}
 </style>

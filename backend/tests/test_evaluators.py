@@ -145,6 +145,15 @@ def test_schematic_evaluator_requires_real_pipeline_delivery(tmp_path):
         / "with_skill" / "outputs" / "workspace" / "out"
     )
     (output / "layout").mkdir(parents=True)
+    (output / "sheets_markdown").mkdir()
+    (output / "frags" / "S1").mkdir(parents=True)
+    (output / "catalog.json").write_text('{"components":[]}', encoding="utf-8")
+    (output / "sheets_markdown" / "S1.md").write_text("# S1", encoding="utf-8")
+    (output / "frags" / "S1" / "base.txt").write_text("base", encoding="utf-8")
+    (output / "frags" / "S1" / "slices.json").write_text("[]", encoding="utf-8")
+    workspace_clutter = output.parent / ".opencode" / "node_modules"
+    workspace_clutter.mkdir(parents=True)
+    (workspace_clutter / "package.json").write_text("{}", encoding="utf-8")
     (output / "sheets.json").write_text(
         '{"sheets":[{"sheet_id":"S1","components":[],"nets":[]}]}', encoding="utf-8"
     )
@@ -162,8 +171,35 @@ def test_schematic_evaluator_requires_real_pipeline_delivery(tmp_path):
         process_metrics={"subagent_calls": 2},
         skill_usage={"all_selected_skills_read": True, "all_selected_skills_observed": True},
         skill_quality={"score": 100, "details": []},
-        results=[{"case_results": [{"status": "PASS", "response": url}]}],
-        interactions=[],
+        results=[{"case_results": [{"status": "PASS", "response": url, "session_results": [{
+            "transcript": [
+                *[
+                    {"role": "tool_call", "tool_call": {"id": f"call-{index}", "name": "exec_command", "arguments": {"cmd": f"python skills/scripts/{script}"}}}
+                    for index, script in enumerate(("validate_sheets.py", "render_sheets_markdown.py", "codegen_base.py", "layout_sheet.py", "apply.py"), 1)
+                ],
+                *[
+                    {"role": "tool_result", "tool_result": {"call_id": f"call-{index}", "status": "completed", "content": "ok"}}
+                    for index in range(1, 6)
+                ],
+            ]
+        }]}]}],
+        interactions=[
+            {
+                "response": {"choices": [{"message": {"tool_calls": [{
+                    "id": "db-fetch", "function": {
+                        "name": "shell_command", "arguments": '{"command":"python fetch_catalog.py"}',
+                    },
+                }]}}]},
+                "proxy_server_request": {"messages": []},
+            },
+            {
+                "response": {"choices": [{"message": {}}]},
+                "proxy_server_request": {"messages": [{
+                    "role": "tool", "tool_call_id": "db-fetch",
+                    "content": "Exit code: 0\nOutput: catalog written",
+                }]},
+            },
+        ],
         artifact_root=str(tmp_path / "run"),
         artifact_manifest=build_artifact_manifest(tmp_path / "run"),
     )
@@ -181,6 +217,24 @@ def test_schematic_evaluator_requires_real_pipeline_delivery(tmp_path):
     assert acceptance["accepted"] is True
     assert acceptance["score"] == 100
     assert result.rule_dimensions["result"]["score"] == 100
+    trace = result.extensions["schematic"]["trace"]
+    assert trace["schema_version"] == "schematic-trace-v2"
+    assert trace["script_success_rate"] == 100
+    assert trace["assertion_completion_rate"] == 100
+    assert trace["artifact_count"] == 7
+    assert trace["workspace_file_count"] == 8
+    assert acceptance["artifact_count"] == 7
+
+    evidence.results[0]["case_results"][0]["session_results"][0]["transcript"][6]["tool_result"]["content"] = (
+        "Exit code: 1\nOutput: validation failed"
+    )
+    failed = resolve_evaluator(backend, evaluation_type="schematic").evaluate(
+        context=context, evidence=evidence, scoring_config={}
+    )
+    failed_trace = failed.extensions["schematic"]["trace"]
+    assert failed_trace["tool_completion_rate"] == pytest.approx(83.33, abs=0.01)
+    assert failed_trace["structured_tool_result_failures"] == 1
+    assert failed.extensions["schematic"]["acceptance"]["accepted"] is False
 
 
 def test_schematic_evaluator_rejects_process_only_success(tmp_path):

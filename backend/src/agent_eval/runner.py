@@ -1080,9 +1080,20 @@ def run_evaluation(
     (result_root / "evaluation-report.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    if evaluation_status == "completed":
+        terminal_message = "Evaluation completed"
+    elif isinstance(failure, dict):
+        terminal_message = str(
+            failure.get("summary")
+            or failure.get("title")
+            or failure.get("detail")
+            or "Evaluation failed"
+        )
+    else:
+        terminal_message = "Evaluation failed"
     progress(
         "completed" if evaluation_status == "completed" else "failed",
         100,
-        "Evaluation completed" if evaluation_status == "completed" else "Model verification failed",
+        terminal_message,
     )
     return summary
