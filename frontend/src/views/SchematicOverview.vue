@@ -3,7 +3,7 @@
     <section class="hero compact"><div><span class="eyebrow">SCHEMATIC CONVERSATIONS</span><h1>原理图生成总览</h1><p>汇总 LiteLLM 中的评测与普通会话，并将主 Agent 和 Subagent 组织为完整会话。</p></div></section>
 
     <el-card shadow="never" class="panel search-panel">
-      <el-tabs v-model="source" @tab-change="search"><el-tab-pane label="全部会话" name="all"/><el-tab-pane label="评测会话" name="evaluation"/><el-tab-pane label="非评测会话" name="non_evaluation"/></el-tabs>
+      <el-tabs v-model="source"><el-tab-pane label="全部会话" name="all"/><el-tab-pane label="评测会话" name="evaluation"/><el-tab-pane label="非评测会话" name="non_evaluation"/></el-tabs>
       <el-form label-position="top" @submit.prevent="search()"><div class="search-grid">
         <el-form-item label="时间范围"><el-date-picker v-model="timeRange" type="datetimerange" range-separator="至" start-placeholder="开始时间" end-placeholder="结束时间" :clearable="false"/></el-form-item>
         <el-form-item label="LiteLLM End User"><el-select v-model="endUser" filterable clearable allow-create placeholder="全部 End User"><el-option v-for="item in filterOptions.end_users" :key="item" :label="item" :value="item"/></el-select></el-form-item>
@@ -32,7 +32,8 @@
         <el-table-column label="总用时" width="105" align="right"><template #default="{row}">{{duration(row.duration_ms)}}</template></el-table-column>
         <el-table-column label="操作" width="90" fixed="right"><template #default="{row}"><el-button link type="primary" @click.stop="openConversation(row)">查看详情</el-button></template></el-table-column>
       </el-table>
-      <el-empty v-else-if="!loading" description="没有找到匹配的会话"/>
+      <el-empty v-else-if="!loading&&hasSearched" description="没有找到匹配的会话"/>
+      <el-empty v-else-if="!loading" description="请设置查询条件后点击搜索"/>
       <el-pagination v-if="data.total" v-model:current-page="sessionPage" v-model:page-size="sessionPageSize" background layout="total, sizes, prev, pager, next, jumper" :page-sizes="[20,50,100]" :total="data.total" class="session-pagination" @current-change="loadConversations" @size-change="changeSessionPageSize"/>
     </el-card>
 
@@ -68,7 +69,7 @@ import {ElMessage} from 'element-plus'
 import {fetchSchematicConversation,fetchSchematicConversations,fetchSchematicInteractionDetail,fetchSchematicInteractionFilters} from '../api'
 import InteractionDetailDialog from '../components/InteractionDetailDialog.vue'
 
-const endUser=ref(''),sessionId=ref(''),selectedModel=ref(''),hideSingleTurn=ref(true),source=ref('all'),loading=ref(false),detailLoading=ref(false),detailVisible=ref(false),selectedRoot=ref(''),detail=ref(null),detailView=ref('timeline'),interactionKeyword=ref(''),sessionPage=ref(1),sessionPageSize=ref(20),interactionDialogVisible=ref(false),selectedInteraction=ref(null),selectedInteractionIndex=ref(0)
+const endUser=ref(''),sessionId=ref(''),selectedModel=ref(''),hideSingleTurn=ref(true),source=ref('all'),loading=ref(false),hasSearched=ref(false),detailLoading=ref(false),detailVisible=ref(false),selectedRoot=ref(''),detail=ref(null),detailView=ref('timeline'),interactionKeyword=ref(''),sessionPage=ref(1),sessionPageSize=ref(20),interactionDialogVisible=ref(false),selectedInteraction=ref(null),selectedInteractionIndex=ref(0)
 const timeRange=ref([new Date(Date.now()-24*60*60*1000),new Date()])
 const data=ref({total:0,conversations:[]}),filterOptions=ref({end_users:[],models:[]})
 const pageInteractions=computed(()=>(data.value.conversations||[]).reduce((sum,item)=>sum+Number(item.interaction_count||0),0))
@@ -77,8 +78,8 @@ const pageSubagents=computed(()=>(data.value.conversations||[]).reduce((sum,item
 const filteredInteractions=computed(()=>{const rows=detail.value?.timeline||[],keyword=interactionKeyword.value.trim().toLocaleLowerCase();return keyword?rows.filter(item=>JSON.stringify(item).toLocaleLowerCase().includes(keyword)):rows})
 
 async function loadConversations(){if(loading.value)return;loading.value=true;try{data.value=await fetchSchematicConversations({end_user:endUser.value.trim()||undefined,session_id:sessionId.value.trim()||undefined,model:selectedModel.value||undefined,exclude_single_turn:hideSingleTurn.value||undefined,source:source.value,limit:sessionPageSize.value,offset:(sessionPage.value-1)*sessionPageSize.value,start_time:timeRange.value?.[0]?.toISOString(),end_time:timeRange.value?.[1]?.toISOString()})}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{loading.value=false}}
-async function search(){sessionPage.value=1;await loadConversations()}
-async function toggleSingleTurn(){hideSingleTurn.value=!hideSingleTurn.value;await search()}
+async function search(){sessionPage.value=1;hasSearched.value=true;await loadConversations()}
+function toggleSingleTurn(){hideSingleTurn.value=!hideSingleTurn.value}
 async function changeSessionPageSize(){sessionPage.value=1;await loadConversations()}
 async function openConversation(conversation){selectedRoot.value=conversation.root_session_id;detailVisible.value=true;detailLoading.value=true;detail.value=null;detailView.value='timeline';interactionKeyword.value='';try{detail.value=await fetchSchematicConversation(conversation.root_session_id,{start_time:timeRange.value?.[0]?.toISOString(),end_time:timeRange.value?.[1]?.toISOString()})}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{detailLoading.value=false}}
 async function openInteraction(item,index){if(!item.request_id)return;item._loading=true;try{if(!item.content_loaded)Object.assign(item,await fetchSchematicInteractionDetail(item.request_id),{content_loaded:true});selectedInteraction.value=item;selectedInteractionIndex.value=index+1;interactionDialogVisible.value=true}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{item._loading=false}}
@@ -98,7 +99,7 @@ const sourceLabel=value=>({evaluation:'评测',non_evaluation:'非评测',mixed:
 const sourceType=value=>value==='evaluation'?'warning':value==='mixed'?'info':'success'
 const statusLabel=value=>({success:'成功',failure:'失败',failed:'失败'}[String(value||'').toLowerCase()]||value||'未知')
 const number=value=>value==null?'—':Number(value).toLocaleString(),duration=value=>value==null?'—':Number(value)>=1000?`${(Number(value)/1000).toFixed(1)} 秒`:`${value} ms`,formatTime=value=>value?new Date(value).toLocaleString('zh-CN'):'未记录'
-onMounted(async()=>{try{filterOptions.value=await fetchSchematicInteractionFilters()}catch{}await loadConversations()})
+onMounted(async()=>{try{filterOptions.value=await fetchSchematicInteractionFilters()}catch{}})
 </script>
 
 <style scoped>
