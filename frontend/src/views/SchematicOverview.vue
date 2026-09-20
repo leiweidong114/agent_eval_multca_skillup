@@ -6,7 +6,7 @@
       <el-tabs v-model="source"><el-tab-pane label="全部会话" name="all"/><el-tab-pane label="评测会话" name="evaluation"/><el-tab-pane label="非评测会话" name="non_evaluation"/></el-tabs>
       <el-form label-position="top" @submit.prevent="search()"><div class="search-grid">
         <el-form-item label="时间范围"><el-select v-model="timeRangePreset"><el-option v-for="item in timeRangeOptions" :key="item.value" :label="item.label" :value="item.value"/></el-select></el-form-item>
-        <el-form-item label="LiteLLM End User"><el-select v-model="endUser" filterable clearable allow-create placeholder="全部 End User"><el-option v-for="item in filterOptions.end_users" :key="item" :label="item" :value="item"/></el-select></el-form-item>
+        <el-form-item label="工号（End User）"><el-select v-model="endUser" filterable clearable allow-create placeholder="输入或选择工号"><el-option v-for="item in filterOptions.end_users" :key="item" :label="item" :value="item"/></el-select></el-form-item>
         <el-form-item label="会话 ID"><el-input v-model="sessionId" clearable placeholder="主会话或 Subagent session_id" @keyup.enter="search()"/></el-form-item>
         <el-form-item label="模型"><el-select v-model="selectedModel" filterable clearable placeholder="全部模型"><el-option v-for="item in filterOptions.models" :key="item" :label="item" :value="item"/></el-select></el-form-item>
         <el-form-item label="任务分类"><el-select v-model="taskClassification" clearable placeholder="全部分类"><el-option v-for="item in taskClassificationOptions" :key="item.value" :label="item.label" :value="item.value"/></el-select></el-form-item>

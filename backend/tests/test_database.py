@@ -180,6 +180,60 @@ def test_exact_session_search_uses_targeted_family_lookup(monkeypatch, tmp_path)
     assert result["conversations"][0]["interaction_count"] == 3
 
 
+def test_end_user_search_is_filtered_in_database_without_scan_cap(monkeypatch, tmp_path):
+    config = DatabaseConfig(
+        enabled=True, host="db", port=5432, name="litellm", user="reader", password="x",
+        sslmode="prefer", connect_timeout_seconds=1, trace_enabled=True,
+        include_content=True, lookaround_seconds=0, limit=500, retention_days=30,
+        max_content_chars=20000,
+    )
+    now = datetime.now(timezone.utc)
+    observed = {}
+    rows = [{
+        "request_id": "request-1", "call_type": "acompletion", "user_id": None,
+        "end_user": "100086", "start_time": now - timedelta(seconds=2),
+        "end_time": now, "model": "glm-4.5-air", "model_group": "glm-4.5-air",
+        "custom_llm_provider": "openai", "session_id": "session-x",
+        "parent_session_id": None, "session_key": None, "parent_session_key": None,
+        "spawned_by": None, "evaluation_task_id": None, "evaluation_run_id": None,
+        "top_level_agent": "justdo", "requested_model": "glm-4.5-air",
+        "request_purpose": "agent", "key_alias": None, "status": "success",
+        "agent_id": None, "request_duration_ms": 2000, "prompt_tokens": 10,
+        "completion_tokens": 5, "total_tokens": 15, "spend": 0,
+    }]
+
+    class Cursor:
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+        def execute(self, query, params):
+            observed["query"] = query
+            observed["params"] = params
+        def fetchall(self): return rows
+
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+        def cursor(self): return Cursor()
+
+    class Psycopg:
+        @staticmethod
+        def connect(**_kwargs): return Connection()
+
+    monkeypatch.setattr("agent_eval.database.resolve_database_config", lambda _root: config)
+    monkeypatch.setattr("agent_eval.database._driver", lambda: (Psycopg, object()))
+    result = search_conversations(
+        tmp_path, end_user="100086",
+        start_time=now - timedelta(days=30), end_time=now + timedelta(seconds=1),
+    )
+
+    assert "end_user = %s" in observed["query"]
+    assert "limit %s" not in observed["query"].lower()
+    assert observed["params"][0] == "100086"
+    assert result["query_strategy"] == "indexed_end_user_overview"
+    assert result["scan_truncated"] is False
+    assert result["conversations"][0]["root_session_id"] == "session-x"
+
+
 def test_fetch_interactions_paginates_past_500(monkeypatch, tmp_path):
     config = DatabaseConfig(
         enabled=True, host="db", port=5432, name="litellm", user="reader", password="x",

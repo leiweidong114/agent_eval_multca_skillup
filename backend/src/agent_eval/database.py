@@ -1210,7 +1210,22 @@ def search_conversations(
             "query_strategy": "indexed_session_family",
         }
 
-    scan_limit = min(50000, max(10000, (offset + max(1, limit)) * 100))
+    # `end_user` is the employee number in this deployment.  Filter it in
+    # PostgreSQL so the existing LiteLLM_SpendLogs_end_user_idx can be used;
+    # fetching an arbitrary recent window and filtering in Python was both
+    # slow and incomplete for employees whose sessions fell outside the cap.
+    database_filters = [user_clause]
+    database_parameters = list(parameters)
+    if end_user:
+        database_filters.append("end_user = %s")
+        database_parameters.append(end_user)
+    database_where = " and ".join(f"({clause})" for clause in database_filters)
+
+    # Unfiltered browsing remains bounded as a safety guard.  An exact
+    # employee query is already selective and must not silently drop older
+    # matching calls, so it has no arbitrary 10k/50k raw-row cap.
+    scan_limit = None if end_user else min(50000, max(10000, (offset + max(1, limit)) * 100))
+    limit_clause = "" if scan_limit is None else "limit %s"
     query = f'''select request_id, call_type, "user" as user_id, end_user,
         "startTime" as start_time, "endTime" as end_time, model, model_group,
         custom_llm_provider,
@@ -1238,18 +1253,22 @@ def search_conversations(
             metadata->'spend_logs_metadata'->>'user_api_key_alias') as key_alias,
         status, agent_id, request_duration_ms,
         prompt_tokens, completion_tokens, total_tokens, spend
-        from "LiteLLM_SpendLogs" where {user_clause}
+        from "LiteLLM_SpendLogs" where {database_where}
         and "startTime" >= %s and "startTime" < %s
         and coalesce(proxy_server_request->'metadata'->>'request_purpose',
             metadata->>'request_purpose', metadata->'spend_logs_metadata'->>'request_purpose', '') <> 'llm_judge'
-        order by "startTime" desc, request_id limit %s'''
+        order by "startTime" desc, request_id {limit_clause}'''
     psycopg, dict_row = _driver()
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
-            cursor.execute(query, (*parameters, window_start, window_end, scan_limit + 1))
+            query_parameters = [*database_parameters, window_start, window_end]
+            if scan_limit is not None:
+                query_parameters.append(scan_limit + 1)
+            cursor.execute(query, tuple(query_parameters))
             database_rows = cursor.fetchall()
-    scan_truncated = len(database_rows) > scan_limit
-    database_rows = database_rows[:scan_limit]
+    scan_truncated = scan_limit is not None and len(database_rows) > scan_limit
+    if scan_limit is not None:
+        database_rows = database_rows[:scan_limit]
     rows = [
         _sanitize({key: _json_value(value) for key, value in row.items()}, max_chars=None)
         for row in database_rows
@@ -1296,7 +1315,7 @@ def search_conversations(
         "next_offset": next_offset if next_offset < total else None,
         "scan_truncated": scan_truncated,
         "scanned_interactions": len(rows),
-        "query_strategy": "bounded_overview_scan",
+        "query_strategy": "indexed_end_user_overview" if end_user else "bounded_overview_scan",
     }
 
 
