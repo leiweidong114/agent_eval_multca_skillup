@@ -7,6 +7,7 @@ from agent_eval.database import (
     DatabaseConfig,
     DatabaseConfigurationError,
     _database_retry,
+    _load_conversation_rows,
     _sanitize,
     build_conversation_groups,
     conversation_time_window,
@@ -16,6 +17,7 @@ from agent_eval.database import (
     summarize_model_interactions,
     verify_requested_model,
     fetch_model_interactions,
+    search_conversations,
 )
 
 
@@ -90,6 +92,92 @@ def test_conversation_summary_uses_attribution_metadata_fallbacks():
     assert conversations[0]["user_id"] == "E10001"
     assert conversations[0]["agent"] == "justdo"
     assert conversations[0]["models"] == ["glm-4.5-air"]
+
+
+def test_targeted_conversation_loader_collects_multiple_subagents():
+    now = datetime(2026, 9, 20, 10, 0, tzinfo=timezone.utc)
+    root_row = {
+        "request_id": "root-1", "session_id": "root", "session_key": "root-key",
+        "parent_session_id": None, "start_time": now, "end_time": now + timedelta(seconds=1),
+    }
+    child_rows = [
+        {
+            "request_id": "child-a-1", "session_id": "child-a", "session_key": "child-a-key",
+            "parent_session_id": "root", "start_time": now + timedelta(seconds=2),
+            "end_time": now + timedelta(seconds=3),
+        },
+        {
+            "request_id": "child-b-1", "session_id": "child-b", "session_key": "child-b-key",
+            "parent_session_id": "root", "start_time": now + timedelta(seconds=4),
+            "end_time": now + timedelta(seconds=5),
+        },
+    ]
+
+    class Cursor:
+        rows = []
+        edge_calls = 0
+
+        def execute(self, query, params):
+            if "select distinct" in query:
+                self.edge_calls += 1
+                self.rows = (
+                    [
+                        {"session_id": "child-a", "session_key": "child-a-key"},
+                        {"session_id": "child-b", "session_key": "child-b-key"},
+                    ]
+                    if self.edge_calls == 1 else []
+                )
+                return
+            requested = set(params[-1]) if isinstance(params[-1], list) else set()
+            if requested == {"root"}:
+                self.rows = [root_row]
+            elif requested == {"child-a", "child-b"}:
+                self.rows = child_rows
+            else:
+                self.rows = []
+
+        def fetchall(self):
+            return self.rows
+
+    root, rows = _load_conversation_rows(
+        Cursor(),
+        requested_session_id="root",
+        user_clause="true",
+        user_parameters=[],
+        window_start=now - timedelta(hours=1),
+        window_end=now + timedelta(hours=1),
+        include_content=False,
+        exclude_judge=True,
+    )
+
+    assert root == "root"
+    assert {row["session_id"] for row in rows} == {"root", "child-a", "child-b"}
+
+
+def test_exact_session_search_uses_targeted_family_lookup(monkeypatch, tmp_path):
+    config = DatabaseConfig(
+        enabled=True, host="db", port=5432, name="litellm", user="reader", password="x",
+        sslmode="prefer", connect_timeout_seconds=1, trace_enabled=True,
+        include_content=True, lookaround_seconds=0, limit=500, retention_days=30,
+        max_content_chars=20000,
+    )
+    now = datetime.now(timezone.utc)
+    conversation = {
+        "root_session_id": "root", "session_id": "root", "source_kind": "evaluation",
+        "interaction_count": 3, "models": ["glm-4.5-air"], "timeline": [
+            {"session_id": "root"}, {"session_id": "child-a"}, {"session_id": "child-b"},
+        ],
+    }
+    monkeypatch.setattr("agent_eval.database.resolve_database_config", lambda _root: config)
+    monkeypatch.setattr("agent_eval.database.get_conversation", lambda *_args, **_kwargs: dict(conversation))
+    result = search_conversations(
+        tmp_path, session_id="child-a", start_time=now - timedelta(hours=1), end_time=now,
+    )
+
+    assert result["query_strategy"] == "indexed_session_family"
+    assert result["scan_truncated"] is False
+    assert result["conversations"][0]["root_session_id"] == "root"
+    assert result["conversations"][0]["interaction_count"] == 3
 
 
 def test_fetch_interactions_paginates_past_500(monkeypatch, tmp_path):

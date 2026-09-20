@@ -95,7 +95,7 @@ def conversation_list(
 ) -> dict[str, Any]:
     if task_classification and task_classification not in TASK_CLASSIFICATION_FILTERS:
         raise HTTPException(status_code=400, detail="不支持的会话任务分类")
-    key = cache_key("schematic-conversations-v3", {
+    key = cache_key("schematic-conversations-v4", {
         "end_user": end_user, "session_id": session_id, "model": model,
         "task_classification": task_classification,
         "exclude_single_turn": exclude_single_turn,
@@ -151,7 +151,7 @@ def conversation_detail(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
 ) -> dict[str, Any]:
-    key = cache_key("schematic-conversation-detail-v2", {
+    key = cache_key("schematic-conversation-detail-v3", {
         "session_id": root_session_id, "start_time": start_time, "end_time": end_time,
     })
     cached = get_cached_json(key)

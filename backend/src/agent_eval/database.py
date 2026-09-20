@@ -867,6 +867,14 @@ def build_conversation_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]
                 "parent_session_id": parents.get(session),
                 "depth": first["depth"],
                 "agent_role": first["agent_role"],
+                "subagent_name": next(
+                    (
+                        item.get("subagent_name")
+                        for item in session_items
+                        if item.get("subagent_name")
+                    ),
+                    None,
+                ),
                 "models": sorted({
                     str(item.get("model_group") or item.get("model"))
                     for item in session_items if item.get("model_group") or item.get("model")
@@ -905,6 +913,214 @@ def build_conversation_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]
     )
 
 
+def _conversation_session_expression(prefix: str = "") -> str:
+    qualified = f"{prefix}." if prefix else ""
+    return f"""coalesce({qualified}session_id,
+        {qualified}proxy_server_request->'metadata'->>'session_id',
+        {qualified}metadata->>'session_id',
+        {qualified}metadata->'spend_logs_metadata'->>'session_id')"""
+
+
+def _conversation_parent_expression(prefix: str = "") -> str:
+    qualified = f"{prefix}." if prefix else ""
+    return f"""coalesce({qualified}proxy_server_request->'metadata'->>'parent_session_id',
+        {qualified}metadata->>'parent_session_id',
+        {qualified}metadata->'spend_logs_metadata'->>'parent_session_id')"""
+
+
+def _conversation_session_key_expression(prefix: str = "") -> str:
+    qualified = f"{prefix}." if prefix else ""
+    return f"""coalesce({qualified}proxy_server_request->'metadata'->>'session_key',
+        {qualified}metadata->>'session_key',
+        {qualified}metadata->'spend_logs_metadata'->>'session_key')"""
+
+
+def _conversation_parent_key_expression(prefix: str = "") -> str:
+    qualified = f"{prefix}." if prefix else ""
+    return f"""coalesce({qualified}proxy_server_request->'metadata'->>'parent_session_key',
+        {qualified}metadata->>'parent_session_key',
+        {qualified}metadata->'spend_logs_metadata'->>'parent_session_key',
+        {qualified}proxy_server_request->'metadata'->>'spawned_by',
+        {qualified}proxy_server_request->'metadata'->>'spawnedBy',
+        {qualified}metadata->>'spawned_by', {qualified}metadata->>'spawnedBy')"""
+
+
+def _conversation_row_columns(*, include_content: bool) -> str:
+    content_columns = (
+        ", messages, response, proxy_server_request, metadata"
+        if include_content
+        else """, null::jsonb as messages, null::jsonb as response,
+            jsonb_build_object('metadata', proxy_server_request->'metadata') as proxy_server_request,
+            metadata"""
+    )
+    return f'''request_id, call_type, "user" as user_id, end_user,
+        "startTime" as start_time, "endTime" as end_time, model, model_group,
+        custom_llm_provider, {_conversation_session_expression()} as session_id,
+        {_conversation_parent_expression()} as parent_session_id,
+        {_conversation_session_key_expression()} as session_key,
+        {_conversation_parent_key_expression()} as parent_session_key,
+        status, agent_id, request_duration_ms, prompt_tokens,
+        completion_tokens, total_tokens, spend {content_columns}'''
+
+
+def _load_conversation_rows(
+    cursor: Any,
+    *,
+    requested_session_id: str,
+    user_clause: str,
+    user_parameters: list[Any],
+    window_start: datetime,
+    window_end: datetime,
+    include_content: bool,
+    exclude_judge: bool,
+) -> tuple[str, list[dict[str, Any]]]:
+    """Load one session family without materializing every edge in the time window."""
+    session_expression = _conversation_session_expression()
+    parent_expression = _conversation_parent_expression()
+    session_key_expression = _conversation_session_key_expression()
+    parent_key_expression = _conversation_parent_key_expression()
+    purpose_clause = ""
+    if exclude_judge:
+        purpose_clause = '''and coalesce(
+            proxy_server_request->'metadata'->>'request_purpose',
+            metadata->>'request_purpose',
+            metadata->'spend_logs_metadata'->>'request_purpose', '') <> 'llm_judge' '''
+    columns = _conversation_row_columns(include_content=include_content)
+
+    def fetch_sessions(session_ids: set[str]) -> list[dict[str, Any]]:
+        if not session_ids:
+            return []
+        values = sorted(session_ids)
+        cursor.execute(
+            f'''select {columns} from "LiteLLM_SpendLogs"
+                where {user_clause}
+                and "startTime" >= %s and "startTime" < %s
+                {purpose_clause}
+                and (session_id = any(%s)
+                    or (session_id is null and {session_expression} = any(%s)))
+                order by "startTime" asc, request_id''',
+            (*user_parameters, window_start, window_end, values, values),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def fetch_session_by_key(session_key: str) -> list[dict[str, Any]]:
+        cursor.execute(
+            f'''select {columns} from "LiteLLM_SpendLogs"
+                where {user_clause}
+                and "startTime" >= %s and "startTime" < %s
+                {purpose_clause}
+                and {session_key_expression} = %s
+                order by "startTime" asc, request_id''',
+            (*user_parameters, window_start, window_end, session_key),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    rows_by_request: dict[str, dict[str, Any]] = {}
+
+    def remember(rows: list[dict[str, Any]]) -> None:
+        for row in rows:
+            rows_by_request[str(row.get("request_id") or len(rows_by_request))] = row
+
+    # Resolve an arbitrary main/subagent identifier to its root. Each exact
+    # session lookup can use LiteLLM's session_id index; JSON is only a fallback.
+    current_id = requested_session_id
+    ancestry_seen: set[str] = set()
+    root_id = current_id
+    while current_id and current_id not in ancestry_seen and len(ancestry_seen) < 32:
+        ancestry_seen.add(current_id)
+        current_rows = fetch_sessions({current_id})
+        if not current_rows:
+            break
+        remember(current_rows)
+        normalized = _interaction_metadata(current_rows[0])
+        root_id = str(normalized.get("session_id") or current_id)
+        parent_id = normalized.get("parent_session_id")
+        if parent_id and str(parent_id) != root_id:
+            current_id = str(parent_id)
+            continue
+        parent_key = normalized.get("parent_session_key") or normalized.get("spawned_by")
+        if parent_key:
+            parent_rows = fetch_session_by_key(str(parent_key))
+            if parent_rows:
+                remember(parent_rows)
+                current_id = str(_interaction_metadata(parent_rows[0])["session_id"])
+                continue
+        break
+
+    # Discover all descendant sessions one level at a time. The edge query only
+    # returns identifiers; full rows are then fetched through the indexed
+    # session_id path instead of joining every SpendLogs row to a global CTE.
+    frontier_ids = {root_id}
+    root_rows = fetch_sessions(frontier_ids)
+    remember(root_rows)
+    frontier_keys = {
+        str(_interaction_metadata(row).get("session_key"))
+        for row in root_rows
+        if _interaction_metadata(row).get("session_key")
+    }
+    known_ids = set(frontier_ids)
+    while frontier_ids and len(known_ids) < 4096:
+        known_times: list[datetime] = []
+        for row in rows_by_request.values():
+            for value in (row.get("start_time"), row.get("end_time")):
+                if isinstance(value, datetime):
+                    known_times.append(
+                        value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+                    )
+        # A child is spawned while its parent family is active. Restrict the
+        # unindexed JSON parent lookup to that activity window; exact child
+        # rows are still loaded across the caller's full requested range.
+        edge_start = max(
+            window_start,
+            (min(known_times) - timedelta(minutes=5)) if known_times else window_start,
+        )
+        edge_end = min(
+            window_end,
+            (max(known_times) + timedelta(minutes=5)) if known_times else window_end,
+        )
+        cursor.execute(
+            f'''select distinct {session_expression} as session_id,
+                    {session_key_expression} as session_key
+                from "LiteLLM_SpendLogs"
+                where {user_clause}
+                and "startTime" >= %s and "startTime" < %s
+                {purpose_clause}
+                and ({parent_expression} = any(%s)
+                    or {parent_key_expression} = any(%s))
+                and {session_expression} is not null''',
+            (
+                *user_parameters,
+                edge_start,
+                edge_end,
+                sorted(frontier_ids),
+                sorted(frontier_keys) or ["__no_session_key__"],
+            ),
+        )
+        children = [dict(row) for row in cursor.fetchall()]
+        child_ids = {
+            str(row["session_id"])
+            for row in children
+            if row.get("session_id") and str(row["session_id"]) not in known_ids
+        }
+        if not child_ids:
+            break
+        child_rows = fetch_sessions(child_ids)
+        remember(child_rows)
+        known_ids.update(child_ids)
+        frontier_ids = child_ids
+        frontier_keys = {
+            str(row.get("session_key"))
+            for row in children
+            if row.get("session_key")
+        }
+
+    rows = sorted(
+        rows_by_request.values(),
+        key=lambda row: (str(row.get("start_time") or ""), str(row.get("request_id") or "")),
+    )
+    return root_id, rows
+
+
 def search_conversations(
     project_root: Path,
     *,
@@ -931,6 +1147,69 @@ def search_conversations(
     if not config.enabled:
         return {"status": "disabled", "conversations": [], "total": 0}
     user_clause, parameters = _conversation_user_filter(user_id)
+    end_user = (end_user or "").strip()
+    session_id = (session_id or "").strip()
+    model = (model or "").strip()
+
+    # Exact session lookup is intentionally handled before the bounded global
+    # overview scan. This makes a requested root/subagent complete and avoids
+    # losing older turns merely because unrelated traffic filled the scan cap.
+    if session_id:
+        conversation = get_conversation(
+            project_root,
+            root_session_id=session_id,
+            user_id=user_id,
+            include_content=False,
+            start_time=window_start,
+            end_time=window_end,
+            exclude_judge=True,
+        )
+        conversations: list[dict[str, Any]] = []
+        if conversation is not None:
+            interactions = conversation.pop("timeline", [])
+            conversation["interactions"] = interactions
+            conversations.append(conversation)
+        filtered = []
+        for item in conversations:
+            if allowed_root_session_ids is not None and str(item.get("root_session_id") or "") not in allowed_root_session_ids:
+                continue
+            if source != "all" and item["source_kind"] not in {source, "mixed"}:
+                continue
+            if end_user and not any(str(row.get("end_user") or "") == end_user for row in item["interactions"]):
+                continue
+            if model and model not in item["models"]:
+                continue
+            if exclude_single_turn and int(item.get("interaction_count") or 0) == 1:
+                continue
+            filtered.append(item)
+        total = len(filtered)
+        page = filtered[offset:offset + max(1, limit)]
+        scanned_interactions = sum(int(item.get("interaction_count") or 0) for item in filtered)
+        if not include_interactions:
+            for item in page:
+                item.pop("interactions", None)
+        next_offset = offset + len(page)
+        return {
+            "status": "ok",
+            "query": {
+                "end_user": end_user or None,
+                "session_id": session_id,
+                "model": model or None,
+                "exclude_single_turn": exclude_single_turn,
+                "source": source,
+                "start_time": window_start.isoformat(),
+                "end_time": window_end.isoformat(),
+            },
+            "total": total,
+            "count": len(page),
+            "conversations": page,
+            "has_more": next_offset < total,
+            "next_offset": next_offset if next_offset < total else None,
+            "scan_truncated": False,
+            "scanned_interactions": scanned_interactions,
+            "query_strategy": "indexed_session_family",
+        }
+
     scan_limit = min(50000, max(10000, (offset + max(1, limit)) * 100))
     query = f'''select request_id, call_type, "user" as user_id, end_user,
         "startTime" as start_time, "endTime" as end_time, model, model_group,
@@ -978,9 +1257,6 @@ def search_conversations(
     enrich_interaction_rows(rows)
     conversations = build_conversation_groups(rows)
 
-    end_user = (end_user or "").strip()
-    session_id = (session_id or "").strip()
-    model = (model or "").strip()
     filtered = []
     for conversation in conversations:
         if allowed_root_session_ids is not None and str(conversation.get("root_session_id") or "") not in allowed_root_session_ids:
@@ -1020,6 +1296,7 @@ def search_conversations(
         "next_offset": next_offset if next_offset < total else None,
         "scan_truncated": scan_truncated,
         "scanned_interactions": len(rows),
+        "query_strategy": "bounded_overview_scan",
     }
 
 
@@ -1031,8 +1308,9 @@ def get_conversation(
     include_content: bool = True,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    exclude_judge: bool = False,
 ) -> dict[str, Any] | None:
-    """Fetch one root and descendants; heavy request/response payloads are optional."""
+    """Fetch one root and descendants through targeted session-family lookups."""
     config = resolve_database_config(project_root)
     if not config.enabled:
         return None
@@ -1041,45 +1319,16 @@ def get_conversation(
     psycopg, dict_row = _driver()
     with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
-            content_columns = (
-                ", logs.messages, logs.response, logs.proxy_server_request, logs.metadata"
-                if include_content else
-                """, null::jsonb as messages, null::jsonb as response,
-                    jsonb_build_object('metadata', logs.proxy_server_request->'metadata') as proxy_server_request,
-                    logs.metadata"""
+            resolved_root_id, full_rows = _load_conversation_rows(
+                cursor,
+                requested_session_id=root_session_id,
+                user_clause=user_clause,
+                user_parameters=parameters,
+                window_start=window_start,
+                window_end=window_end,
+                include_content=include_content,
+                exclude_judge=exclude_judge,
             )
-            cursor.execute(f'''with recursive session_edges as materialized (
-                    select distinct
-                        coalesce(session_id, proxy_server_request->'metadata'->>'session_id',
-                            metadata->>'session_id', metadata->'spend_logs_metadata'->>'session_id') as child_id,
-                        coalesce(proxy_server_request->'metadata'->>'parent_session_id',
-                            metadata->>'parent_session_id', metadata->'spend_logs_metadata'->>'parent_session_id') as parent_id
-                    from "LiteLLM_SpendLogs" where {user_clause}
-                    and "startTime" >= %s and "startTime" < %s
-                ), descendants(session_id) as (
-                    select %s::text
-                    union
-                    select edge.child_id from session_edges edge
-                    join descendants parent on edge.parent_id = parent.session_id
-                    where edge.child_id is not null
-                )
-                select logs.request_id, logs.call_type, logs."user" as user_id, logs.end_user,
-                    logs."startTime" as start_time, logs."endTime" as end_time,
-                    logs.model, logs.model_group, logs.custom_llm_provider, logs.session_id,
-                    logs.status, logs.agent_id, logs.request_duration_ms, logs.prompt_tokens,
-                    logs.completion_tokens, logs.total_tokens, logs.spend {content_columns}
-                from "LiteLLM_SpendLogs" logs join descendants found on
-                    coalesce(logs.session_id, logs.proxy_server_request->'metadata'->>'session_id',
-                        logs.metadata->>'session_id', logs.metadata->'spend_logs_metadata'->>'session_id') = found.session_id
-                where {user_clause}
-                and logs."startTime" >= %s and logs."startTime" < %s
-                order by logs."startTime" asc, logs.request_id''',
-                (
-                    *parameters, window_start, window_end,
-                    root_session_id,
-                    *parameters, window_start, window_end,
-                ))
-            full_rows = cursor.fetchall()
     if not full_rows:
         return None
     interactions = [
@@ -1088,7 +1337,10 @@ def get_conversation(
     ]
     enrich_interaction_rows(interactions)
     rebuilt = build_conversation_groups(interactions)
-    conversation = next((item for item in rebuilt if item["root_session_id"] == root_session_id), None)
+    conversation = next(
+        (item for item in rebuilt if item["root_session_id"] == resolved_root_id),
+        None,
+    )
     if conversation is None:
         return None
     conversation["timeline"] = conversation.pop("interactions")
@@ -1097,6 +1349,8 @@ def get_conversation(
         "start_time": window_start.isoformat(),
         "end_time": window_end.isoformat(),
     }
+    conversation["query_strategy"] = "indexed_session_family"
+    conversation["requested_session_id"] = root_session_id
     return conversation
 
 
