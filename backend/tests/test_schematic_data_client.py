@@ -32,9 +32,6 @@ def test_schematic_data_query_returns_java_payload_unchanged(monkeypatch):
 
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     client = TestClient(app)
-    assert client.post(
-        "/api/auth/login", json={"employee_no": "test-worker", "password": "ignored"}
-    ).status_code == 200
 
     response = client.get(
         "/api/schematic-data/query",
@@ -56,6 +53,11 @@ def test_schematic_data_query_returns_java_payload_unchanged(monkeypatch):
     }
 
 
-def test_schematic_data_query_requires_login():
+def test_schematic_data_query_does_not_require_login(monkeypatch):
+    class FakeClient:
+        def query_payload(self, **kwargs):
+            return {"data": {"records": [], "total": 0}}
+
+    monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     response = TestClient(app).get("/api/schematic-data/query")
-    assert response.status_code == 401
+    assert response.status_code == 200

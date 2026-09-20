@@ -43,7 +43,11 @@ app.add_middleware(
 async def require_claimed_login(request: Request, call_next):
     path = request.url.path
     protected = path.startswith("/api/") or path.startswith("/prism/api/")
-    public = path == "/api/health" or path.startswith("/api/auth/") or not protected
+    public = (
+        path in {"/api/health", "/api/schematic-data/query"}
+        or path.startswith("/api/auth/")
+        or not protected
+    )
     if not public:
         from app.auth import identity_from_request
 

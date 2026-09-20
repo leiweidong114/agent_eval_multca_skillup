@@ -42,20 +42,12 @@ curl.exe -G "http://10.0.0.8:8080/schematic/schematicData/query" `
   --data-urlencode "size=20"
 ```
 
-评测后端还提供需要登录的同源代理接口。它调用上面的 Java 接口并原样返回 Java 的
-JSON 响应，因此浏览器不需要直接访问内网 Java 服务：
+评测后端还提供只读同源代理接口。它调用上面的 Java 接口并原样返回 Java 的 JSON
+响应；该接口不要求 UI 登录 Cookie，因此浏览器和内网服务都可以直接调用：
 
 ```powershell
-$session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/auth/login" `
-  -WebSession $session `
-  -ContentType "application/json" `
-  -Body '{"employee_no":"100001","password":"任意非空内容"}'
-
 Invoke-RestMethod -Method Get `
-  -Uri "http://127.0.0.1:8000/api/schematic-data/query?collectionName=HDschematicRationalityCollection&page=1&size=20&refresh=true" `
-  -WebSession $session
+  -Uri "http://127.0.0.1:8000/api/schematic-data/query?collectionName=HDschematicRationalityCollection&page=1&size=20&refresh=true"
 ```
 
 `refresh=false`（默认）使用进程内 TTL/LRU 缓存；`refresh=true` 强制调用 Java 接口。
