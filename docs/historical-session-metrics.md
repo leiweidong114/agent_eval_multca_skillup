@@ -70,9 +70,23 @@ Java 服务 IP 和端口仍只由根目录 `.env` 的 `SCHEMATIC_DATA_API_BASE_U
 
 ## 4. 指标计算
 
-规则代码计算工具/脚本调用成功率、Skill 步骤完成度、错误与重试；LLM Judge 负责
-任务类型补充判断、语义错误恢复及疑似伪造输出。长会话分块送入 Judge，最终由代码
-去重、校验真实 request ID 并合并。Judge 不可用时仍保存规则计算结果。
+规则代码计算工具/脚本调用成功率、Skill 步骤完成度、错误与重试。启用 LLM Judge
+时，每条会话首先把时间最早请求中的第一条 `user` Prompt 单独送入分类 Judge，分类
+只依据用户原始意图，不读取 Agent 后续执行结果。分类结果保存到 SQLite 的
+`task_type`、`task_category`、`task_subtype` 和完整指标 JSON 中。
+
+分类枚举如下：
+
+- 原理图生成任务：框图生成原理图、框图生成信号接口列表、信号接口列表生成原理图、
+  原理图应用到天枢。
+- 原理图调整任务。
+- 其他原理图任务。
+- 其他任务。
+
+随后完整会话按分片送入指标 Judge，分析语义错误恢复及疑似伪造输出，最终由代码
+去重、校验真实 request ID 并合并。任一 Judge 不可用时仍保存能够确定的规则指标和
+错误原因。分类 Judge 的请求与响应使用 `session_task_classification` 用途记录，可在
+“Judge 交互记录”页面单独筛选。
 
 自动任务配置保持不变：
 
@@ -106,6 +120,12 @@ curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/jobs/任务ID
 curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics?limit=20&offset=0"
 curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/summary"
 curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/会话ID"
+
+# 原理图生成总览按分类筛选；也可传具体子类 block_to_schematic 等
+curl.exe -b cookies.txt -G "http://127.0.0.1:8000/api/schematic/conversations" `
+  --data-urlencode "task_classification=schematic_generation" `
+  --data-urlencode "limit=20" `
+  --data-urlencode "offset=0"
 ```
 
 Java 运营系统应调用这些只读 API，不直接读取 SQLite 或 MongoDB，以便复用登录鉴权、

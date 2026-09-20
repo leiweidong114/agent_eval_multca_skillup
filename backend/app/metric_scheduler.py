@@ -10,6 +10,7 @@ from agent_eval.database import search_conversations
 from app.config import BACKEND_ROOT
 from app.metric_job_manager import metric_job_manager
 from app.metrics_store import MetricsStore
+from app.session_metrics import METRIC_DEFINITION_VERSION
 
 
 LOGGER = logging.getLogger(__name__)
@@ -87,9 +88,11 @@ class MetricScheduler:
         pending: list[str] = []
         for item in conversations:
             session_id = str(item["root_session_id"])
-            calculated_at = _as_datetime((statuses.get(session_id) or {}).get("calculated_at"))
+            metric_status = statuses.get(session_id) or {}
+            calculated_at = _as_datetime(metric_status.get("calculated_at"))
             finished_at = _as_datetime(item.get("finished_at"))
-            if calculated_at is None or (finished_at is not None and finished_at > calculated_at):
+            version_changed = metric_status.get("metric_definition_version") != METRIC_DEFINITION_VERSION
+            if calculated_at is None or version_changed or (finished_at is not None and finished_at > calculated_at):
                 pending.append(session_id)
         if not pending:
             return None

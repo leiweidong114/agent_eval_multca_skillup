@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 
-METRIC_DEFINITION_VERSION = "1.0.0-rules"
+METRIC_DEFINITION_VERSION = "1.1.0-task-classifier"
 _FAILURE_PATTERN = re.compile(r"\b(error|failed|failure|exception|timeout|timed out)\b|失败|错误|异常|超时", re.I)
 _SCRIPT_PATTERN = re.compile(r"(?:^|[\\/\s\"'])([^\\/\s\"']+\.(?:py|ps1|sh|js|mjs|cjs))(?:$|[\s\"'])", re.I)
 

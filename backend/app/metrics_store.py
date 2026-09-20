@@ -47,7 +47,8 @@ class MetricsStore:
                 CREATE TABLE IF NOT EXISTS session_metrics_latest (
                     session_id TEXT PRIMARY KEY,
                     status TEXT, calculated_at TEXT, finished_at TEXT,
-                    task_type TEXT, agent TEXT, model TEXT, end_user TEXT,
+                    task_type TEXT, task_category TEXT, task_subtype TEXT,
+                    agent TEXT, model TEXT, end_user TEXT,
                     metric_definition_version TEXT, document_json TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_metrics_finished ON session_metrics_latest(finished_at DESC);
@@ -62,6 +63,18 @@ class MetricsStore:
                 );
                 """
             )
+            columns = {
+                str(row[1])
+                for row in self._connection.execute("PRAGMA table_info(session_metrics_latest)").fetchall()
+            }
+            for name in ("task_category", "task_subtype"):
+                if name not in columns:
+                    self._connection.execute(
+                        f"ALTER TABLE session_metrics_latest ADD COLUMN {name} TEXT"
+                    )
+            self._connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_metrics_category ON session_metrics_latest(task_category, task_type, finished_at DESC)"
+            )
             self._connection.commit()
 
     def upsert_metrics(self, result: dict[str, Any]) -> None:
@@ -71,6 +84,7 @@ class MetricsStore:
         values = (
             session_id, str(result.get("status") or ""), _timestamp(result.get("calculated_at")),
             _timestamp(result.get("finished_at")), str(result.get("task_type") or ""),
+            str(result.get("task_category") or ""), str(result.get("task_subtype") or ""),
             str(result.get("agent") or ""), str(result.get("model") or ""),
             str(result.get("end_user") or ""), str(result.get("metric_definition_version") or ""),
             encoded,
@@ -79,12 +93,13 @@ class MetricsStore:
             self._connection.execute(
                 """
                 INSERT INTO session_metrics_latest(
-                    session_id,status,calculated_at,finished_at,task_type,agent,model,end_user,
+                    session_id,status,calculated_at,finished_at,task_type,task_category,task_subtype,agent,model,end_user,
                     metric_definition_version,document_json
-                ) VALUES(?,?,?,?,?,?,?,?,?,?)
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(session_id) DO UPDATE SET
                     status=excluded.status, calculated_at=excluded.calculated_at,
                     finished_at=excluded.finished_at, task_type=excluded.task_type,
+                    task_category=excluded.task_category, task_subtype=excluded.task_subtype,
                     agent=excluded.agent, model=excluded.model, end_user=excluded.end_user,
                     metric_definition_version=excluded.metric_definition_version,
                     document_json=excluded.document_json
@@ -108,14 +123,30 @@ class MetricsStore:
             return {}
         placeholders = ",".join("?" for _ in ids)
         rows = self._connection.execute(
-            f"SELECT session_id,status,calculated_at,metric_definition_version FROM session_metrics_latest WHERE session_id IN ({placeholders})",
+            f"SELECT session_id,status,calculated_at,metric_definition_version,task_type,task_category,task_subtype FROM session_metrics_latest WHERE session_id IN ({placeholders})",
             ids,
         ).fetchall()
         return {str(row["session_id"]): {
             "_id": row["session_id"], "status": row["status"],
             "calculated_at": row["calculated_at"],
             "metric_definition_version": row["metric_definition_version"],
+            "task_type": row["task_type"],
+            "task_category": row["task_category"],
+            "task_subtype": row["task_subtype"],
         } for row in rows}
+
+    def session_ids_for_task_classification(self, value: str) -> set[str]:
+        if value == "schematic_generation":
+            rows = self._connection.execute(
+                "SELECT session_id FROM session_metrics_latest WHERE task_category=?",
+                (value,),
+            ).fetchall()
+        else:
+            rows = self._connection.execute(
+                "SELECT session_id FROM session_metrics_latest WHERE task_type=?",
+                (value,),
+            ).fetchall()
+        return {str(row["session_id"]) for row in rows}
 
     def save_job(self, job: dict[str, Any]) -> None:
         encoded = json.dumps(job, ensure_ascii=False, default=_json_default)

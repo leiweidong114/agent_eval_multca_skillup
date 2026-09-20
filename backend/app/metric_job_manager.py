@@ -12,6 +12,7 @@ from app.metrics_store import MetricsStore
 from app.schematic_rationality_judge import judge_rationality_result
 from app.session_metrics import calculate_rule_metrics
 from app.session_metric_judge import judge_session_metrics
+from app.session_task_classifier import classify_session_task, task_hierarchy
 
 
 class MetricJobManager:
@@ -107,10 +108,45 @@ class MetricJobManager:
                     self._append_event(job, "session_loaded", "会话读取完成，开始执行确定性规则", session_id=session_id, interaction_count=conversation.get("interaction_count", len(conversation.get("timeline") or [])))
                     self._save(job, store)
                 result = calculate_rule_metrics(conversation)
+                rule_category, rule_subtype = task_hierarchy(str(result.get("task_type") or "other"))
+                result["task_category"] = rule_category
+                result["task_subtype"] = rule_subtype
                 with self._lock:
                     self._append_event(job, "rule_metrics", "规则指标计算完成", session_id=session_id, task_type=result.get("task_type"))
                     self._save(job, store)
                 if job["use_llm_judge"]:
+                    with self._lock:
+                        job["phase"] = "task_classification"
+                        self._append_event(
+                            job,
+                            "task_classification_started",
+                            "Judge LLM 正在根据第一条用户 Prompt 进行任务分类",
+                            session_id=session_id,
+                        )
+                        self._save(job, store)
+                    result["task_classification"] = classify_session_task(
+                        conversation,
+                        employee_no=str(job.get("user_id") or "") or None,
+                    )
+                    classification = result["task_classification"]
+                    with self._lock:
+                        classification_status = str(classification.get("status") or "unknown")
+                        self._append_event(
+                            job,
+                            "task_classification_completed" if classification_status == "completed" else "task_classification_unavailable",
+                            "会话任务分类完成" if classification_status == "completed" else "会话任务分类不可用，保留规则分类",
+                            session_id=session_id,
+                            task_type=classification.get("task_type"),
+                            detail=classification.get("error") or classification.get("reason"),
+                        )
+                        self._save(job, store)
+                    if classification_status == "completed":
+                        result["task_type"] = classification["task_type"]
+                        result["task_category"] = classification["task_category"]
+                        result["task_subtype"] = classification.get("task_subtype")
+                        result["task_type_source"] = "first_user_prompt_llm_judge"
+                        result["task_type_confidence"] = classification.get("confidence")
+
                     def judge_progress(stage: str, chunk_index: int, chunk_total: int, message: str) -> None:
                         with self._lock:
                             job["phase"] = "llm_judge"
@@ -140,14 +176,16 @@ class MetricJobManager:
                         # Rule-derived task type stays authoritative when it has
                         # explicit Skill/script markers. Judge classification fills
                         # only the low-confidence fallback.
-                        if result.get("task_type_source") == "rule_fallback":
+                        if classification_status != "completed" and result.get("task_type_source") == "rule_fallback":
                             result["task_type"] = result["judge"].get("task_type") or result["task_type"]
                             result["task_type_source"] = "llm_judge"
+                            result["task_category"], result["task_subtype"] = task_hierarchy(result["task_type"])
                         result["status"] = "completed"
                     else:
                         result["status"] = "rules_completed_judge_unavailable"
                 else:
                     result["judge"] = {"status": "disabled"}
+                    result["task_classification"] = {"status": "disabled"}
                     with self._lock:
                         self._append_event(job, "llm_judge_skipped", "本次任务未启用 LLM Judge", session_id=session_id)
                 with self._lock:

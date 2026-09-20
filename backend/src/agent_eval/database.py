@@ -919,6 +919,7 @@ def search_conversations(
     include_interactions: bool = False,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    allowed_root_session_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     """Return root conversations in a bounded window; default to the latest 24 hours."""
     if offset < 0:
@@ -982,6 +983,8 @@ def search_conversations(
     model = (model or "").strip()
     filtered = []
     for conversation in conversations:
+        if allowed_root_session_ids is not None and str(conversation.get("root_session_id") or "") not in allowed_root_session_ids:
+            continue
         if source != "all" and conversation["source_kind"] not in {source, "mixed"}:
             continue
         if end_user and not any(str(item.get("end_user") or "") == end_user for item in conversation["interactions"]):

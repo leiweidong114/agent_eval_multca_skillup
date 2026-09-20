@@ -20,13 +20,16 @@ from agent_eval.database import (
 )
 from app.auth import employee_from_request
 from app.config import BACKEND_ROOT
+from app.metrics_store import MetricsStore
 from app.response_cache import cache_key, get_cached_json, set_cached_json
+from app.session_task_classifier import TASK_TYPES
 
 
 router = APIRouter(prefix="/api/schematic", tags=["schematic"])
 # Deterministic diagram preview, separate from the four-Skill LLM evaluation.
 SKILL_ROOT = BACKEND_ROOT / "schematic_demo"
 PROJECTS_ROOT = BACKEND_ROOT / "schematic_projects"
+TASK_CLASSIFICATION_FILTERS = {"schematic_generation", *TASK_TYPES}
 
 
 class DiagramRequest(BaseModel):
@@ -82,6 +85,7 @@ def conversation_list(
     end_user: str | None = None,
     session_id: str | None = None,
     model: str | None = None,
+    task_classification: str | None = None,
     exclude_single_turn: bool = False,
     source: str = Query("all", pattern="^(all|evaluation|non_evaluation)$"),
     limit: int = Query(30, ge=1, le=100),
@@ -89,8 +93,11 @@ def conversation_list(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
 ) -> dict[str, Any]:
-    key = cache_key("schematic-conversations-v2", {
+    if task_classification and task_classification not in TASK_CLASSIFICATION_FILTERS:
+        raise HTTPException(status_code=400, detail="不支持的会话任务分类")
+    key = cache_key("schematic-conversations-v3", {
         "end_user": end_user, "session_id": session_id, "model": model,
+        "task_classification": task_classification,
         "exclude_single_turn": exclude_single_turn,
         "source": source, "limit": limit, "offset": offset,
         "start_time": start_time, "end_time": end_time,
@@ -100,6 +107,11 @@ def conversation_list(
         cached["cache"] = "hit"
         return cached
     try:
+        store = MetricsStore()
+        allowed_session_ids = (
+            store.session_ids_for_task_classification(task_classification)
+            if task_classification else None
+        )
         result = search_conversations(
             BACKEND_ROOT,
             user_id=None,
@@ -112,7 +124,17 @@ def conversation_list(
             offset=offset,
             start_time=start_time,
             end_time=end_time,
+            allowed_root_session_ids=allowed_session_ids,
         )
+        statuses = store.statuses(
+            item["root_session_id"] for item in result.get("conversations", [])
+        )
+        for item in result.get("conversations", []):
+            metric = statuses.get(str(item.get("root_session_id") or "")) or {}
+            item["metric_status"] = metric.get("status") or "not_calculated"
+            item["task_type"] = metric.get("task_type")
+            item["task_category"] = metric.get("task_category")
+            item["task_subtype"] = metric.get("task_subtype")
         result["cache"] = "miss"
         set_cached_json(key, result, ttl_seconds=30)
         return result

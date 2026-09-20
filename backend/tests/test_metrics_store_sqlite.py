@@ -22,6 +22,8 @@ def test_sqlite_metrics_and_jobs_round_trip(monkeypatch, tmp_path):
         "finished_at": "2026-09-17T01:00:00+00:00",
         "calculated_at": "2026-09-17T01:01:00+00:00",
         "task_type": "block_to_schematic",
+        "task_category": "schematic_generation",
+        "task_subtype": "block_to_schematic",
         "agent": "codex",
         "model": "glm-4.5-air",
         "end_user": "100001",
@@ -34,6 +36,9 @@ def test_sqlite_metrics_and_jobs_round_trip(monkeypatch, tmp_path):
 
     assert store.get_metrics("session-1")["model"] == "glm-4.5-air"
     assert store.statuses(["session-1"])["session-1"]["status"] == "completed"
+    assert store.statuses(["session-1"])["session-1"]["task_category"] == "schematic_generation"
+    assert store.session_ids_for_task_classification("schematic_generation") == {"session-1"}
+    assert store.session_ids_for_task_classification("block_to_schematic") == {"session-1"}
     assert store.get_job("job-1") == {"job_id": "job-1", "status": "completed"}
     page = store.list_metrics(
         start_time=datetime(2026, 9, 17, tzinfo=timezone.utc),
