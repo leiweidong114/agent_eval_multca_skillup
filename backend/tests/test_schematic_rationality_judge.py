@@ -57,6 +57,48 @@ def test_text_source_uses_only_judge_extracted_metrics(monkeypatch):
     assert result["metrics"] == {"warning_count": 2}
 
 
+def test_hscope_diagram_lint_rates_are_extracted_by_code(monkeypatch):
+    observed = {}
+
+    def fake_judge(**kwargs):
+        observed.update(kwargs)
+        return {
+            "model": "judge-model",
+            "result": {
+                "quality_level": "good",
+                "metrics": {"overall_success_rate": 1},
+                "summary": "六项检查总体稳定。",
+                "issues": [],
+            },
+        }
+
+    monkeypatch.setattr(subject, "run_json_judge", fake_judge)
+    record = {
+        "sessionId": "session-lint",
+        "checkType": "hscope_diagram_lint",
+        "resultText": json.dumps({
+            "totalSuccessRate": 92.5,
+            "checks": [
+                {"name": "器件检查", "successRate": 95},
+                {"name": "网络检查", "successRate": 0.9},
+                {"name": "电源检查", "successRate": 88},
+                {"name": "接口检查", "successRate": 91},
+                {"name": "标注检查", "successRate": 93},
+                {"name": "布局检查", "successRate": 87},
+            ],
+        }, ensure_ascii=False),
+    }
+
+    result = subject.judge_rationality_result(record, employee_no="001")
+
+    assert result["analysis_type"] == "hscope_diagram_lint"
+    assert result["metrics"]["overall_success_rate"] == 92.5
+    assert result["metrics"]["extraction_complete"] is True
+    assert [item["success_rate"] for item in result["metrics"]["dimension_success_rates"]] == [95, 90, 88, 91, 93, 87]
+    assert "checkType=hscope_diagram_lint" in observed["user_prompt"]
+    assert "脚本已提取的权威数值" in observed["user_prompt"]
+
+
 class FakeDataClient:
     def find_rationality_records(self, identifiers):
         assert identifiers == ["root-session", "run-42"]

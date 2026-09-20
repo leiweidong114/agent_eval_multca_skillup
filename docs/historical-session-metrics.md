@@ -73,8 +73,21 @@ Java 服务 IP 和端口仍只由根目录 `.env` 的 `SCHEMATIC_DATA_API_BASE_U
 
 ## 4. 指标计算
 
-规则代码计算工具/脚本调用成功率、Skill 步骤完成度、错误与重试。启用 LLM Judge
-时，每条会话首先把时间最早请求中的第一条 `user` Prompt 单独送入分类 Judge，分类
+规则代码计算工具/脚本调用成功率、Skill 步骤完成度、错误与重试。Worker 还会按根
+`sessionId`（兼容评测运行 ID）从
+`HDschematicRationalityCollection` 读取最新的已完成记录。查不到时，页面提示
+“当前会话暂无统计原理图生成轨迹指标”。
+
+`resultText` 按 `checkType` 路由分析：
+
+- `hscope_diagram_lint`：由确定性脚本递归提取总成功率和6项指标成功率；Judge LLM
+  只负责结合原始内容生成中文质量结论和问题说明，不能覆盖脚本提取的数值。
+- 其他类型：沿用通用原理图质量 schema，JSON 中的显式数值优先，Judge 只补充缺失
+  指标和中文说明。
+
+固定数值不直接交给 LLM 提取，是为了保证重复计算结果一致，并避免模型漏项、改值或
+把 `0.9` 与 `90%` 混淆。提取不满总计7项时，详情页会保留已提取结果并显示结构告警。
+启用 LLM Judge 时，每条会话首先把时间最早请求中的第一条 `user` Prompt 单独送入分类 Judge，分类
 只依据用户原始意图，不读取 Agent 后续执行结果。分类结果保存到 SQLite 的
 `task_type`、`task_category`、`task_subtype` 和完整指标 JSON 中。
 

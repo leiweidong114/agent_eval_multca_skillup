@@ -213,7 +213,7 @@ class MetricJobManager:
                         self._append_event(
                             job,
                             "schematic_rationality_not_found",
-                            "该会话没有已完成的原理图合理性分析记录",
+                            "当前会话暂无统计原理图生成轨迹指标",
                             session_id=session_id,
                         )
                 elif job["use_llm_judge"]:
