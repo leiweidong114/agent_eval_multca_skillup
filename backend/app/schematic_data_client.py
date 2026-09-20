@@ -92,9 +92,13 @@ class SchematicDataClient:
         payload = get_cached_json(key) if use_cache else None
         if payload is None:
             try:
+                headers = {}
+                if self.settings.schematic_data_api_cookie:
+                    headers["Cookie"] = self.settings.schematic_data_api_cookie
                 response = httpx.get(
                     self.query_url,
                     params=params,
+                    headers=headers,
                     timeout=self.settings.schematic_data_timeout_seconds,
                     trust_env=False,
                 )

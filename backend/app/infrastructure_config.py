@@ -17,6 +17,7 @@ class InfrastructureSettings:
     schematic_data_api_base_url: str | None
     schematic_data_query_path: str
     schematic_data_write_path: str | None
+    schematic_data_api_cookie: str | None
     schematic_data_timeout_seconds: float
     schematic_data_query_page_size: int
     schematic_data_query_max_pages: int
@@ -45,6 +46,7 @@ def load_infrastructure_settings(*, force: bool = False) -> InfrastructureSettin
         or "/schematic/schematicData/query"
     ).strip()
     write_path = str(environment.get("SCHEMATIC_DATA_WRITE_PATH") or "").strip()
+    api_cookie = str(environment.get("SCHEMATIC_DATA_API_COOKIE") or "").strip()
     sqlite_value = str(
         environment.get("SESSION_METRICS_SQLITE_PATH")
         or "backend/data/session_metrics.sqlite3"
@@ -60,6 +62,7 @@ def load_infrastructure_settings(*, force: bool = False) -> InfrastructureSettin
         schematic_data_api_base_url=base_url or None,
         schematic_data_query_path="/" + query_path.lstrip("/"),
         schematic_data_write_path=("/" + write_path.lstrip("/")) if write_path else None,
+        schematic_data_api_cookie=api_cookie or None,
         schematic_data_timeout_seconds=timeout,
         schematic_data_query_page_size=_positive_int(
             environment.get("SCHEMATIC_DATA_QUERY_PAGE_SIZE"), 20, maximum=100
@@ -87,6 +90,7 @@ def infrastructure_health() -> dict[str, Any]:
         "data_api": bool(settings.schematic_data_api_base_url),
         "query_path": settings.schematic_data_query_path,
         "write_configured": bool(settings.schematic_data_write_path),
+        "cookie_configured": bool(settings.schematic_data_api_cookie),
         "metrics_store": "sqlite",
         "cache": "memory_ttl_lru",
     }

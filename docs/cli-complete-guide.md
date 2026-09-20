@@ -1501,7 +1501,9 @@ curl.exe --noproxy "*" http://127.0.0.1:8631/api/schematicRationalityAnalysis/he
 
 第三个接口 `schematicRationalityAnalysis` 负责产生原理图质量证据。评测系统不再
 直连 MongoDB，而是通过 `.env` 中的 `SCHEMATIC_DATA_API_BASE_URL` 加上
-`/schematic/schematicData/query` 查询 `HDschematicRationalityCollection`。完整配置见
+`/schematic/schematicData/query` 查询 `HDschematicRationalityCollection`。如果 Java
+接口要求 Cookie，在 `.env` 配置 `SCHEMATIC_DATA_API_COOKIE=JSESSIONID=...`，后端会
+自动将其作为出站 `Cookie` 请求头发送。完整配置见
 `docs/historical-session-metrics.md`。
 
 完整 HTTP 冒烟测试：

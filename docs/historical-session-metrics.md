@@ -21,6 +21,7 @@ backend/data/session_metrics.sqlite3
 # 只填写协议、目标服务器 IP/主机名和端口，不要包含查询路径。
 SCHEMATIC_DATA_API_BASE_URL=http://10.0.0.8:8080
 SCHEMATIC_DATA_QUERY_PATH=/schematic/schematicData/query
+SCHEMATIC_DATA_API_COOKIE=JSESSIONID=请替换为实际值
 SCHEMATIC_DATA_API_TIMEOUT_SECONDS=15
 SCHEMATIC_DATA_QUERY_PAGE_SIZE=20
 SCHEMATIC_DATA_QUERY_MAX_PAGES=50
@@ -37,13 +38,15 @@ AGENT_EVAL_CACHE_MAX_SIZE=1000
 
 ```powershell
 curl.exe -G "http://10.0.0.8:8080/schematic/schematicData/query" `
+  -H "Cookie: JSESSIONID=请替换为实际值" `
   --data-urlencode "collectionName=HDschematicRationalityCollection" `
   --data-urlencode "page=1" `
   --data-urlencode "size=20"
 ```
 
 评测后端还提供只读同源代理接口。它调用上面的 Java 接口并原样返回 Java 的 JSON
-响应；该接口不要求 UI 登录 Cookie，因此浏览器和内网服务都可以直接调用：
+响应。调用本地评测接口不要求 UI 登录 Cookie；评测后端会自动把 `.env` 中的
+`SCHEMATIC_DATA_API_COOKIE` 作为出站 `Cookie` 请求头发送给 Java 服务：
 
 ```powershell
 Invoke-RestMethod -Method Get `

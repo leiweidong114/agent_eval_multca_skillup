@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schematic_data_client import _records
+from app.schematic_data_client import SchematicDataClient, _records
 
 
 def test_records_accepts_single_document():
@@ -61,3 +61,39 @@ def test_schematic_data_query_does_not_require_login(monkeypatch):
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     response = TestClient(app).get("/api/schematic-data/query")
     assert response.status_code == 200
+
+
+def test_schematic_data_client_sends_configured_cookie(monkeypatch):
+    captured = {}
+
+    class Settings:
+        schematic_data_api_base_url = "http://java.internal:8080"
+        schematic_data_query_path = "/schematic/schematicData/query"
+        schematic_data_api_cookie = "JSESSIONID=session-secret; tenant=intranet"
+        schematic_data_timeout_seconds = 15
+        schematic_data_query_page_size = 20
+        cache_default_ttl_seconds = 300
+
+    class Response:
+        def raise_for_status(self): return None
+        def json(self): return {"data": {"records": [], "total": 0}}
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setattr("app.schematic_data_client.load_infrastructure_settings", lambda: Settings())
+    monkeypatch.setattr("app.schematic_data_client.httpx.get", fake_get)
+
+    payload = SchematicDataClient().query_payload(
+        collection_name="HDschematicRationalityCollection",
+        page=1,
+        size=20,
+        use_cache=False,
+    )
+
+    assert payload["data"]["total"] == 0
+    assert captured["headers"] == {
+        "Cookie": "JSESSIONID=session-secret; tenant=intranet"
+    }
