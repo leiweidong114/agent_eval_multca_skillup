@@ -45,7 +45,10 @@ def load_infrastructure_settings(*, force: bool = False) -> InfrastructureSettin
         environment.get("SCHEMATIC_DATA_QUERY_PATH")
         or "/schematic/schematicData/query"
     ).strip()
-    write_path = str(environment.get("SCHEMATIC_DATA_WRITE_PATH") or "").strip()
+    write_path = str(
+        environment.get("SCHEMATIC_DATA_WRITE_PATH")
+        or "/schematic/schematicData/insert"
+    ).strip()
     api_cookie = str(environment.get("SCHEMATIC_DATA_API_COOKIE") or "").strip()
     sqlite_value = str(
         environment.get("SESSION_METRICS_SQLITE_PATH")

@@ -9,7 +9,7 @@ from typing import Any
 from agent_eval.database import get_conversation
 from app.config import BACKEND_ROOT
 from app.metrics_store import MetricsStore
-from app.schematic_rationality_judge import judge_rationality_result
+from app.schematic_rationality_judge import extract_rationality_metrics, judge_rationality_result
 from app.session_metrics import calculate_rule_metrics
 from app.session_metric_judge import judge_session_metrics
 from app.session_task_classifier import classify_session_task, task_hierarchy
@@ -250,8 +250,10 @@ class MetricJobManager:
                                 session_id=session_id,
                             )
                     except Exception as exc:
+                        extracted = extract_rationality_metrics(rationality_record)
                         result["schematic_rationality"] = {
-                            "status": "judge_unavailable",
+                            "status": "completed" if extracted.get("metrics") else "judge_unavailable",
+                            "judge_status": "unavailable",
                             "source_collection": "HDschematicRationalityCollection",
                             "source_record_id": rationality_record.get("_id"),
                             "source_uuid": rationality_record.get("uuid"),
@@ -259,6 +261,10 @@ class MetricJobManager:
                             "record_count": rationality_record_count,
                             "matched_by": rationality_matched_by,
                             "result_text": rationality_record.get("resultText"),
+                            "quality_level": "unknown",
+                            "summary": "已通过确定性脚本提取原理图轨迹指标；Judge LLM 中文解释暂不可用。",
+                            "issues": [],
+                            **extracted,
                             "error": str(exc),
                         }
                         with self._lock:
@@ -270,8 +276,10 @@ class MetricJobManager:
                                 detail=str(exc),
                             )
                 else:
+                    extracted = extract_rationality_metrics(rationality_record)
                     result["schematic_rationality"] = {
-                        "status": "judge_disabled",
+                        "status": "completed" if extracted.get("metrics") else "judge_disabled",
+                        "judge_status": "disabled",
                         "source_collection": "HDschematicRationalityCollection",
                         "source_record_id": rationality_record.get("_id"),
                         "source_uuid": rationality_record.get("uuid"),
@@ -279,6 +287,10 @@ class MetricJobManager:
                         "record_count": rationality_record_count,
                         "matched_by": rationality_matched_by,
                         "result_text": rationality_record.get("resultText"),
+                        "quality_level": "unknown",
+                        "summary": "已通过确定性脚本提取原理图轨迹指标；本次未启用 Judge LLM 中文解释。",
+                        "issues": [],
+                        **extracted,
                     }
                 with self._lock:
                     job["phase"] = "saving_metrics"

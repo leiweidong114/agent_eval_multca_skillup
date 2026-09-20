@@ -22,6 +22,7 @@ backend/data/session_metrics.sqlite3
 SCHEMATIC_DATA_API_BASE_URL=http://10.0.0.8:8080
 SCHEMATIC_DATA_QUERY_PATH=/schematic/schematicData/query
 SCHEMATIC_DATA_API_COOKIE=JSESSIONID=请替换为实际值
+SCHEMATIC_DATA_WRITE_PATH=/schematic/schematicData/insert
 SCHEMATIC_DATA_API_TIMEOUT_SECONDS=15
 SCHEMATIC_DATA_QUERY_PAGE_SIZE=20
 SCHEMATIC_DATA_QUERY_MAX_PAGES=50
@@ -55,6 +56,25 @@ Invoke-RestMethod -Method Get `
 
 `refresh=false`（默认）使用进程内 TTL/LRU 缓存；`refresh=true` 强制调用 Java 接口。
 Java 服务 IP 和端口仍只由根目录 `.env` 的 `SCHEMATIC_DATA_API_BASE_URL` 配置。
+
+写入接口通过 Python 客户端调用。下面的端到端脚本会生成一条
+`hscope_diagram_lint` 测试数据，写入 MongoDB，再按同一会话 ID 回读校验：
+
+```powershell
+.\backend\.runtime\windows\python\Scripts\python.exe `
+  .\test\schematic_data_insert_e2e.py `
+  --session-id "替换为LiteLLM真实会话ID" `
+  --employee-no "100001"
+```
+
+前端登录后也可以调用受保护的 Python 代理接口：
+
+```text
+POST /api/schematic-data/insert
+```
+
+该接口校验11个业务字段并转发到 Java `/schematic/schematicData/insert`；成功写入后会
+清除进程内查询缓存，使下一次历史会话指标计算立即读取新记录。
 
 客户端兼容单条对象、JSON 数组和常见分页结构（`records/items/list/rows/content`，
 可包在 `data` 或 `result` 内）。查询接口尚未提供 `sessionId` 服务端筛选，因此当前会

@@ -123,14 +123,31 @@ def _diagram_lint_rates(source: Any) -> dict[str, Any]:
     }
 
 
+def extract_rationality_metrics(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract authoritative values before any fallible LLM interpretation."""
+    result_text = str(record.get("resultText") or "")
+    source = _source_value(result_text)
+    check_type = str(record.get("checkType") or "schematic_quality")
+    metrics = (
+        _diagram_lint_rates(source)
+        if check_type == DIAGRAM_LINT_CHECK_TYPE
+        else _normalize_metrics(source)
+    )
+    return {
+        "analysis_type": check_type,
+        "metrics": metrics,
+        "source_format": "json" if not isinstance(source, str) else "text",
+    }
+
+
 def judge_rationality_result(
     record: Mapping[str, Any], *, employee_no: str | None = None
 ) -> dict[str, Any]:
     result_text = str(record.get("resultText") or "")
-    source = _source_value(result_text)
-    source_metrics = _normalize_metrics(source)
-    check_type = str(record.get("checkType") or "schematic_quality")
-    lint_metrics = _diagram_lint_rates(source) if check_type == DIAGRAM_LINT_CHECK_TYPE else None
+    extracted = extract_rationality_metrics(record)
+    source_metrics = extracted["metrics"]
+    check_type = extracted["analysis_type"]
+    lint_metrics = source_metrics if check_type == DIAGRAM_LINT_CHECK_TYPE else None
     schema = {
         "quality_level": "excellent|good|fair|poor|unknown",
         "metrics": (
@@ -182,5 +199,5 @@ def judge_rationality_result(
         "metrics": metrics,
         "summary": str(report.get("summary") or ""),
         "issues": issues,
-        "source_format": "json" if not isinstance(source, str) else "text",
+        "source_format": extracted["source_format"],
     }
