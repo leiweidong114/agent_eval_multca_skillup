@@ -1127,6 +1127,7 @@ def search_conversations(
     user_id: str | None = None,
     end_user: str | None = None,
     session_id: str | None = None,
+    request_id: str | None = None,
     model: str | None = None,
     exclude_single_turn: bool = False,
     source: str = "all",
@@ -1149,7 +1150,55 @@ def search_conversations(
     user_clause, parameters = _conversation_user_filter(user_id)
     end_user = (end_user or "").strip()
     session_id = (session_id or "").strip()
+    request_id = (request_id or "").strip()
     model = (model or "").strip()
+
+    request_lookup = bool(request_id)
+    if request_lookup:
+        # request_id is LiteLLM_SpendLogs' primary key. Resolve it to the
+        # containing session first, then reuse the complete session-family
+        # loader so searching one turn returns its main Agent and Subagents.
+        purpose_clause = '''and coalesce(
+            proxy_server_request->'metadata'->>'request_purpose',
+            metadata->>'request_purpose',
+            metadata->'spend_logs_metadata'->>'request_purpose', '') <> 'llm_judge' '''
+        psycopg, dict_row = _driver()
+        with psycopg.connect(**config.connection_kwargs(), row_factory=dict_row) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f'''select {_conversation_session_expression()} as session_id
+                        from "LiteLLM_SpendLogs"
+                        where request_id = %s and {user_clause}
+                        and "startTime" >= %s and "startTime" < %s
+                        {purpose_clause}
+                        limit 1''',
+                    (request_id, *parameters, window_start, window_end),
+                )
+                request_row = cursor.fetchone()
+        resolved_session_id = str(request_row.get("session_id") or "") if request_row else ""
+        if not resolved_session_id:
+            return {
+                "status": "ok",
+                "query": {
+                    "end_user": end_user or None,
+                    "session_id": None,
+                    "request_id": request_id,
+                    "model": model or None,
+                    "exclude_single_turn": exclude_single_turn,
+                    "source": source,
+                    "start_time": window_start.isoformat(),
+                    "end_time": window_end.isoformat(),
+                },
+                "total": 0,
+                "count": 0,
+                "conversations": [],
+                "has_more": False,
+                "next_offset": None,
+                "scan_truncated": False,
+                "scanned_interactions": 0,
+                "query_strategy": "indexed_request_family",
+            }
+        session_id = resolved_session_id
 
     # Exact session lookup is intentionally handled before the bounded global
     # overview scan. This makes a requested root/subagent complete and avoids
@@ -1179,7 +1228,7 @@ def search_conversations(
                 continue
             if model and model not in item["models"]:
                 continue
-            if exclude_single_turn and int(item.get("interaction_count") or 0) == 1:
+            if exclude_single_turn and not request_lookup and int(item.get("interaction_count") or 0) == 1:
                 continue
             filtered.append(item)
         total = len(filtered)
@@ -1194,6 +1243,7 @@ def search_conversations(
             "query": {
                 "end_user": end_user or None,
                 "session_id": session_id,
+                "request_id": request_id or None,
                 "model": model or None,
                 "exclude_single_turn": exclude_single_turn,
                 "source": source,
@@ -1207,7 +1257,7 @@ def search_conversations(
             "next_offset": next_offset if next_offset < total else None,
             "scan_truncated": False,
             "scanned_interactions": scanned_interactions,
-            "query_strategy": "indexed_session_family",
+            "query_strategy": "indexed_request_family" if request_lookup else "indexed_session_family",
         }
 
     # `end_user` is the employee number in this deployment.  Filter it in
@@ -1302,6 +1352,7 @@ def search_conversations(
         "query": {
             "end_user": end_user or None,
             "session_id": session_id or None,
+            "request_id": request_id or None,
             "model": model or None,
             "exclude_single_turn": exclude_single_turn,
             "source": source,

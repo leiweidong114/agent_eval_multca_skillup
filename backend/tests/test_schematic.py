@@ -62,7 +62,10 @@ def test_schematic_conversation_list_forwards_single_turn_exclusion(monkeypatch)
     client = TestClient(app)
     client.post("/api/auth/login", json={"employee_no": "schematic-user", "password": "x"})
 
-    response = client.get("/api/schematic/conversations?exclude_single_turn=true")
+    response = client.get(
+        "/api/schematic/conversations?exclude_single_turn=true&request_id=request-123"
+    )
 
     assert response.status_code == 200
     assert captured["exclude_single_turn"] is True
+    assert captured["request_id"] == "request-123"

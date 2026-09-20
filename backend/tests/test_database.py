@@ -180,6 +180,57 @@ def test_exact_session_search_uses_targeted_family_lookup(monkeypatch, tmp_path)
     assert result["conversations"][0]["interaction_count"] == 3
 
 
+def test_exact_request_search_resolves_indexed_session_family(monkeypatch, tmp_path):
+    config = DatabaseConfig(
+        enabled=True, host="db", port=5432, name="litellm", user="reader", password="x",
+        sslmode="prefer", connect_timeout_seconds=1, trace_enabled=True,
+        include_content=True, lookaround_seconds=0, limit=500, retention_days=30,
+        max_content_chars=20000,
+    )
+    now = datetime.now(timezone.utc)
+    observed = {}
+
+    class Cursor:
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+        def execute(self, query, params):
+            observed["query"] = query
+            observed["params"] = params
+        def fetchone(self): return {"session_id": "root-session"}
+
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+        def cursor(self): return Cursor()
+
+    class Psycopg:
+        @staticmethod
+        def connect(**_kwargs): return Connection()
+
+    monkeypatch.setattr("agent_eval.database.resolve_database_config", lambda _root: config)
+    monkeypatch.setattr("agent_eval.database._driver", lambda: (Psycopg, object()))
+    monkeypatch.setattr(
+        "agent_eval.database.get_conversation",
+        lambda *_args, **_kwargs: {
+            "root_session_id": "root-session", "session_id": "root-session",
+            "source_kind": "non_evaluation", "interaction_count": 1,
+            "models": ["glm-4.5-air"],
+            "timeline": [{"request_id": "request-1", "session_id": "root-session"}],
+        },
+    )
+
+    result = search_conversations(
+        tmp_path, request_id="request-1", exclude_single_turn=True,
+        start_time=now - timedelta(hours=1), end_time=now,
+    )
+
+    assert "where request_id = %s" in observed["query"]
+    assert observed["params"][0] == "request-1"
+    assert result["query_strategy"] == "indexed_request_family"
+    assert result["query"]["request_id"] == "request-1"
+    assert result["conversations"][0]["root_session_id"] == "root-session"
+
+
 def test_end_user_search_is_filtered_in_database_without_scan_cap(monkeypatch, tmp_path):
     config = DatabaseConfig(
         enabled=True, host="db", port=5432, name="litellm", user="reader", password="x",

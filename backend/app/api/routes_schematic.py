@@ -84,6 +84,7 @@ def conversation_list(
     request: Request,
     end_user: str | None = None,
     session_id: str | None = None,
+    request_id: str | None = None,
     model: str | None = None,
     task_classification: str | None = None,
     exclude_single_turn: bool = False,
@@ -96,7 +97,7 @@ def conversation_list(
     if task_classification and task_classification not in TASK_CLASSIFICATION_FILTERS:
         raise HTTPException(status_code=400, detail="不支持的会话任务分类")
     key = cache_key("schematic-conversations-v4", {
-        "end_user": end_user, "session_id": session_id, "model": model,
+        "end_user": end_user, "session_id": session_id, "request_id": request_id, "model": model,
         "task_classification": task_classification,
         "exclude_single_turn": exclude_single_turn,
         "source": source, "limit": limit, "offset": offset,
@@ -117,6 +118,7 @@ def conversation_list(
             user_id=None,
             end_user=end_user,
             session_id=session_id,
+            request_id=request_id,
             model=model,
             exclude_single_turn=exclude_single_turn,
             source=source,
