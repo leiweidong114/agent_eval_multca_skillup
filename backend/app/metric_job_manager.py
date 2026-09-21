@@ -49,6 +49,16 @@ def _insert_response_summary(value: Any) -> dict[str, Any]:
     }
 
 
+def _rationality_analysis_summary(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: item
+        for key, item in value.items()
+        if key != "result_text"
+    }
+
+
 class MetricJobManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -125,7 +135,20 @@ class MetricJobManager:
                     job["current_session_index"] = session_index
                     job["phase"] = "loading_session"
                     job["progress"] = round((session_index - 1) / max(1, job["total"]) * 100)
-                    self._append_event(job, "loading_session", "正在从 LiteLLM 数据库读取完整会话", session_id=session_id, session_index=session_index)
+                    self._append_event(
+                        job,
+                        "loading_session",
+                        "正在从 LiteLLM PostgreSQL 读取完整会话",
+                        session_id=session_id,
+                        session_index=session_index,
+                        outcome="running",
+                        input={
+                            "root_session_id": session_id,
+                            "start_time": job["start_time"],
+                            "end_time": job["end_time"],
+                            "include_content": True,
+                        },
+                    )
                     self._save(job, store)
                 conversation = get_conversation(
                     BACKEND_ROOT,
@@ -139,14 +162,48 @@ class MetricJobManager:
                     raise ValueError("会话不存在于所选时间范围")
                 with self._lock:
                     job["phase"] = "rule_metrics"
-                    self._append_event(job, "session_loaded", "会话读取完成，开始执行确定性规则", session_id=session_id, interaction_count=conversation.get("interaction_count", len(conversation.get("timeline") or [])))
+                    self._append_event(
+                        job,
+                        "session_loaded",
+                        "LiteLLM 会话读取成功，开始执行确定性规则",
+                        session_id=session_id,
+                        interaction_count=conversation.get("interaction_count", len(conversation.get("timeline") or [])),
+                        outcome="success",
+                        output={
+                            "root_session_id": conversation.get("root_session_id"),
+                            "interaction_count": conversation.get("interaction_count", len(conversation.get("timeline") or [])),
+                            "agent": conversation.get("agent"),
+                            "models": conversation.get("models") or [],
+                            "end_user": conversation.get("end_user"),
+                            "started_at": conversation.get("started_at"),
+                            "finished_at": conversation.get("finished_at"),
+                            "total_tokens": conversation.get("total_tokens"),
+                            "evaluation_run_ids": conversation.get("evaluation_run_ids") or [],
+                        },
+                    )
                     self._save(job, store)
                 result = calculate_rule_metrics(conversation)
                 rule_category, rule_subtype = task_hierarchy(str(result.get("task_type") or "other"))
                 result["task_category"] = rule_category
                 result["task_subtype"] = rule_subtype
                 with self._lock:
-                    self._append_event(job, "rule_metrics", "规则指标计算完成", session_id=session_id, task_type=result.get("task_type"))
+                    self._append_event(
+                        job,
+                        "rule_metrics",
+                        "确定性规则指标计算成功",
+                        session_id=session_id,
+                        task_type=result.get("task_type"),
+                        outcome="success",
+                        output={
+                            "task_type": result.get("task_type"),
+                            "task_type_source": result.get("task_type_source"),
+                            "task_type_confidence": result.get("task_type_confidence"),
+                            "metrics": result.get("metrics"),
+                            "skill_steps": result.get("skill_steps"),
+                            "evidence_coverage": result.get("evidence_coverage"),
+                            "metric_definition_version": result.get("metric_definition_version"),
+                        },
+                    )
                     self._save(job, store)
                 if job["use_llm_judge"]:
                     with self._lock:
@@ -156,6 +213,7 @@ class MetricJobManager:
                             "task_classification_started",
                             "Judge LLM 正在根据第一条用户 Prompt 进行任务分类",
                             session_id=session_id,
+                            outcome="running",
                         )
                         self._save(job, store)
                     result["task_classification"] = classify_session_task(
@@ -172,6 +230,8 @@ class MetricJobManager:
                             session_id=session_id,
                             task_type=classification.get("task_type"),
                             detail=classification.get("error") or classification.get("reason"),
+                            outcome="success" if classification_status == "completed" else "warning",
+                            output=classification,
                         )
                         self._save(job, store)
                     if classification_status == "completed":
@@ -184,7 +244,15 @@ class MetricJobManager:
                     def judge_progress(stage: str, chunk_index: int, chunk_total: int, message: str) -> None:
                         with self._lock:
                             job["phase"] = "llm_judge"
-                            self._append_event(job, stage, message, session_id=session_id, chunk_index=chunk_index, chunk_total=chunk_total)
+                            self._append_event(
+                                job,
+                                stage,
+                                message,
+                                session_id=session_id,
+                                chunk_index=chunk_index,
+                                chunk_total=chunk_total,
+                                outcome="success" if stage.endswith("_completed") else "running",
+                            )
                             self._save(job, store)
 
                     result["judge"] = judge_session_metrics(
@@ -201,6 +269,8 @@ class MetricJobManager:
                             session_id=session_id,
                             judge_status=judge_status,
                             detail=result["judge"].get("error"),
+                            outcome="success" if judge_status == "completed" else "warning",
+                            output=result["judge"],
                         )
                         self._save(job, store)
                     if result["judge"].get("status") == "completed":
@@ -221,7 +291,7 @@ class MetricJobManager:
                     result["judge"] = {"status": "disabled"}
                     result["task_classification"] = {"status": "disabled"}
                     with self._lock:
-                        self._append_event(job, "llm_judge_skipped", "本次任务未启用 LLM Judge", session_id=session_id)
+                        self._append_event(job, "llm_judge_skipped", "本次任务未启用 LLM Judge", session_id=session_id, outcome="skipped", output={"status": "disabled"})
                 with self._lock:
                     job["phase"] = "schematic_rationality"
                     query_ids = list(dict.fromkeys([
@@ -240,6 +310,7 @@ class MetricJobManager:
                             "session_ids": query_ids,
                             "status": "calling",
                         },
+                        outcome="running",
                     )
                     self._save(job, store)
                 rationality_query_error: Exception | None = None
@@ -263,6 +334,12 @@ class MetricJobManager:
                                 "records_matched": rationality_record_count,
                                 "matched_by": rationality_matched_by,
                                 "calls": store.query_diagnostics(),
+                                "selected_record": _rationality_record_summary(rationality_record),
+                            },
+                            outcome="success",
+                            output={
+                                "record_count": rationality_record_count,
+                                "matched_by": rationality_matched_by,
                                 "selected_record": _rationality_record_summary(rationality_record),
                             },
                         )
@@ -294,6 +371,8 @@ class MetricJobManager:
                                 "calls": store.query_diagnostics(),
                                 "error": str(exc),
                             },
+                            outcome="failed",
+                            output=_rationality_analysis_summary(result["schematic_rationality"]),
                         )
                         self._save(job, store)
                 if rationality_query_error is not None:
@@ -310,6 +389,8 @@ class MetricJobManager:
                             "schematic_rationality_not_found",
                             "当前会话暂无统计原理图生成轨迹指标",
                             session_id=session_id,
+                            outcome="not_found",
+                            output=_rationality_analysis_summary(result["schematic_rationality"]),
                         )
                 elif job["use_llm_judge"]:
                     try:
@@ -319,6 +400,7 @@ class MetricJobManager:
                                 "schematic_rationality_judge",
                                 "Judge LLM 正在分析 resultText",
                                 session_id=session_id,
+                                outcome="running",
                             )
                             self._save(job, store)
                         analysis = judge_rationality_result(
@@ -343,6 +425,8 @@ class MetricJobManager:
                                 "schematic_rationality_completed",
                                 "原理图合理性指标分析完成",
                                 session_id=session_id,
+                                outcome="success",
+                                output=_rationality_analysis_summary(result["schematic_rationality"]),
                             )
                     except Exception as exc:
                         extracted = extract_rationality_metrics(rationality_record)
@@ -369,6 +453,8 @@ class MetricJobManager:
                                 "原理图合理性 Judge 不可用，保留原始记录",
                                 session_id=session_id,
                                 detail=str(exc),
+                                outcome="warning",
+                                output=_rationality_analysis_summary(result["schematic_rationality"]),
                             )
                 else:
                     extracted = extract_rationality_metrics(rationality_record)
@@ -387,6 +473,15 @@ class MetricJobManager:
                         "issues": [],
                         **extracted,
                     }
+                    with self._lock:
+                        self._append_event(
+                            job,
+                            "schematic_rationality_rules_completed",
+                            "已通过确定性规则提取原理图合理性指标",
+                            session_id=session_id,
+                            outcome="success",
+                            output=_rationality_analysis_summary(result["schematic_rationality"]),
+                        )
                 with self._lock:
                     job["phase"] = "saving_metrics"
                     self._append_event(
@@ -402,6 +497,7 @@ class MetricJobManager:
                             "check_type": "agent_eval_session_metrics",
                             "status": "calling",
                         },
+                        outcome="running",
                     )
                     self._save(job, store)
                 try:
@@ -424,6 +520,7 @@ class MetricJobManager:
                                 "calls": store.write_diagnostics(),
                                 "error": str(exc),
                             },
+                            outcome="failed",
                         )
                         self._save(job, store)
                     raise
@@ -433,7 +530,7 @@ class MetricJobManager:
                         "schematic_data_insert_succeeded",
                         "Java 插入接口调用成功，指标已保存到 MongoDB",
                         session_id=session_id,
-                        interface={
+                            interface={
                             "method": "POST",
                             "endpoint": store.write_endpoint(),
                             "collection": "HDschematicRationalityCollection",
@@ -441,17 +538,39 @@ class MetricJobManager:
                             "check_type": "agent_eval_session_metrics",
                             "status": "success",
                             "calls": store.write_diagnostics(),
-                            "response": _insert_response_summary(insert_response),
-                        },
+                                "response": _insert_response_summary(insert_response),
+                            },
+                            outcome="success",
+                            output={
+                                "session_id": session_id,
+                                "metric_status": result.get("status"),
+                                "task_type": result.get("task_type"),
+                                "metrics": result.get("metrics"),
+                                "schematic_rationality": _rationality_analysis_summary(result.get("schematic_rationality")),
+                            },
                     )
                     job["completed"] += 1
                     job["progress"] = round(session_index / max(1, job["total"]) * 100)
-                    self._append_event(job, "session_completed", "会话指标计算完成", session_id=session_id, metric_status=result.get("status"))
+                    self._append_event(
+                        job,
+                        "session_completed",
+                        "会话全部指标步骤完成",
+                        session_id=session_id,
+                        metric_status=result.get("status"),
+                        outcome="success",
+                        output={
+                            "task_type": result.get("task_type"),
+                            "metrics": result.get("metrics"),
+                            "judge_status": (result.get("judge") or {}).get("status"),
+                            "schematic_rationality_status": (result.get("schematic_rationality") or {}).get("status"),
+                            "persisted_to": "HDschematicRationalityCollection",
+                        },
+                    )
             except Exception as exc:
                 with self._lock:
                     job["failed"] += 1
                     job["errors"] = [*job["errors"], {"session_id": session_id, "detail": str(exc)}][-100:]
-                    self._append_event(job, "session_failed", "会话指标计算失败", session_id=session_id, detail=str(exc))
+                    self._append_event(job, "session_failed", "会话指标计算失败", session_id=session_id, detail=str(exc), outcome="failed", output={"error": str(exc)})
             with self._lock:
                 self._save(job, store)
         with self._lock:
