@@ -70,6 +70,7 @@ class MetricsStore:
 
     def __init__(self) -> None:
         self._client = SchematicDataClient()
+        self._latest_rationality_diagnostic: dict[str, Any] = {}
 
     def _data_client(self) -> SchematicDataClient:
         client = getattr(self, "_client", None)
@@ -108,6 +109,57 @@ class MetricsStore:
         if hasattr(client, "clear_diagnostics"):
             client.clear_diagnostics()
         return client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
+
+    def verify_metric_persisted(
+        self,
+        session_id: str,
+        expected_uuid: str,
+    ) -> dict[str, Any]:
+        """Read a just-written metric back from MongoDB through the Java facade."""
+        client = self._data_client()
+        try:
+            records = client.find_records(
+                RATIONALITY_COLLECTION,
+                [session_id],
+                use_cache=False,
+            )
+        except TypeError:
+            # Small fake clients used by integrations may implement the older
+            # two-argument protocol. Production SchematicDataClient always
+            # takes use_cache and bypasses TTL/LRU here.
+            records = client.find_records(RATIONALITY_COLLECTION, [session_id])
+        metric_records = [
+            record
+            for record in records
+            if str(record.get("checkType") or "") == SESSION_METRICS_CHECK_TYPE
+        ]
+        matching = next(
+            (
+                record
+                for record in metric_records
+                if str(record.get("uuid") or "") == str(expected_uuid)
+            ),
+            None,
+        )
+        parsed = _metric_document(matching) if matching is not None else None
+        verified = matching is not None and parsed is not None
+        reason = None
+        if matching is None:
+            reason = "写入接口返回成功，但按相同 Session ID 回读时没有找到本次 UUID"
+        elif parsed is None:
+            reason = "已回读到本次 UUID，但 resultText 不是可解析的指标 JSON"
+        return {
+            "verified": verified,
+            "reason": reason,
+            "session_id": session_id,
+            "expected_uuid": expected_uuid,
+            "records_returned": len(records),
+            "metric_records_returned": len(metric_records),
+            "returned_metric_uuids": [str(item.get("uuid") or "") for item in metric_records[:50]],
+            "record_id": str((matching or {}).get("_id") or "") or None,
+            "record_status": (matching or {}).get("status"),
+            "parsed_metric_status": (parsed or {}).get("status"),
+        }
 
     def query_diagnostics(self) -> list[dict[str, Any]]:
         client = self._data_client()
@@ -235,9 +287,19 @@ class MetricsStore:
         ))
         if hasattr(self._data_client(), "clear_diagnostics"):
             self._data_client().clear_diagnostics()
+        client = self._data_client()
+        try:
+            all_values = client.find_rationality_records(identifiers, use_cache=False)
+        except TypeError:
+            all_values = client.find_rationality_records(identifiers)
+        self_metrics = [
+            value
+            for value in all_values
+            if str(value.get("checkType") or "") == SESSION_METRICS_CHECK_TYPE
+        ]
         values = [
             value
-            for value in self._data_client().find_rationality_records(identifiers)
+            for value in all_values
             if str(value.get("checkType") or "") != SESSION_METRICS_CHECK_TYPE
         ]
         completed = [
@@ -252,7 +314,49 @@ class MetricsStore:
         matched_by = None
         if result is not None:
             matched_by = "root_session_id" if result.get("sessionId") == session_id else "evaluation_run_id"
+        status_counts: dict[str, int] = {}
+        check_type_counts: dict[str, int] = {}
+        for value in all_values:
+            status = str(value.get("status") or "<empty>")
+            check_type = str(value.get("checkType") or "<empty>")
+            status_counts[status] = status_counts.get(status, 0) + 1
+            check_type_counts[check_type] = check_type_counts.get(check_type, 0) + 1
+        if not all_values:
+            reason = "Java 查询成功，但没有返回任何 Session ID 精确匹配记录"
+        elif not values:
+            reason = "只找到平台自身的 agent_eval_session_metrics，未找到原理图轨迹质量记录"
+        elif not completed:
+            reason = "找到了 Session ID 匹配记录，但其 status 不在 completed/success/ok 中"
+        else:
+            reason = None
+        self._latest_rationality_diagnostic = {
+            "identifiers": identifiers,
+            "exact_match_record_count": len(all_values),
+            "rationality_record_count": len(values),
+            "self_metric_record_count": len(self_metrics),
+            "eligible_record_count": len(completed),
+            "accepted_statuses": ["completed", "success", "ok"],
+            "excluded_check_type": SESSION_METRICS_CHECK_TYPE,
+            "status_counts": status_counts,
+            "check_type_counts": check_type_counts,
+            "returned_session_ids": sorted({str(value.get("sessionId") or "") for value in all_values}),
+            "record_samples": [
+                {
+                    "_id": str(value.get("_id") or "") or None,
+                    "uuid": value.get("uuid"),
+                    "sessionId": value.get("sessionId"),
+                    "status": value.get("status"),
+                    "checkType": value.get("checkType"),
+                    "createTime": value.get("createTime"),
+                }
+                for value in all_values[:20]
+            ],
+            "reason": reason,
+        }
         return result, len(values), matched_by
+
+    def latest_rationality_diagnostic(self) -> dict[str, Any]:
+        return dict(getattr(self, "_latest_rationality_diagnostic", {}))
 
     def summary(self, *, start_time: datetime, end_time: datetime) -> dict[str, Any]:
         result = self.list_metrics(start_time=start_time, end_time=end_time, limit=100000)

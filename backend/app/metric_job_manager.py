@@ -296,6 +296,7 @@ class MetricJobManager:
                         session_id,
                         correlation_ids=conversation.get("evaluation_run_ids") or [],
                     )
+                    rationality_query_diagnostic = store.latest_rationality_diagnostic()
                     with self._lock:
                         self._append_event(
                             job,
@@ -318,6 +319,7 @@ class MetricJobManager:
                                 "record_count": rationality_record_count,
                                 "matched_by": rationality_matched_by,
                                 "selected_record": _rationality_record_summary(rationality_record),
+                                "selection_diagnostic": rationality_query_diagnostic,
                             },
                         )
                         self._save(job, store)
@@ -326,6 +328,7 @@ class MetricJobManager:
                     rationality_record = None
                     rationality_record_count = 0
                     rationality_matched_by = None
+                    rationality_query_diagnostic = {}
                     result["schematic_rationality"] = {
                         "status": "source_unavailable",
                         "source_collection": "HDschematicRationalityCollection",
@@ -359,6 +362,7 @@ class MetricJobManager:
                         "status": "not_found",
                         "source_collection": "HDschematicRationalityCollection",
                         "record_count": rationality_record_count,
+                        "query_diagnostic": rationality_query_diagnostic,
                     }
                     with self._lock:
                         self._append_event(
@@ -376,7 +380,9 @@ class MetricJobManager:
                             output={
                                 **_rationality_analysis_summary(result["schematic_rationality"]),
                                 "query_succeeded": True,
-                                "reason": "接口调用成功，但没有找到 Session ID 匹配、状态有效且不是指标计算结果的原理图轨迹记录",
+                                "reason": rationality_query_diagnostic.get("reason")
+                                or "接口调用成功，但没有找到状态有效的原理图轨迹记录",
+                                "selection_diagnostic": rationality_query_diagnostic,
                             },
                         )
                 elif job["use_llm_judge"]:
@@ -555,14 +561,23 @@ class MetricJobManager:
                         outcome="running",
                     )
                     self._save(job, store)
+                read_back_verification: dict[str, Any] | None = None
                 try:
                     insert_response = store.upsert_metrics(result, record=metric_record)
+                    read_back_verification = store.verify_metric_persisted(
+                        session_id,
+                        str(metric_record.get("uuid") or ""),
+                    )
+                    if not read_back_verification.get("verified"):
+                        raise RuntimeError(
+                            str(read_back_verification.get("reason") or "MongoDB 写后回读验证失败")
+                        )
                 except Exception as exc:
                     with self._lock:
                         self._append_event(
                             job,
                             "schematic_data_insert_failed",
-                            "Java 插入接口调用失败，指标未写入 MongoDB",
+                            "Java 插入或 MongoDB 写后回读验证失败，指标未确认保存",
                             session_id=session_id,
                             detail=str(exc),
                             interface={
@@ -573,6 +588,7 @@ class MetricJobManager:
                                 "check_type": "agent_eval_session_metrics",
                                 "status": "failed",
                                 "calls": store.write_diagnostics(),
+                                "read_back_verification": read_back_verification,
                                 "error": str(exc),
                             },
                             outcome="failed",
@@ -583,9 +599,9 @@ class MetricJobManager:
                     self._append_event(
                         job,
                         "schematic_data_insert_succeeded",
-                        "Java 插入接口调用成功，指标已保存到 MongoDB",
+                        "Java 插入成功并通过 MongoDB 写后回读验证",
                         session_id=session_id,
-                            interface={
+                        interface={
                             "method": "POST",
                             "endpoint": store.write_endpoint(),
                             "collection": "HDschematicRationalityCollection",
@@ -593,18 +609,20 @@ class MetricJobManager:
                             "check_type": "agent_eval_session_metrics",
                             "status": "success",
                             "calls": store.write_diagnostics(),
-                                "response": _insert_response_summary(insert_response),
-                            },
-                            outcome="success",
-                            output={
-                                "session_id": session_id,
-                                "saved_record": metric_record_audit,
-                                "insert_response": _insert_response_summary(insert_response),
-                                "metric_status": result.get("status"),
-                                "task_type": result.get("task_type"),
-                                "metrics": result.get("metrics"),
-                                "schematic_rationality": _rationality_analysis_summary(result.get("schematic_rationality")),
-                            },
+                            "response": _insert_response_summary(insert_response),
+                            "read_back_verification": read_back_verification,
+                        },
+                        outcome="success",
+                        output={
+                            "session_id": session_id,
+                            "saved_record": metric_record_audit,
+                            "insert_response": _insert_response_summary(insert_response),
+                            "read_back_verification": read_back_verification,
+                            "metric_status": result.get("status"),
+                            "task_type": result.get("task_type"),
+                            "metrics": result.get("metrics"),
+                            "schematic_rationality": _rationality_analysis_summary(result.get("schematic_rationality")),
+                        },
                     )
                     job["completed"] += 1
                     job["progress"] = round(session_index / max(1, job["total"]) * 100)

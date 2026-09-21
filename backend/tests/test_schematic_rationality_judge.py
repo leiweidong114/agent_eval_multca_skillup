@@ -121,3 +121,30 @@ def test_store_can_join_rationality_record_by_evaluation_run_id(monkeypatch):
     assert count == 1
     assert record["_id"] == "mongo-1"
     assert matched_by == "evaluation_run_id"
+    assert store.latest_rationality_diagnostic()["eligible_record_count"] == 1
+
+
+class IneligibleDataClient:
+    def find_rationality_records(self, identifiers):
+        return [{
+            "_id": "mongo-2",
+            "sessionId": identifiers[0],
+            "status": "pending",
+            "checkType": "hscope_diagram_lint",
+            "resultText": "{}",
+        }]
+
+
+def test_store_explains_why_matching_session_is_not_eligible(monkeypatch):
+    monkeypatch.setattr("app.metrics_store.SchematicDataClient", IneligibleDataClient)
+    store = MetricsStore.__new__(MetricsStore)
+
+    record, count, matched_by = store.latest_rationality_analysis("root-session")
+    diagnostic = store.latest_rationality_diagnostic()
+
+    assert record is None
+    assert count == 1
+    assert matched_by is None
+    assert diagnostic["exact_match_record_count"] == 1
+    assert diagnostic["status_counts"] == {"pending": 1}
+    assert "status" in diagnostic["reason"]

@@ -46,8 +46,10 @@ def test_remote_metrics_round_trip_without_local_database():
     }
 
     store.upsert_metrics(result)
+    verification = store.verify_metric_persisted("session-1", client.records[0]["uuid"])
 
     assert client.records[0]["checkType"] == SESSION_METRICS_CHECK_TYPE
+    assert verification["verified"] is True
     assert json.loads(client.records[0]["resultText"])["model"] == "glm-4.5-air"
     assert store.get_metrics("session-1")["model"] == "glm-4.5-air"
     assert store.statuses(["session-1"])["session-1"]["status"] == "completed"
@@ -60,3 +62,14 @@ def test_remote_metrics_round_trip_without_local_database():
     assert page["total"] == 1
     assert page["items"][0]["session_id"] == "session-1"
     assert store.get_job("job-1") is None
+
+
+def test_write_read_verification_rejects_missing_uuid():
+    client = FakeClient()
+    store = MetricsStore.__new__(MetricsStore)
+    store._client = client
+
+    verification = store.verify_metric_persisted("session-missing", "uuid-not-present")
+
+    assert verification["verified"] is False
+    assert "没有找到本次 UUID" in verification["reason"]

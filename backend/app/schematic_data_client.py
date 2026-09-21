@@ -162,6 +162,18 @@ class SchematicDataClient:
             "records_returned": len(rows),
             "total": total,
             "record_fields": sorted({str(key) for row in rows for key in row}),
+            "record_session_ids": sorted({
+                str(row.get("sessionId")) for row in rows if row.get("sessionId") is not None
+            })[:50],
+            "record_statuses": sorted({
+                str(row.get("status")) for row in rows if row.get("status") is not None
+            })[:50],
+            "record_check_types": sorted({
+                str(row.get("checkType")) for row in rows if row.get("checkType") is not None
+            })[:50],
+            "record_uuids": [
+                str(row.get("uuid")) for row in rows if row.get("uuid") is not None
+            ][:50],
         })
         self._query_diagnostics.append(diagnostic)
         return payload
@@ -214,8 +226,13 @@ class SchematicDataClient:
         clear_response_cache()
         return payload
 
-    def find_rationality_records(self, identifiers: Iterable[str]) -> list[dict[str, Any]]:
-        return self.find_records(RATIONALITY_COLLECTION, identifiers)
+    def find_rationality_records(
+        self,
+        identifiers: Iterable[str],
+        *,
+        use_cache: bool = True,
+    ) -> list[dict[str, Any]]:
+        return self.find_records(RATIONALITY_COLLECTION, identifiers, use_cache=use_cache)
 
     def find_records(
         self,
