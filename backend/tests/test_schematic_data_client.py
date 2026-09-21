@@ -164,3 +164,21 @@ def test_schematic_data_insert_route_needs_no_login_and_forwards_payload(monkeyp
     assert response.json()["record"]["_id"] == "mongo-1"
     assert captured["record"] == payload
     assert captured["collection_name"] == "HDschematicRationalityCollection"
+
+
+def test_schematic_data_insert_with_trailing_slash_needs_no_login(monkeypatch):
+    class FakeClient:
+        def insert_record(self, record, *, collection_name):
+            return {"status": "inserted", "record": record}
+
+    monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
+    payload = {
+        "uuid": "uuid-2", "status": "completed", "createUser": "100001",
+        "createTime": "2026-09-21T08:00:00Z", "checkType": "hscope_diagram_lint",
+        "checkMessage": "测试", "userName": "测试用户", "hscopeProjectId": "project-2",
+        "boardNum": "BOARD-2", "sessionId": "session-2", "resultText": "{}",
+    }
+
+    response = TestClient(app).post("/api/schematic-data/insert/", json=payload)
+
+    assert response.status_code == 201

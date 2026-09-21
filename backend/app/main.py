@@ -44,11 +44,8 @@ async def require_claimed_login(request: Request, call_next):
     path = request.url.path
     protected = path.startswith("/api/") or path.startswith("/prism/api/")
     public = (
-        path in {
-            "/api/health",
-            "/api/schematic-data/query",
-            "/api/schematic-data/insert",
-        }
+        path == "/api/health"
+        or path.startswith("/api/schematic-data/")
         or path.startswith("/api/auth/")
         or not protected
     )
