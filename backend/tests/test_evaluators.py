@@ -171,7 +171,7 @@ def test_schematic_evaluator_requires_real_pipeline_delivery(tmp_path):
         process_metrics={"subagent_calls": 2},
         skill_usage={"all_selected_skills_read": True, "all_selected_skills_observed": True},
         skill_quality={"score": 100, "details": []},
-        results=[{"case_results": [{"status": "PASS", "response": url, "session_results": [{
+        results=[{"case_results": [{"configuration": "with_skill", "status": "PASS", "response": url, "session_results": [{
             "transcript": [
                 *[
                     {"role": "tool_call", "tool_call": {"id": f"call-{index}", "name": "exec_command", "arguments": {"cmd": f"python skills/scripts/{script}"}}}
@@ -182,8 +182,15 @@ def test_schematic_evaluator_requires_real_pipeline_delivery(tmp_path):
                     for index in range(1, 6)
                 ],
             ]
-        }]}]}],
+        }]}, {"configuration": "without_skill", "status": "FAIL", "response": "Expected negative control"}]}],
         interactions=[
+            {
+                "response": {"choices": [{"message": {"tool_calls": [{
+                    "id": "plan-call",
+                    "function": {"name": "update_plan", "arguments": '{"step":"python fetch_catalog.py"}'},
+                }]}}]},
+                "proxy_server_request": {"messages": []},
+            },
             {
                 "response": {"choices": [{"message": {"tool_calls": [{
                     "id": "db-fetch", "function": {
@@ -220,6 +227,7 @@ def test_schematic_evaluator_requires_real_pipeline_delivery(tmp_path):
     trace = result.extensions["schematic"]["trace"]
     assert trace["schema_version"] == "schematic-trace-v2"
     assert trace["script_success_rate"] == 100
+    assert trace["script_calls"] == 6  # update_plan prose is not a script invocation
     assert trace["assertion_completion_rate"] == 100
     assert trace["artifact_count"] == 7
     assert trace["workspace_file_count"] == 8
@@ -262,6 +270,85 @@ def test_schematic_evaluator_rejects_process_only_success(tmp_path):
 
     assert result.extensions["schematic"]["acceptance"]["accepted"] is False
     assert "schematic_url_verified" in result.extensions["schematic"]["acceptance"]["failed_checks"]
+
+
+@pytest.mark.parametrize("tool_name", ["exec", "PowerShell"])
+def test_schematic_trace_correlates_justdo_tool_ids(tmp_path, tool_name):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    install_bundled_schematic_plugin(backend)
+    call_id = "call_267c52e34b224d7d9e70c688"
+    evidence = EvaluationEvidence(
+        deterministic_scores={}, process_metrics={}, skill_usage={}, skill_quality={},
+        results=[], artifact_root=str(tmp_path), artifact_manifest=[],
+        interactions=[
+            {
+                "response": {"choices": [{"message": {"tool_calls": [{
+                    "id": call_id,
+                    "function": {"name": tool_name, "arguments": '{"command":"python fetch_catalog.py"}'},
+                }]}}]},
+                "proxy_server_request": {"messages": []},
+            },
+            {
+                "response": {"choices": []},
+                "proxy_server_request": {"messages": [{
+                    "role": "tool", "tool_call_id": call_id.replace("call_", "call"),
+                    "content": "catalog written: out/catalog.json",
+                }]},
+            },
+        ],
+    )
+    context = EvaluationContext(
+        run_id="run", task_id="task", evaluation_type="schematic",
+        agent="justdo", requested_model="model", skill_name="bundle",
+        selected_skills=("schematic-pipeline",), skill_md="# Skill",
+        schematic_task_type="block_to_schematic",
+    )
+    result = resolve_evaluator(backend, evaluation_type="schematic").evaluate(
+        context=context, evidence=evidence, scoring_config={},
+    )
+    trace = result.extensions["schematic"]["trace"]
+    fetch = next(item for item in trace["script_evidence"] if item["script"] == "fetch_catalog.py")
+    assert fetch["attempts"] == 1
+    assert fetch["successful_calls"] == 1
+    assert trace["structured_tool_result_failures"] == 0
+
+
+def test_schematic_trace_distinguishes_failed_script_retry(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    install_bundled_schematic_plugin(backend)
+    ids = ("call_1111111111111111", "call_2222222222222222")
+    evidence = EvaluationEvidence(
+        deterministic_scores={}, process_metrics={}, skill_usage={}, skill_quality={},
+        results=[], artifact_root=str(tmp_path), artifact_manifest=[],
+        interactions=[
+            {
+                "response": {"choices": [{"message": {"tool_calls": [{
+                    "id": call_id,
+                    "function": {"name": "exec", "arguments": '{"command":"python layout_sheet.py"}'},
+                }]}}]},
+                "proxy_server_request": {"messages": [{
+                    "role": "tool", "tool_call_id": call_id.replace("call_", "call"),
+                    "content": content,
+                }]},
+            }
+            for call_id, content in zip(ids, ("切片完整性校验失败", '{"status": "ok"}'))
+        ],
+    )
+    context = EvaluationContext(
+        run_id="run", task_id="task", evaluation_type="schematic",
+        agent="justdo", requested_model="model", skill_name="bundle",
+        selected_skills=("schematic-pipeline",), skill_md="# Skill",
+        schematic_task_type="block_to_schematic",
+    )
+    result = resolve_evaluator(backend, evaluation_type="schematic").evaluate(
+        context=context, evidence=evidence, scoring_config={},
+    )
+    layout = next(item for item in result.extensions["schematic"]["trace"]["script_evidence"]
+                  if item["script"] == "layout_sheet.py")
+    assert layout["attempts"] == 2
+    assert layout["successful_calls"] == 1
 
 
 def test_skill_evaluator_requires_real_marker_artifact(tmp_path):

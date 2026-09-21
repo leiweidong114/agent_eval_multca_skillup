@@ -57,6 +57,8 @@ def _response_text(evidence: EvaluationEvidence) -> str:
     values: list[str] = []
     for iteration in evidence.results:
         for case in iteration.get("case_results") or []:
+            if case.get("configuration", "with_skill") != "with_skill":
+                continue
             values.append(str(case.get("response") or ""))
             for session in case.get("session_results") or []:
                 values.append(str(session.get("final_message") or ""))
@@ -79,6 +81,7 @@ def evaluate_result(
         case
         for iteration in evidence.results
         for case in iteration.get("case_results") or []
+        if case.get("configuration", "with_skill") == "with_skill"
     ]
     cases_passed = bool(cases) and all(case.get("status") == "PASS" for case in cases)
     sheets_valid = bool(

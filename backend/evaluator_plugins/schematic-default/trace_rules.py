@@ -23,6 +23,42 @@ def _text(value: Any) -> str:
         return str(value)
 
 
+def _tool_call_id(value: Any) -> str:
+    """Normalize JustDo's OpenClaw `call_abc` / LiteLLM `callabc` IDs.
+
+    The proxy removes the underscore after `call` in tool-result messages, while
+    the model response and local transcript retain it. Limit this normalization
+    to hex IDs so unrelated tool IDs cannot be accidentally paired.
+    """
+    call_id = str(value or "")
+    match = re.fullmatch(r"call_([0-9a-f]{16,})", call_id, re.IGNORECASE)
+    return f"call{match.group(1)}" if match else call_id
+
+
+def _executed_scripts(name: str, arguments: Any) -> set[str]:
+    """Count only scripts actually invoked by a shell tool, not plans or prose."""
+    if name.lower() not in {"exec", "exec_command", "shell_command", "bash", "shell", "powershell"}:
+        return set()
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except (TypeError, ValueError):
+            return set()
+    if not isinstance(arguments, dict):
+        return set()
+    command = arguments.get("command") or arguments.get("cmd")
+    if not isinstance(command, str):
+        return set()
+    return {
+        script for script in REQUIRED_PIPELINE_SCRIPTS
+        if re.search(
+            rf"\b(?:python(?:3(?:\.\d+)?)?|py)(?:\.exe)?\b[^\n;|]{{0,400}}\b{re.escape(script)}\b",
+            command,
+            re.IGNORECASE,
+        )
+    }
+
+
 def _transcript_events(value: Any) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     if isinstance(value, list):
@@ -96,15 +132,18 @@ def evaluate_trace(evidence: EvaluationEvidence) -> dict[str, object]:
         role = str(event.get("role") or "").lower()
         if role == "tool_call" and isinstance(event.get("tool_call"), dict):
             call = event["tool_call"]
-            call_id = str(call.get("id") or f"call-{index}")
+            call_id = _tool_call_id(call.get("id") or f"call-{index}")
             calls[call_id] = {
                 "id": call_id,
                 "name": str(call.get("name") or ""),
                 "text": _text(call.get("arguments") or {}).lower().replace("\\", "/"),
+                "executed_scripts": _executed_scripts(
+                    str(call.get("name") or ""), call.get("arguments") or {}
+                ),
             }
         elif role == "tool_result" and isinstance(event.get("tool_result"), dict):
             result = event["tool_result"]
-            call_id = str(result.get("call_id") or result.get("tool_call_id") or "")
+            call_id = _tool_call_id(result.get("call_id") or result.get("tool_call_id") or "")
             if call_id:
                 results[call_id] = result
 
@@ -118,6 +157,7 @@ def evaluate_trace(evidence: EvaluationEvidence) -> dict[str, object]:
             marker in body for marker in (
                 '"status": "error"', '"status":"error"',
                 "traceback (most recent call last)", "timed out",
+                "校验失败", "找不到路径",
             )
         ) or bool(
             re.search(r"\bexit\s+code\s*:\s*[1-9]\d*\b", body)
@@ -128,7 +168,7 @@ def evaluate_trace(evidence: EvaluationEvidence) -> dict[str, object]:
 
     script_evidence = []
     for script in REQUIRED_PIPELINE_SCRIPTS:
-        ids = [call_id for call_id, call in calls.items() if script in call["text"]]
+        ids = [call_id for call_id, call in calls.items() if script in call["executed_scripts"]]
         successful_ids = [call_id for call_id in ids if result_ok(call_id)]
         script_evidence.append({
             "script": script, "attempts": len(ids),

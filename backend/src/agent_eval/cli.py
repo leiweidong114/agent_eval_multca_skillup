@@ -932,6 +932,7 @@ def _evaluation_batch(
             case
             for iteration in (result.get("results") or [])
             for case in (iteration.get("case_results") or [])
+            if case.get("configuration", "with_skill") == "with_skill"
         ]
         return all(case.get("status") == "PASS" for case in cases) if cases else True
 
