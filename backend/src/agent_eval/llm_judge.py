@@ -151,9 +151,7 @@ def _judge_request(endpoint: str, *, headers: dict[str, str], body: dict[str, An
 
 
 def _json_object(text: str) -> dict[str, Any]:
-    cleaned = text.strip()
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.I)
-    value = json.loads(cleaned)
+    value = _generic_json_object(text)
     if not isinstance(value, dict):
         raise ValueError("LLM judge did not return a JSON object")
     dimensions = value.get("dimensions")
@@ -165,6 +163,63 @@ def _json_object(text: str) -> dict[str, Any]:
             raise ValueError(f"LLM judge response is missing numeric {name}.score")
         item["score"] = round(max(0.0, min(100.0, float(item["score"]))), 2)
     return value
+
+
+def _generic_json_object(text: Any) -> dict[str, Any]:
+    """Decode a Judge JSON object while tolerating common reasoning wrappers."""
+    if isinstance(text, dict):
+        return dict(text)
+    if isinstance(text, list):
+        text = "\n".join(
+            str(item.get("text") or item.get("content") or "")
+            if isinstance(item, dict) else str(item)
+            for item in text
+        )
+    cleaned = str(text or "").strip()
+    cleaned = re.sub(r"<think\b[^>]*>[\s\S]*?</think>", "", cleaned, flags=re.I).strip()
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.I).strip()
+    if not cleaned:
+        raise ValueError("Judge model returned an empty message.content")
+    try:
+        value = json.loads(cleaned)
+    except json.JSONDecodeError as direct_error:
+        decoder = json.JSONDecoder()
+        value = None
+        for match in re.finditer(r"\{", cleaned):
+            try:
+                candidate, _ = decoder.raw_decode(cleaned[match.start():])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(candidate, dict):
+                value = candidate
+                break
+        if value is None:
+            raise ValueError(
+                "Judge model returned non-JSON message.content "
+                f"(length={len(cleaned)}, parse_error={direct_error.msg})"
+            ) from direct_error
+    if not isinstance(value, dict):
+        raise ValueError("LLM judge did not return a JSON object")
+    return value
+
+
+def _judge_response_content(payload: Any) -> tuple[Any, dict[str, Any]]:
+    if not isinstance(payload, dict):
+        raise ValueError("Judge gateway response is not a JSON object")
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise ValueError("Judge gateway response contains no choices")
+    choice = choices[0]
+    message = choice.get("message")
+    if not isinstance(message, dict):
+        raise ValueError("Judge gateway response contains no assistant message")
+    reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
+    diagnostics = {
+        "finish_reason": choice.get("finish_reason"),
+        "content_length": len(str(message.get("content") or "")),
+        "reasoning_content_length": len(str(reasoning)),
+    }
+    return message.get("content"), diagnostics
 
 
 def run_json_judge(
@@ -220,6 +275,9 @@ def run_json_judge(
     }
     started_at = datetime.now(timezone.utc)
     interaction_id = uuid.uuid4().hex
+    payload: dict[str, Any] | None = None
+    content: Any = None
+    response_diagnostics: dict[str, Any] = {}
     try:
         response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout)
         if response.status_code in {400, 404, 422}:
@@ -227,11 +285,29 @@ def run_json_judge(
             response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout)
         response.raise_for_status()
         payload = response.json()
-        content = payload["choices"][0]["message"]["content"]
-        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", str(content).strip(), flags=re.I)
-        value = json.loads(cleaned)
-        if not isinstance(value, dict):
-            raise ValueError("LLM judge did not return a JSON object")
+        content, response_diagnostics = _judge_response_content(payload)
+        response_format_fallback = "response_format" not in body
+        try:
+            value = _generic_json_object(content)
+        except ValueError as first_error:
+            if "response_format" not in body:
+                raise ValueError(f"{first_error}; response={response_diagnostics}") from first_error
+            # A few OpenAI-compatible reasoning gateways return HTTP 200 with
+            # empty/non-JSON content when response_format is present. Retry once
+            # without that field while still enforcing JSON locally.
+            body.pop("response_format", None)
+            response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout)
+            response.raise_for_status()
+            payload = response.json()
+            content, response_diagnostics = _judge_response_content(payload)
+            try:
+                value = _generic_json_object(content)
+            except ValueError as fallback_error:
+                raise ValueError(
+                    f"{fallback_error}; response={response_diagnostics}; "
+                    f"response_format_attempt={first_error}"
+                ) from fallback_error
+            response_format_fallback = True
         _write_judge_audit(
             project_root,
             interaction_id=interaction_id,
@@ -251,6 +327,7 @@ def run_json_judge(
             "gateway": profile.name,
             "usage": payload.get("usage") or {},
             "judge_interaction_id": interaction_id,
+            "response_format_fallback": response_format_fallback,
         }
     except Exception as exc:
         _write_judge_audit(
@@ -263,6 +340,8 @@ def run_json_judge(
             model=profile.model,
             request_body=body,
             started_at=started_at,
+            response_payload=payload,
+            output_content=str(content or ""),
             error=str(exc),
         )
         raise
