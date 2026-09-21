@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from agent_eval.env_config import effective_environment
@@ -23,7 +22,6 @@ class InfrastructureSettings:
     schematic_data_query_max_pages: int
     cache_default_ttl_seconds: int
     cache_max_size: int
-    metrics_sqlite_path: Path
     source: str = "environment"
 
 
@@ -50,13 +48,6 @@ def load_infrastructure_settings(*, force: bool = False) -> InfrastructureSettin
         or "/schematic/schematicData/insert"
     ).strip()
     api_cookie = str(environment.get("SCHEMATIC_DATA_API_COOKIE") or "").strip()
-    sqlite_value = str(
-        environment.get("SESSION_METRICS_SQLITE_PATH")
-        or "backend/data/session_metrics.sqlite3"
-    ).strip()
-    sqlite_path = Path(sqlite_value)
-    if not sqlite_path.is_absolute():
-        sqlite_path = (BACKEND_ROOT.parent / sqlite_path).resolve()
     try:
         timeout = max(1.0, float(environment.get("SCHEMATIC_DATA_API_TIMEOUT_SECONDS") or 15))
     except (TypeError, ValueError):
@@ -77,7 +68,6 @@ def load_infrastructure_settings(*, force: bool = False) -> InfrastructureSettin
             environment.get("AGENT_EVAL_CACHE_TTL_SECONDS"), 300
         ),
         cache_max_size=_positive_int(environment.get("AGENT_EVAL_CACHE_MAX_SIZE"), 1000),
-        metrics_sqlite_path=sqlite_path,
     )
 
 
@@ -94,6 +84,6 @@ def infrastructure_health() -> dict[str, Any]:
         "query_path": settings.schematic_data_query_path,
         "write_configured": bool(settings.schematic_data_write_path),
         "cookie_configured": bool(settings.schematic_data_api_cookie),
-        "metrics_store": "sqlite",
+        "metrics_store": "mongodb_via_http",
         "cache": "memory_ttl_lru",
     }

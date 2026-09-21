@@ -73,6 +73,7 @@ export const createMetricJob = (payload) => data(http.post('/session-metrics/job
 export const fetchMetricJob = (jobId) => data(http.get(`/session-metrics/jobs/${encodeURIComponent(jobId)}`))
 export const fetchMetricDetail = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}`))
 export const fetchJudgeInteractions = (params = {}) => data(http.get('/judge-interactions', { params }))
+export const fetchJudgeInteractionFilters = () => data(http.get('/judge-interactions/filters'))
 export const fetchJudgeInteraction = (id) => data(http.get(`/judge-interactions/${encodeURIComponent(id)}`))
 
 export const fetchPrismDashboard = () => data(prism.get('/dashboard'))

@@ -1,20 +1,33 @@
+import json
 from datetime import datetime, timezone
 
-from app import metrics_store
+from app.metrics_store import MetricsStore, SESSION_METRICS_CHECK_TYPE
 
 
-class Settings:
-    def __init__(self, path):
-        self.metrics_sqlite_path = path
+class FakeClient:
+    def __init__(self):
+        self.records = []
+
+    def insert_record(self, record, *, collection_name):
+        saved = {**record, "_id": f"mongo-{len(self.records) + 1}"}
+        self.records.append(saved)
+        return {"status": "inserted", "record": saved, "collection": collection_name}
+
+    def find_records(self, collection_name, identifiers):
+        expected = set(identifiers)
+        return [item for item in self.records if item.get("sessionId") in expected]
+
+    def find_rationality_records(self, identifiers):
+        return self.find_records("HDschematicRationalityCollection", identifiers)
+
+    def iter_collection(self, collection_name):
+        return list(self.records)
 
 
-def test_sqlite_metrics_and_jobs_round_trip(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        metrics_store,
-        "load_infrastructure_settings",
-        lambda: Settings(tmp_path / "metrics.sqlite3"),
-    )
-    store = metrics_store.MetricsStore()
+def test_remote_metrics_round_trip_without_local_database():
+    client = FakeClient()
+    store = MetricsStore.__new__(MetricsStore)
+    store._client = client
     result = {
         "session_id": "session-1",
         "status": "completed",
@@ -31,18 +44,18 @@ def test_sqlite_metrics_and_jobs_round_trip(monkeypatch, tmp_path):
         "source_fingerprint": "fingerprint",
         "metrics": {"tool_success_rate": 100, "error_count": 0},
     }
-    store.upsert_metrics(result)
-    store.save_job({"job_id": "job-1", "status": "completed"})
 
+    store.upsert_metrics(result)
+
+    assert client.records[0]["checkType"] == SESSION_METRICS_CHECK_TYPE
+    assert json.loads(client.records[0]["resultText"])["model"] == "glm-4.5-air"
     assert store.get_metrics("session-1")["model"] == "glm-4.5-air"
     assert store.statuses(["session-1"])["session-1"]["status"] == "completed"
-    assert store.statuses(["session-1"])["session-1"]["task_category"] == "schematic_generation"
     assert store.session_ids_for_task_classification("schematic_generation") == {"session-1"}
-    assert store.session_ids_for_task_classification("block_to_schematic") == {"session-1"}
-    assert store.get_job("job-1") == {"job_id": "job-1", "status": "completed"}
     page = store.list_metrics(
         start_time=datetime(2026, 9, 17, tzinfo=timezone.utc),
         end_time=datetime(2026, 9, 18, tzinfo=timezone.utc),
     )
     assert page["total"] == 1
     assert page["items"][0]["session_id"] == "session-1"
+    assert store.get_job("job-1") is None

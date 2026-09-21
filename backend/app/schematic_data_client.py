@@ -116,6 +116,7 @@ class SchematicDataClient:
                     headers=self._headers(),
                     timeout=self.settings.schematic_data_timeout_seconds,
                     trust_env=False,
+                    verify=False,
                 )
                 response.raise_for_status()
                 payload = response.json()
@@ -139,6 +140,7 @@ class SchematicDataClient:
                 headers=self._headers(),
                 timeout=self.settings.schematic_data_timeout_seconds,
                 trust_env=False,
+                verify=False,
             )
             response.raise_for_status()
             payload = response.json()
@@ -148,6 +150,16 @@ class SchematicDataClient:
         return payload
 
     def find_rationality_records(self, identifiers: Iterable[str]) -> list[dict[str, Any]]:
+        return self.find_records(RATIONALITY_COLLECTION, identifiers)
+
+    def find_records(
+        self,
+        collection_name: str,
+        identifiers: Iterable[str],
+        *,
+        use_cache: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Return records whose sessionId exactly matches one of the identifiers."""
         expected = {str(item) for item in identifiers if str(item)}
         if not expected:
             return []
@@ -156,15 +168,39 @@ class SchematicDataClient:
         for identifier in sorted(expected):
             for page in range(1, self.settings.schematic_data_query_max_pages + 1):
                 rows, total = self.query_page(
-                    collection_name=RATIONALITY_COLLECTION,
+                    collection_name=collection_name,
                     page=page,
                     size=page_size,
                     session_id=identifier,
+                    use_cache=use_cache,
                 )
                 matches.extend(row for row in rows if str(row.get("sessionId") or "") == identifier)
                 if not rows or len(rows) < page_size or (total is not None and page * page_size >= total):
                     break
         return matches
+
+    def iter_collection(
+        self,
+        collection_name: str,
+        *,
+        use_cache: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Read the configured bounded page range from one remote collection."""
+        values: list[dict[str, Any]] = []
+        page_size = self.settings.schematic_data_query_page_size
+        for page in range(1, self.settings.schematic_data_query_max_pages + 1):
+            rows, total = self.query_page(
+                collection_name=collection_name,
+                page=page,
+                size=page_size,
+                use_cache=use_cache,
+            )
+            values.extend(rows)
+            if not rows or len(rows) < page_size or (
+                total is not None and page * page_size >= total
+            ):
+                break
+        return values
 
 
 def schematic_data_health() -> dict[str, Any]:

@@ -294,7 +294,7 @@ class MetricJobManager:
                     }
                 with self._lock:
                     job["phase"] = "saving_metrics"
-                    self._append_event(job, "saving_metrics", "正在写入本地 SQLite 指标库", session_id=session_id)
+                    self._append_event(job, "saving_metrics", "正在通过 Java 接口写入 MongoDB 会话指标", session_id=session_id)
                     self._save(job, store)
                 store.upsert_metrics(result)
                 with self._lock:

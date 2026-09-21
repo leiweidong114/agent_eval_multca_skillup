@@ -383,6 +383,7 @@ def test_judge_interactions_are_listed_as_summaries_and_opened_separately(tmp_pa
         "user_id": "local",
         "purpose": "evaluation_judge",
         "model": "judge-model",
+        "status": "success",
         "started_at": "2026-09-15T12:00:00+00:00",
         "usage": {"total_tokens": 42},
     }
@@ -395,10 +396,18 @@ def test_judge_interactions_are_listed_as_summaries_and_opened_separately(tmp_pa
     monkeypatch.setattr("app.api.routes_judge.RECORDS_ROOT", records)
 
     listed = client.get("/api/judge-interactions").json()
+    filtered = client.get(
+        "/api/judge-interactions",
+        params={"judge_type": "task_evaluation", "status": "success"},
+    ).json()
+    filters = client.get("/api/judge-interactions/filters").json()
     detail = client.get(f"/api/judge-interactions/{interaction_id}").json()
 
     assert listed["items"][0]["total_tokens"] == 42
+    assert listed["items"][0]["judge_type"] == "task_evaluation"
     assert "input" not in listed["items"][0]
+    assert filtered["total"] == 1
+    assert filters["judge_types"] == ["task_evaluation"]
     assert detail["output"]["content"] == "ok"
 
 

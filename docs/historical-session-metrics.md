@@ -3,11 +3,9 @@
 ## 1. 数据来源与存储
 
 “历史会话指标计算”默认查询最近 24 小时的 LiteLLM 普通会话。LiteLLM PostgreSQL
-仍是模型交互事实源。评测系统产生的衍生指标和计算任务保存在项目本地 SQLite：
-
-```text
-backend/data/session_metrics.sqlite3
-```
+仍是模型交互事实源。计算完成的衍生指标通过 Java HTTP 接口写入 MongoDB 的
+`HDschematicRationalityCollection`，使用原会话 `sessionId` 关联，`checkType` 固定为
+`agent_eval_session_metrics`。项目本地不再保存 SQLite 指标数据库。
 
 原理图合理性分析记录不由评测后端直连 MongoDB。后端通过 HTTP 查询接口读取
 `HDschematicRationalityCollection`，并按真实 LiteLLM 根 `sessionId` 或评测运行 ID
@@ -27,10 +25,6 @@ SCHEMATIC_DATA_API_TIMEOUT_SECONDS=15
 SCHEMATIC_DATA_QUERY_PAGE_SIZE=20
 SCHEMATIC_DATA_QUERY_MAX_PAGES=50
 
-# 第二个写接口的契约确认后填写；当前查询功能不使用此项。
-SCHEMATIC_DATA_WRITE_PATH=
-
-SESSION_METRICS_SQLITE_PATH=backend/data/session_metrics.sqlite3
 AGENT_EVAL_CACHE_TTL_SECONDS=300
 AGENT_EVAL_CACHE_MAX_SIZE=1000
 ```
@@ -39,6 +33,7 @@ AGENT_EVAL_CACHE_MAX_SIZE=1000
 
 ```powershell
 curl.exe -G "http://10.0.0.8:8080/schematic/schematicData/query" `
+  -k `
   -H "Cookie: JSESSIONID=请替换为实际值" `
   --data-urlencode "collectionName=HDschematicRationalityCollection" `
   --data-urlencode "page=1" `
@@ -56,6 +51,8 @@ Invoke-RestMethod -Method Get `
 
 `refresh=false`（默认）使用进程内 TTL/LRU 缓存；`refresh=true` 强制调用 Java 接口。
 Java 服务 IP 和端口仍只由根目录 `.env` 的 `SCHEMATIC_DATA_API_BASE_URL` 配置。
+Python 转发客户端对查询和插入都显式使用 `verify=False`，因此也可以访问使用内网
+自签名证书的 HTTPS Java 服务。
 
 写入接口通过 Python 客户端调用。下面的端到端脚本会生成一条
 `hscope_diagram_lint` 测试数据，写入 MongoDB，再按同一会话 ID 回读校验：
@@ -73,6 +70,23 @@ Java 服务 IP 和端口仍只由根目录 `.env` 的 `SCHEMATIC_DATA_API_BASE_U
 POST /api/schematic-data/insert
 ```
 
+完整 Python 代理接口为：
+
+```powershell
+# 查询（Python 到 Java 的 HTTPS 请求固定 verify=False）
+curl.exe -G "http://127.0.0.1:8000/api/schematic-data/query" `
+  --data-urlencode "collectionName=HDschematicRationalityCollection" `
+  --data-urlencode "page=1" `
+  --data-urlencode "size=20" `
+  --data-urlencode "sessionId=实际会话ID" `
+  --data-urlencode "refresh=true"
+
+# 插入（浏览器/CLI 访问 Python 接口仍须登录；Python 到 Java 固定 verify=False）
+curl.exe -b cookies.txt -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
+  -H "Content-Type: application/json" `
+  -d '{"uuid":"唯一UUID","status":"completed","createUser":"100001","createTime":"2026-09-21T08:00:00Z","checkType":"hscope_diagram_lint","checkMessage":"原理图质量分析","userName":"测试用户","hscopeProjectId":"project-demo","boardNum":"BOARD-001","sessionId":"实际会话ID","resultText":"{}"}'
+```
+
 该接口校验11个业务字段并转发到 Java `/schematic/schematicData/insert`；成功写入后会
 清除进程内查询缓存，使下一次历史会话指标计算立即读取新记录。
 
@@ -88,7 +102,7 @@ POST /api/schematic-data/insert
 - 每条数据独立 TTL，到期后自动回源。
 - 命中时更新最近使用顺序。
 - 超过 `AGENT_EVAL_CACHE_MAX_SIZE` 后淘汰最久未使用数据。
-- 重启后端会清空缓存，不影响 SQLite 指标结果。
+- 重启后端会清空缓存，不影响 MongoDB 中已经保存的指标结果。
 - 多后端进程不共享缓存，各进程独立回源。
 
 ## 4. 指标计算
@@ -108,8 +122,8 @@ POST /api/schematic-data/insert
 固定数值不直接交给 LLM 提取，是为了保证重复计算结果一致，并避免模型漏项、改值或
 把 `0.9` 与 `90%` 混淆。提取不满总计7项时，详情页会保留已提取结果并显示结构告警。
 启用 LLM Judge 时，每条会话首先把时间最早请求中的第一条 `user` Prompt 单独送入分类 Judge，分类
-只依据用户原始意图，不读取 Agent 后续执行结果。分类结果保存到 SQLite 的
-`task_type`、`task_category`、`task_subtype` 和完整指标 JSON 中。
+只依据用户原始意图，不读取 Agent 后续执行结果。分类结果随完整指标 JSON 写回
+MongoDB 对应 `sessionId` 的 `agent_eval_session_metrics` 记录中。
 
 分类枚举如下：
 
@@ -140,7 +154,7 @@ SESSION_METRICS_AUTO_USER_ID=system
 以下示例假设后端为 `http://127.0.0.1:8000`，`cookies.txt` 已保存登录 Cookie。
 
 ```powershell
-# 健康状态：SQLite、TTL/LRU、外部查询接口、自动调度器
+# 健康状态：MongoDB HTTP 存储、TTL/LRU、外部查询接口、自动调度器
 curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/health"
 
 # 最近 24 小时会话
@@ -164,5 +178,5 @@ curl.exe -b cookies.txt -G "http://127.0.0.1:8000/api/schematic/conversations" `
   --data-urlencode "offset=0"
 ```
 
-Java 运营系统应调用这些只读 API，不直接读取 SQLite 或 MongoDB，以便复用登录鉴权、
-字段兼容、默认 24 小时时间窗和指标版本逻辑。
+Java 运营系统可以调用这些只读 API，以便复用登录鉴权、字段兼容、默认 24 小时时间窗
+和指标版本逻辑；指标事实数据实际保存在 MongoDB 中。

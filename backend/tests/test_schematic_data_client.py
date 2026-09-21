@@ -99,6 +99,7 @@ def test_schematic_data_client_sends_configured_cookie(monkeypatch):
     assert captured["headers"] == {
         "Cookie": "JSESSIONID=session-secret; tenant=intranet"
     }
+    assert captured["verify"] is False
 
 
 def test_schematic_data_client_inserts_record_with_cookie(monkeypatch):
@@ -134,6 +135,7 @@ def test_schematic_data_client_inserts_record_with_cookie(monkeypatch):
     assert captured["url"].endswith("/schematic/schematicData/insert")
     assert captured["params"]["collectionName"] == "HDschematicRationalityCollection"
     assert captured["headers"] == {"Cookie": "JSESSIONID=session-secret"}
+    assert captured["verify"] is False
     assert captured["json"]["sessionId"] == "session-1"
     assert captured["cache_cleared"] is True
 

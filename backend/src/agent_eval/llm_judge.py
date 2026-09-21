@@ -29,6 +29,13 @@ _CHINESE_OUTPUT_REQUIREMENT = (
 
 _JUDGE_AUDIT_LOCK = threading.Lock()
 
+JUDGE_TYPE_BY_PURPOSE = {
+    "evaluation_judge": "task_evaluation",
+    "session_metric_judge": "metric_calculation",
+    "session_task_classification": "task_classification",
+    "schematic_rationality_judge": "schematic_rationality",
+}
+
 
 def _write_judge_audit(
     project_root: Path,
@@ -53,6 +60,7 @@ def _write_judge_audit(
         "interaction_id": interaction_id,
         "user_id": employee_no or "local",
         "purpose": purpose,
+        "judge_type": JUDGE_TYPE_BY_PURPOSE.get(purpose, purpose or "other"),
         "context_id": context_id,
         "gateway": gateway,
         "model": model,
