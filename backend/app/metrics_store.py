@@ -401,13 +401,10 @@ class MetricsStore:
             for value in all_values
             if str(value.get("checkType") or "") not in {SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE}
         ]
-        completed = [
-            value
-            for value in values
-            if str(value.get("status") or "").lower() in {"completed", "success", "ok"}
-        ]
-        completed.sort(key=lambda value: str(value.get("createTime") or ""), reverse=True)
-        result = dict(completed[0]) if completed else None
+        # status is supplied by the upstream analysis service and is not a
+        # prerequisite for reading its resultText. Session ID is the join key.
+        values.sort(key=lambda value: str(value.get("createTime") or ""), reverse=True)
+        result = dict(values[0]) if values else None
         if result is not None:
             result["_id"] = str(result.get("_id") or "")
         matched_by = None
@@ -424,8 +421,6 @@ class MetricsStore:
             reason = "Java 查询成功，但没有返回任何 Session ID 精确匹配记录"
         elif not values:
             reason = "只找到平台自身的指标或计算过程记录，未找到原理图轨迹质量记录"
-        elif not completed:
-            reason = "找到了 Session ID 匹配记录，但其 status 不在 completed/success/ok 中"
         else:
             reason = None
         self._latest_rationality_diagnostic = {
@@ -434,8 +429,8 @@ class MetricsStore:
             "rationality_record_count": len(values),
             "self_metric_record_count": len(self_metrics),
             "self_process_record_count": len(self_processes),
-            "eligible_record_count": len(completed),
-            "accepted_statuses": ["completed", "success", "ok"],
+            "eligible_record_count": len(values),
+            "status_filter": "none",
             "excluded_check_types": [SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE],
             "status_counts": status_counts,
             "check_type_counts": check_type_counts,

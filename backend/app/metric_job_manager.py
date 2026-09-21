@@ -315,7 +315,7 @@ class MetricJobManager:
                         input={
                             "collectionName": "HDschematicRationalityCollection",
                             "session_ids": query_ids,
-                            "accepted_statuses": ["completed", "success", "ok"],
+                            "status_filter": "none",
                             "excluded_check_types": [SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE],
                         },
                         interface={
@@ -412,14 +412,14 @@ class MetricJobManager:
                             input={
                                 "collectionName": "HDschematicRationalityCollection",
                                 "session_ids": query_ids,
-                                "accepted_statuses": ["completed", "success", "ok"],
+                                "status_filter": "none",
                                 "excluded_check_types": [SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE],
                             },
                             output={
                                 **_rationality_analysis_summary(result["schematic_rationality"]),
                                 "query_succeeded": True,
                                 "reason": rationality_query_diagnostic.get("reason")
-                                or "接口调用成功，但没有找到状态有效的原理图轨迹记录",
+                                or "接口调用成功，但没有找到 Session ID 匹配的原理图轨迹记录",
                                 "selection_diagnostic": rationality_query_diagnostic,
                             },
                         )

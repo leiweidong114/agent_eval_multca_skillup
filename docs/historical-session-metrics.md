@@ -112,7 +112,7 @@ curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
 
 规则代码计算工具/脚本调用成功率、Skill 步骤完成度、错误与重试。Worker 还会按根
 `sessionId`（兼容评测运行 ID）从
-`HDschematicRationalityCollection` 读取最新的已完成记录。查不到时，页面提示
+`HDschematicRationalityCollection` 按 `sessionId` 精确匹配，排除平台自身的指标与过程记录后读取最新记录；不以原始记录的 `status` 作为筛选条件。查不到时，页面提示
 “当前会话暂无统计原理图生成轨迹指标”。
 
 `resultText` 按 `checkType` 路由分析：

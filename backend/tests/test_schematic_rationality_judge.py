@@ -135,16 +135,18 @@ class IneligibleDataClient:
         }]
 
 
-def test_store_explains_why_matching_session_is_not_eligible(monkeypatch):
+def test_store_accepts_matching_session_regardless_of_status(monkeypatch):
     monkeypatch.setattr("app.metrics_store.SchematicDataClient", IneligibleDataClient)
     store = MetricsStore.__new__(MetricsStore)
 
     record, count, matched_by = store.latest_rationality_analysis("root-session")
     diagnostic = store.latest_rationality_diagnostic()
 
-    assert record is None
+    assert record["_id"] == "mongo-2"
     assert count == 1
-    assert matched_by is None
+    assert matched_by == "root_session_id"
     assert diagnostic["exact_match_record_count"] == 1
     assert diagnostic["status_counts"] == {"pending": 1}
-    assert "status" in diagnostic["reason"]
+    assert diagnostic["status_filter"] == "none"
+    assert diagnostic["eligible_record_count"] == 1
+    assert diagnostic["reason"] is None
