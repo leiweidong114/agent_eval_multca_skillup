@@ -15,6 +15,40 @@ from app.session_metric_judge import judge_session_metrics
 from app.session_task_classifier import classify_session_task, task_hierarchy
 
 
+def _rationality_record_summary(record: dict[str, Any] | None) -> dict[str, Any] | None:
+    if record is None:
+        return None
+    result_text = str(record.get("resultText") or "")
+    return {
+        "_id": str(record.get("_id") or "") or None,
+        "uuid": record.get("uuid"),
+        "status": record.get("status"),
+        "createUser": record.get("createUser"),
+        "createTime": record.get("createTime"),
+        "checkType": record.get("checkType"),
+        "checkMessage": record.get("checkMessage"),
+        "userName": record.get("userName"),
+        "hscopeProjectId": record.get("hscopeProjectId"),
+        "boardNum": record.get("boardNum"),
+        "sessionId": record.get("sessionId"),
+        "resultTextPreview": result_text[:4000],
+        "resultTextLength": len(result_text),
+        "resultTextTruncated": len(result_text) > 4000,
+    }
+
+
+def _insert_response_summary(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {"type": type(value).__name__}
+    record = value.get("record") if isinstance(value.get("record"), dict) else {}
+    return {
+        "response_fields": sorted(str(key) for key in value),
+        "status": value.get("status") or value.get("message"),
+        "record_id": record.get("_id") or value.get("_id"),
+        "record_uuid": record.get("uuid"),
+    }
+
+
 class MetricJobManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -190,20 +224,81 @@ class MetricJobManager:
                         self._append_event(job, "llm_judge_skipped", "本次任务未启用 LLM Judge", session_id=session_id)
                 with self._lock:
                     job["phase"] = "schematic_rationality"
+                    query_ids = list(dict.fromkeys([
+                        session_id,
+                        *(str(value) for value in conversation.get("evaluation_run_ids") or []),
+                    ]))
                     self._append_event(
                         job,
                         "schematic_rationality_loading",
-                        "正在读取原理图合理性分析记录",
+                        "正在调用 Java 查询接口读取 MongoDB 原理图分析记录",
                         session_id=session_id,
+                        interface={
+                            "method": "GET",
+                            "endpoint": store.query_endpoint(),
+                            "collection": "HDschematicRationalityCollection",
+                            "session_ids": query_ids,
+                            "status": "calling",
+                        },
                     )
                     self._save(job, store)
-                rationality_record, rationality_record_count, rationality_matched_by = (
-                    store.latest_rationality_analysis(
+                rationality_query_error: Exception | None = None
+                try:
+                    rationality_record, rationality_record_count, rationality_matched_by = store.latest_rationality_analysis(
                         session_id,
                         correlation_ids=conversation.get("evaluation_run_ids") or [],
                     )
-                )
-                if rationality_record is None:
+                    with self._lock:
+                        self._append_event(
+                            job,
+                            "schematic_data_query_succeeded",
+                            "Java 查询接口调用成功",
+                            session_id=session_id,
+                            interface={
+                                "method": "GET",
+                                "endpoint": store.query_endpoint(),
+                                "collection": "HDschematicRationalityCollection",
+                                "session_ids": query_ids,
+                                "status": "success",
+                                "records_matched": rationality_record_count,
+                                "matched_by": rationality_matched_by,
+                                "calls": store.query_diagnostics(),
+                                "selected_record": _rationality_record_summary(rationality_record),
+                            },
+                        )
+                        self._save(job, store)
+                except Exception as exc:
+                    rationality_query_error = exc
+                    rationality_record = None
+                    rationality_record_count = 0
+                    rationality_matched_by = None
+                    result["schematic_rationality"] = {
+                        "status": "source_unavailable",
+                        "source_collection": "HDschematicRationalityCollection",
+                        "record_count": 0,
+                        "error": str(exc),
+                    }
+                    with self._lock:
+                        self._append_event(
+                            job,
+                            "schematic_data_query_failed",
+                            "Java 查询接口调用失败",
+                            session_id=session_id,
+                            detail=str(exc),
+                            interface={
+                                "method": "GET",
+                                "endpoint": store.query_endpoint(),
+                                "collection": "HDschematicRationalityCollection",
+                                "session_ids": query_ids,
+                                "status": "failed",
+                                "calls": store.query_diagnostics(),
+                                "error": str(exc),
+                            },
+                        )
+                        self._save(job, store)
+                if rationality_query_error is not None:
+                    pass
+                elif rationality_record is None:
                     result["schematic_rationality"] = {
                         "status": "not_found",
                         "source_collection": "HDschematicRationalityCollection",
@@ -294,10 +389,61 @@ class MetricJobManager:
                     }
                 with self._lock:
                     job["phase"] = "saving_metrics"
-                    self._append_event(job, "saving_metrics", "正在通过 Java 接口写入 MongoDB 会话指标", session_id=session_id)
+                    self._append_event(
+                        job,
+                        "saving_metrics",
+                        "正在调用 Java 插入接口写入 MongoDB 会话指标",
+                        session_id=session_id,
+                        interface={
+                            "method": "POST",
+                            "endpoint": store.write_endpoint(),
+                            "collection": "HDschematicRationalityCollection",
+                            "session_id": session_id,
+                            "check_type": "agent_eval_session_metrics",
+                            "status": "calling",
+                        },
+                    )
                     self._save(job, store)
-                store.upsert_metrics(result)
+                try:
+                    insert_response = store.upsert_metrics(result)
+                except Exception as exc:
+                    with self._lock:
+                        self._append_event(
+                            job,
+                            "schematic_data_insert_failed",
+                            "Java 插入接口调用失败，指标未写入 MongoDB",
+                            session_id=session_id,
+                            detail=str(exc),
+                            interface={
+                                "method": "POST",
+                                "endpoint": store.write_endpoint(),
+                                "collection": "HDschematicRationalityCollection",
+                                "session_id": session_id,
+                                "check_type": "agent_eval_session_metrics",
+                                "status": "failed",
+                                "calls": store.write_diagnostics(),
+                                "error": str(exc),
+                            },
+                        )
+                        self._save(job, store)
+                    raise
                 with self._lock:
+                    self._append_event(
+                        job,
+                        "schematic_data_insert_succeeded",
+                        "Java 插入接口调用成功，指标已保存到 MongoDB",
+                        session_id=session_id,
+                        interface={
+                            "method": "POST",
+                            "endpoint": store.write_endpoint(),
+                            "collection": "HDschematicRationalityCollection",
+                            "session_id": session_id,
+                            "check_type": "agent_eval_session_metrics",
+                            "status": "success",
+                            "calls": store.write_diagnostics(),
+                            "response": _insert_response_summary(insert_response),
+                        },
+                    )
                     job["completed"] += 1
                     job["progress"] = round(session_index / max(1, job["total"]) * 100)
                     self._append_event(job, "session_completed", "会话指标计算完成", session_id=session_id, metric_status=result.get("status"))

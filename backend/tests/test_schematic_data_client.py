@@ -88,7 +88,8 @@ def test_schematic_data_client_sends_configured_cookie(monkeypatch):
     monkeypatch.setattr("app.schematic_data_client.load_infrastructure_settings", lambda: Settings())
     monkeypatch.setattr("app.schematic_data_client.httpx.get", fake_get)
 
-    payload = SchematicDataClient().query_payload(
+    client = SchematicDataClient()
+    payload = client.query_payload(
         collection_name="HDschematicRationalityCollection",
         page=1,
         size=20,
@@ -100,6 +101,8 @@ def test_schematic_data_client_sends_configured_cookie(monkeypatch):
         "Cookie": "JSESSIONID=session-secret; tenant=intranet"
     }
     assert captured["verify"] is False
+    assert client.query_diagnostics()[0]["status"] == "success"
+    assert client.query_diagnostics()[0]["records_returned"] == 0
 
 
 def test_schematic_data_client_inserts_record_with_cookie(monkeypatch):
@@ -127,7 +130,8 @@ def test_schematic_data_client_inserts_record_with_cookie(monkeypatch):
     monkeypatch.setattr("app.schematic_data_client.httpx.post", fake_post)
     monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: captured.setdefault("cache_cleared", True))
 
-    result = SchematicDataClient().insert_record(
+    client = SchematicDataClient()
+    result = client.insert_record(
         {"sessionId": "session-1", "resultText": "{}"}
     )
 
@@ -138,6 +142,8 @@ def test_schematic_data_client_inserts_record_with_cookie(monkeypatch):
     assert captured["verify"] is False
     assert captured["json"]["sessionId"] == "session-1"
     assert captured["cache_cleared"] is True
+    assert client.write_diagnostics()[0]["status"] == "success"
+    assert client.write_diagnostics()[0]["session_id"] == "session-1"
 
 
 def test_schematic_data_insert_route_needs_no_login_and_forwards_payload(monkeypatch):

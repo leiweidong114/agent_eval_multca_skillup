@@ -138,6 +138,12 @@ MongoDB 对应 `sessionId` 的 `agent_eval_session_metrics` 记录中。
 错误原因。分类 Judge 的请求与响应使用 `session_task_classification` 用途记录，可在
 “Judge 交互记录”页面单独筛选。
 
+“指标计算过程”会记录 MongoDB Java 代理的查询与插入过程，包括 HTTP 方法、接口
+地址、集合、Session ID、HTTP 状态、缓存命中、耗时、返回记录数和字段列表。查询命中
+后还会显示所选记录的业务字段及最多 4000 字符的 `resultText` 摘要；Cookie 等请求头
+不会进入过程日志。接口失败时会显示证书、超时或 HTTP 错误，查询失败不会伪装成
+“未找到记录”，插入失败则明确标记指标没有保存成功。
+
 自动任务配置保持不变：
 
 ```dotenv

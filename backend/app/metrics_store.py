@@ -95,7 +95,24 @@ class MetricsStore:
             "sessionId": session_id,
             "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
         }
-        return self._data_client().insert_record(record, collection_name=RATIONALITY_COLLECTION)
+        client = self._data_client()
+        if hasattr(client, "clear_diagnostics"):
+            client.clear_diagnostics()
+        return client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
+
+    def query_diagnostics(self) -> list[dict[str, Any]]:
+        client = self._data_client()
+        return client.query_diagnostics() if hasattr(client, "query_diagnostics") else []
+
+    def write_diagnostics(self) -> list[dict[str, Any]]:
+        client = self._data_client()
+        return client.write_diagnostics() if hasattr(client, "write_diagnostics") else []
+
+    def query_endpoint(self) -> str:
+        return self._data_client().query_url
+
+    def write_endpoint(self) -> str:
+        return self._data_client().write_url
 
     def _records_for(self, session_ids: Iterable[str]) -> list[dict[str, Any]]:
         return self._data_client().find_records(RATIONALITY_COLLECTION, session_ids)
@@ -189,6 +206,8 @@ class MetricsStore:
         identifiers = list(dict.fromkeys(
             value for value in [str(session_id), *(str(item) for item in correlation_ids)] if value
         ))
+        if hasattr(self._data_client(), "clear_diagnostics"):
+            self._data_client().clear_diagnostics()
         values = [
             value
             for value in self._data_client().find_rationality_records(identifiers)

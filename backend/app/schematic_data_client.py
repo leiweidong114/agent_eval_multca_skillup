@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Iterable, Mapping
 
 import httpx
@@ -54,6 +55,8 @@ def _records(payload: Any) -> tuple[list[dict[str, Any]], int | None]:
 class SchematicDataClient:
     def __init__(self) -> None:
         self.settings = load_infrastructure_settings()
+        self._query_diagnostics: list[dict[str, Any]] = []
+        self._write_diagnostics: list[dict[str, Any]] = []
         if not self.settings.schematic_data_api_base_url:
             raise InfrastructureConfigurationError("SCHEMATIC_DATA_API_BASE_URL 尚未配置")
 
@@ -73,6 +76,16 @@ class SchematicDataClient:
             if self.settings.schematic_data_api_cookie
             else {}
         )
+
+    def clear_diagnostics(self) -> None:
+        self._query_diagnostics = []
+        self._write_diagnostics = []
+
+    def query_diagnostics(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._query_diagnostics]
+
+    def write_diagnostics(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._write_diagnostics]
 
     def query_page(
         self,
@@ -108,6 +121,13 @@ class SchematicDataClient:
             params["sessionId"] = session_id
         key = cache_key("schematic-data-query", {"url": self.query_url, **params})
         payload = get_cached_json(key) if use_cache else None
+        started = time.perf_counter()
+        diagnostic: dict[str, Any] = {
+            "method": "GET",
+            "endpoint": self.query_url,
+            "params": params,
+            "verify_tls": False,
+        }
         if payload is None:
             try:
                 response = httpx.get(
@@ -121,8 +141,29 @@ class SchematicDataClient:
                 response.raise_for_status()
                 payload = response.json()
             except (httpx.HTTPError, ValueError) as exc:
+                diagnostic.update({
+                    "status": "failed",
+                    "http_status": getattr(getattr(exc, "response", None), "status_code", None),
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                    "error": str(exc),
+                })
+                self._query_diagnostics.append(diagnostic)
                 raise InfrastructureConfigurationError(f"原理图数据查询接口调用失败: {exc}") from exc
             set_cached_json(key, payload, ttl_seconds=self.settings.cache_default_ttl_seconds)
+            diagnostic.update({"status": "success", "http_status": getattr(response, "status_code", 200), "cache": "miss"})
+        else:
+            diagnostic.update({"status": "success", "http_status": None, "cache": "hit"})
+        try:
+            rows, total = _records(payload)
+        except InfrastructureConfigurationError:
+            rows, total = [], None
+        diagnostic.update({
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            "records_returned": len(rows),
+            "total": total,
+            "record_fields": sorted({str(key) for row in rows for key in row}),
+        })
+        self._query_diagnostics.append(diagnostic)
         return payload
 
     def insert_record(
@@ -132,6 +173,16 @@ class SchematicDataClient:
         collection_name: str = RATIONALITY_COLLECTION,
     ) -> Any:
         """Insert one analysis record through the configured Java facade."""
+        started = time.perf_counter()
+        diagnostic: dict[str, Any] = {
+            "method": "POST",
+            "endpoint": self.write_url,
+            "params": {"collectionName": collection_name},
+            "verify_tls": False,
+            "record_fields": sorted(str(key) for key in record),
+            "session_id": record.get("sessionId"),
+            "check_type": record.get("checkType"),
+        }
         try:
             response = httpx.post(
                 self.write_url,
@@ -145,7 +196,21 @@ class SchematicDataClient:
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
+            diagnostic.update({
+                "status": "failed",
+                "http_status": getattr(getattr(exc, "response", None), "status_code", None),
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "error": str(exc),
+            })
+            self._write_diagnostics.append(diagnostic)
             raise InfrastructureConfigurationError(f"原理图数据写入接口调用失败: {exc}") from exc
+        diagnostic.update({
+            "status": "success",
+            "http_status": getattr(response, "status_code", 200),
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            "response_fields": sorted(str(key) for key in payload) if isinstance(payload, Mapping) else [],
+        })
+        self._write_diagnostics.append(diagnostic)
         clear_response_cache()
         return payload
 
