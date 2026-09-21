@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from agent_eval.database import get_conversation
+from agent_eval.model_config import resolve_config_secret
 from app.config import BACKEND_ROOT
 from app.metrics_store import MetricsStore, SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE
 from app.schematic_rationality_judge import extract_rationality_metrics, judge_rationality_result
@@ -77,6 +78,14 @@ class MetricJobManager:
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="session-metrics")
+        # One background session Judge per manager, with at most two concurrent
+        # outbound Judge calls including classification/rationality.
+        self._judge_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="session-metric-judge")
+        try:
+            judge_parallelism = int(resolve_config_secret(BACKEND_ROOT, "SESSION_METRIC_JUDGE_PARALLELISM") or "2")
+        except ValueError:
+            judge_parallelism = 2
+        self._judge_slots = threading.BoundedSemaphore(max(1, min(2, judge_parallelism)))
 
     def submit(
         self,
@@ -143,6 +152,9 @@ class MetricJobManager:
             self._append_event(job, "job_started", "指标计算 Worker 已启动")
             self._save(job, store)
         for session_index, session_id in enumerate(list(job["session_ids"]), start=1):
+            judge_future = None
+            judge_active = threading.Event()
+            judge_active.set()
             try:
                 with self._lock:
                     job["current_session_id"] = session_id
@@ -219,28 +231,53 @@ class MetricJobManager:
                         },
                     )
                     self._save(job, store)
+                if job["use_llm_judge"]:
+                    def judge_progress(stage: str, chunk_index: int, chunk_total: int, message: str,
+                                       *, active=judge_active, callback_session_id=session_id) -> None:
+                        if not active.is_set():
+                            return
+                        with self._lock:
+                            if not active.is_set():
+                                return
+                            self._append_event(
+                                job, stage, message, session_id=callback_session_id,
+                                chunk_index=chunk_index, chunk_total=chunk_total,
+                                outcome="success" if stage.endswith("_completed") else "running",
+                            )
+                            self._save(job, store)
+
+                    def run_session_judge(conversation_snapshot=conversation, callback=judge_progress,
+                                          employee_no=str(job.get("user_id") or "") or None):
+                        with self._judge_slots:
+                            return judge_session_metrics(
+                                conversation_snapshot, employee_no=employee_no,
+                                progress_callback=callback,
+                            )
+
+                    judge_future = self._judge_executor.submit(run_session_judge)
                 classification_status = "disabled"
                 if job["use_llm_judge"]:
                     classification_prompt = first_user_prompt(conversation)
-                    with self._lock:
-                        job["phase"] = "task_classification"
-                        self._append_event(
-                            job,
-                            "task_classification_started",
-                            "Judge LLM 正在根据第一条用户 Prompt 进行任务分类",
-                            session_id=session_id,
-                            outcome="running",
-                            input={
-                                "first_user_prompt": classification_prompt,
-                                "prompt_found": bool(classification_prompt),
-                                "root_session_id": session_id,
-                            },
+                    with self._judge_slots:
+                        with self._lock:
+                            job["phase"] = "task_classification"
+                            self._append_event(
+                                job,
+                                "task_classification_started",
+                                "Judge LLM 正在根据第一条用户 Prompt 进行任务分类",
+                                session_id=session_id,
+                                outcome="running",
+                                input={
+                                    "first_user_prompt": classification_prompt,
+                                    "prompt_found": bool(classification_prompt),
+                                    "root_session_id": session_id,
+                                },
+                            )
+                            self._save(job, store)
+                        result["task_classification"] = classify_session_task(
+                            conversation,
+                            employee_no=str(job.get("user_id") or "") or None,
                         )
-                        self._save(job, store)
-                    result["task_classification"] = classify_session_task(
-                        conversation,
-                        employee_no=str(job.get("user_id") or "") or None,
-                    )
                     classification = result["task_classification"]
                     with self._lock:
                         classification_status = str(classification.get("status") or "unknown")
@@ -388,19 +425,20 @@ class MetricJobManager:
                         )
                 elif job["use_llm_judge"]:
                     try:
-                        with self._lock:
-                            self._append_event(
-                                job,
-                                "schematic_rationality_judge",
-                                "Judge LLM 正在分析 resultText",
-                                session_id=session_id,
-                                outcome="running",
+                        with self._judge_slots:
+                            with self._lock:
+                                self._append_event(
+                                    job,
+                                    "schematic_rationality_judge",
+                                    "Judge LLM 正在分析 resultText",
+                                    session_id=session_id,
+                                    outcome="running",
+                                )
+                                self._save(job, store)
+                            analysis = judge_rationality_result(
+                                rationality_record,
+                                employee_no=str(job.get("user_id") or "") or None,
                             )
-                            self._save(job, store)
-                        analysis = judge_rationality_result(
-                            rationality_record,
-                            employee_no=str(job.get("user_id") or "") or None,
-                        )
                         result["schematic_rationality"] = {
                             "source_collection": "HDschematicRationalityCollection",
                             "source_record_id": rationality_record.get("_id"),
@@ -481,25 +519,10 @@ class MetricJobManager:
                 # It still evaluates the LiteLLM conversation evidence only;
                 # rationality analysis remains an independent fifth step.
                 if job["use_llm_judge"]:
-                    def judge_progress(stage: str, chunk_index: int, chunk_total: int, message: str) -> None:
-                        with self._lock:
-                            job["phase"] = "llm_judge"
-                            self._append_event(
-                                job,
-                                stage,
-                                message,
-                                session_id=session_id,
-                                chunk_index=chunk_index,
-                                chunk_total=chunk_total,
-                                outcome="success" if stage.endswith("_completed") else "running",
-                            )
-                            self._save(job, store)
-
-                    result["judge"] = judge_session_metrics(
-                        conversation,
-                        employee_no=str(job.get("user_id") or "") or None,
-                        progress_callback=judge_progress,
-                    )
+                    with self._lock:
+                        job["phase"] = "llm_judge"
+                        self._save(job, store)
+                    result["judge"] = judge_future.result()
                     with self._lock:
                         judge_status = str(result["judge"].get("status") or "unknown")
                         self._append_event(
@@ -643,6 +666,9 @@ class MetricJobManager:
                         },
                     )
             except Exception as exc:
+                judge_active.clear()
+                if judge_future is not None:
+                    judge_future.cancel()
                 with self._lock:
                     job["failed"] += 1
                     job["errors"] = [*job["errors"], {"session_id": session_id, "detail": str(exc)}][-100:]

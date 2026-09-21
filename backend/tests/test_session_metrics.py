@@ -33,12 +33,115 @@ def test_failed_metric_job_still_persists_its_process(monkeypatch):
         manager._run("metrics-test", store)
     finally:
         manager._executor.shutdown(wait=True)
+        manager._judge_executor.shutdown(wait=True)
 
     public_job = manager.get("metrics-test")
     assert public_job["status"] == "completed_with_errors"
     assert public_job["server_time"].tzinfo is not None
     assert store.saved_process[0] == "session-1"
     assert any(event["stage"] == "session_failed" for event in store.saved_process[1])
+
+
+def test_metric_job_overlaps_independent_classification_and_session_judge(monkeypatch):
+    import threading
+    from datetime import datetime, timezone
+
+    from app.metric_job_manager import MetricJobManager
+
+    classification_started = threading.Event()
+    metric_judge_started = threading.Event()
+    conversation = {
+        "root_session_id": "session-1",
+        "timeline": [{"request_id": "r1", "messages": [{"role": "user", "content": "生成原理图"}]}],
+    }
+
+    def classify(*args, **kwargs):
+        classification_started.set()
+        assert metric_judge_started.wait(2), "session Judge did not start alongside classification"
+        return {
+            "status": "completed", "task_type": "other",
+            "task_category": "other", "task_subtype": None,
+        }
+
+    def judge(*args, progress_callback, **kwargs):
+        progress_callback("llm_judge_chunk_started", 1, 1, "开始分片")
+        metric_judge_started.set()
+        assert classification_started.wait(2), "classification did not start alongside session Judge"
+        progress_callback("llm_judge_chunk_completed", 1, 1, "完成分片")
+        return {"status": "completed", "task_type": "other", "suspected_fabrications": []}
+
+    class FakeStore:
+        def save_job(self, job):
+            pass
+
+        def query_endpoint(self):
+            return "http://localhost/query"
+
+        def latest_rationality_analysis(self, *args, **kwargs):
+            return None, 0, None
+
+        def latest_rationality_diagnostic(self):
+            return {}
+
+        def query_diagnostics(self):
+            return []
+
+        def build_metrics_record(self, result):
+            return {"uuid": "metric-1", "resultText": "{}"}
+
+        def write_endpoint(self):
+            return "http://localhost/insert"
+
+        def upsert_metrics(self, result, *, record):
+            return {"status": "ok"}
+
+        def verify_metric_persisted(self, session_id, record_id):
+            return {"verified": True}
+
+        def write_diagnostics(self):
+            return []
+
+        def save_process_trace(self, job, session_id):
+            self.saved_process = list(job["events"])
+
+    monkeypatch.setattr("app.metric_job_manager.get_conversation", lambda *args, **kwargs: conversation)
+    monkeypatch.setattr("app.metric_job_manager.classify_session_task", classify)
+    monkeypatch.setattr("app.metric_job_manager.judge_session_metrics", judge)
+    monkeypatch.setattr("app.metric_job_manager.resolve_config_secret", lambda *args, **kwargs: "2")
+    manager = MetricJobManager()
+    store = FakeStore()
+    now = datetime.now(timezone.utc)
+    manager._jobs["metrics-overlap"] = {
+        "job_id": "metrics-overlap", "status": "queued", "session_ids": ["session-1"],
+        "total": 1, "completed": 0, "failed": 0, "process_trace_failures": 0,
+        "events": [], "event_seq": 0, "errors": [], "use_llm_judge": True,
+        "start_time": now, "end_time": now, "created_at": now,
+    }
+    try:
+        manager._run("metrics-overlap", store)
+    finally:
+        manager._executor.shutdown(wait=True)
+        manager._judge_executor.shutdown(wait=True)
+
+    assert manager.get("metrics-overlap")["status"] == "completed"
+    stages = [event["stage"] for event in store.saved_process]
+    assert "llm_judge_chunk_started" in stages
+    assert "task_classification_started" in stages
+    assert "llm_judge_completed" in stages
+
+
+def test_metric_judge_parallelism_can_be_limited_to_one(monkeypatch):
+    from app.metric_job_manager import MetricJobManager
+
+    monkeypatch.setattr("app.metric_job_manager.resolve_config_secret", lambda *args, **kwargs: "1")
+    manager = MetricJobManager()
+    try:
+        assert manager._judge_slots.acquire(blocking=False)
+        assert not manager._judge_slots.acquire(blocking=False)
+        manager._judge_slots.release()
+    finally:
+        manager._executor.shutdown(wait=True)
+        manager._judge_executor.shutdown(wait=True)
 
 
 def test_rule_metrics_correlate_tools_scripts_retries_and_skill_steps():
