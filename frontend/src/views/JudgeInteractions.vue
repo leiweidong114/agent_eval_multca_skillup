@@ -2,6 +2,7 @@
   <div class="page-stack">
     <section class="hero compact">
       <div><span class="eyebrow">JUDGE OBSERVABILITY</span><h1>Judge 交互记录</h1><p>按 Judge 类型集中查看指标计算、任务评估、任务分类及原理图质量分析的完整输入输出。</p></div>
+      <el-button type="primary" :loading="testingJudge" @click="testJudge"><el-icon><Connection/></el-icon> Judge 模型可用性测试</el-button>
     </section>
 
     <el-card shadow="never" class="panel search-panel">
@@ -36,6 +37,25 @@
       <el-pagination v-if="total" class="pagination" background layout="total, sizes, prev, pager, next, jumper" :total="total" v-model:current-page="page" v-model:page-size="pageSize" :page-sizes="[20,50,100]" @current-change="load" @size-change="resetAndLoad"/>
     </el-card>
     <InteractionDetailDialog v-model="detailVisible" :item="detailItem" :turn-index="1" :loading="detailLoading" eyebrow="JUDGE INTERACTION" dialog-title="Judge LLM 交互详情" context-label="任务 / Session" :actor-label-override="detail?judgeTypeLabel(detail.judge_type):'Judge LLM'"/>
+    <el-dialog v-model="testVisible" width="760px" title="Judge 模型可用性测试" append-to-body>
+      <div v-loading="testingJudge" class="judge-test-result">
+        <el-alert v-if="testResult" :type="testResult.ok?'success':'error'" :closable="false" show-icon :title="testResult.message" :description="testResult.error||''"/>
+        <template v-if="testResult">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="整体状态"><el-tag :type="testResult.ok?'success':'danger'">{{testResult.ok?'可用':'不可用'}}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="总耗时">{{duration(testResult.duration_ms)}}</el-descriptions-item>
+          <el-descriptions-item label="测试 Session"><code>{{testResult.context_id}}</code></el-descriptions-item>
+          <el-descriptions-item label="Judge 模型">{{testedJudgeModel}}</el-descriptions-item>
+          <el-descriptions-item label="任务分类">{{testCheckStatus(testResult.checks?.task_classification)}}</el-descriptions-item>
+          <el-descriptions-item label="会话指标 Judge">{{testCheckStatus(testResult.checks?.session_metric_judge)}}</el-descriptions-item>
+          <el-descriptions-item label="分类失败原因" :span="2">{{testResult.checks?.task_classification?.error||'—'}}</el-descriptions-item>
+          <el-descriptions-item label="指标失败原因" :span="2">{{testResult.checks?.session_metric_judge?.error||'—'}}</el-descriptions-item>
+        </el-descriptions>
+        <el-alert type="warning" :closable="false" title="通过代表当前配置和短会话 Judge 链路正常；长会话仍可能受到上下文长度、限流或后续额度变化影响。"/>
+        <details><summary>查看完整测试返回</summary><pre>{{JSON.stringify(testResult,null,2)}}</pre></details></template>
+      </div>
+      <template #footer><el-button @click="testVisible=false">关闭</el-button><el-button type="primary" :loading="testingJudge" @click="testJudge">重新测试</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
@@ -43,29 +63,33 @@
 import {computed,onMounted,ref} from 'vue'
 import {useRoute} from 'vue-router'
 import {ElMessage} from 'element-plus'
-import {fetchJudgeInteraction,fetchJudgeInteractionFilters,fetchJudgeInteractions} from '../api'
+import {fetchJudgeInteraction,fetchJudgeInteractionFilters,fetchJudgeInteractions,testJudgeAvailability} from '../api'
 import InteractionDetailDialog from '../components/InteractionDetailDialog.vue'
 
 const route=useRoute()
 const items=ref([]),total=ref(0),page=ref(1),pageSize=ref(20),loading=ref(false),hasSearched=ref(false)
 const judgeType=ref(''),model=ref(''),contextId=ref(String(route.query.context_id||'')),userId=ref(''),status=ref('')
 const filters=ref({models:[],users:[]}),detailVisible=ref(false),detailLoading=ref(false),detail=ref(null)
+const testingJudge=ref(false),testVisible=ref(false),testResult=ref(null)
 const timeRangeOptions=[{label:'最近 1 天',value:'1d',days:1},{label:'最近 1 周',value:'7d',days:7},{label:'最近 1 个月',value:'30d',days:30},{label:'不限时间',value:'all',days:null}]
 const timeRangePreset=ref('1d')
 const timeRangeLabel=computed(()=>timeRangeOptions.find(item=>item.value===timeRangePreset.value)?.label||'最近 1 天')
 const judgeTypeOptions=[{label:'指标计算',value:'metric_calculation'},{label:'任务评估',value:'task_evaluation'},{label:'任务分类',value:'task_classification'},{label:'原理图质量指标分析',value:'schematic_rationality'}]
 const detailItem=computed(()=>{const value=detail.value;if(!value)return null;const input=value.input||{},system=input.system||[],history=input.history||[],tools=input.tool||[],users=input.user||[],messages=[...system,...history,...tools,...users];const rawResponse=value.output?.response;const response=rawResponse&&Object.keys(rawResponse).length?rawResponse:(value.output?.content?{content:value.output.content}:{});return{request_id:value.interaction_id,model:value.model,model_group:value.model,session_id:value.context_id,start_time:value.started_at,request_duration_ms:value.duration_ms,prompt_tokens:value.usage?.prompt_tokens,completion_tokens:value.usage?.completion_tokens,total_tokens:value.usage?.total_tokens,status:value.status,error:value.error,proxy_server_request:{body:{messages}},current_input_messages:[...tools,...users],history_message_count:system.length+history.length,response}})
+const testedJudgeModel=computed(()=>testResult.value?.checks?.task_classification?.model||testResult.value?.checks?.session_metric_judge?.models?.join('、')||'未返回')
 
 function timeRangeParams(){const option=timeRangeOptions.find(item=>item.value===timeRangePreset.value);if(!option?.days)return{};const end=new Date();return{start_time:new Date(end.getTime()-option.days*86400000).toISOString(),end_time:end.toISOString()}}
 async function load(){loading.value=true;try{const data=await fetchJudgeInteractions({limit:pageSize.value,offset:(page.value-1)*pageSize.value,judge_type:judgeType.value||undefined,model:model.value.trim()||undefined,context_id:contextId.value.trim()||undefined,user_id:userId.value.trim()||undefined,status:status.value||undefined,...timeRangeParams()});items.value=data.items||[];total.value=data.total||0;hasSearched.value=true}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{loading.value=false}}
 function search(){page.value=1;load()}
 function resetAndLoad(){page.value=1;load()}
 async function openDetail(row){detailVisible.value=true;detailLoading.value=true;detail.value=null;try{detail.value=await fetchJudgeInteraction(row.interaction_id)}catch(error){ElMessage.error(error.response?.data?.detail||error.message)}finally{detailLoading.value=false}}
+async function testJudge(){testingJudge.value=true;testVisible.value=true;try{testResult.value=await testJudgeAvailability();ElMessage[testResult.value.ok?'success':'error'](testResult.value.message);filters.value=await fetchJudgeInteractionFilters();if(hasSearched.value)await load()}catch(error){testResult.value={ok:false,message:'Judge 可用性测试请求失败',checks:{},error:error.response?.data?.detail||error.message};ElMessage.error(testResult.value.error)}finally{testingJudge.value=false}}
+const testCheckStatus=value=>value?.status==='completed'?'成功':value?.status==='unavailable'?'不可用':value?.status||'未执行'
 const judgeTypeLabel=value=>({task_evaluation:'任务评估',metric_calculation:'指标计算',task_classification:'任务分类',schematic_rationality:'原理图质量指标分析'}[value]||value||'其他 Judge')
 const formatTime=value=>value?new Date(value).toLocaleString('zh-CN'):'—',number=value=>Number(value||0).toLocaleString(),duration=value=>value==null?'—':Number(value)<1000?`${Math.round(value)} ms`:`${(Number(value)/1000).toFixed(2)} s`
 onMounted(async()=>{try{filters.value=await fetchJudgeInteractionFilters()}catch(error){ElMessage.warning(error.response?.data?.detail||error.message)}if(contextId.value)search()})
 </script>
 
 <style scoped>
-.search-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:4px 14px}.search-note{margin:4px 0 0;color:var(--muted);font-size:12px}.pagination{display:flex;justify-content:flex-end;margin-top:18px}@media(max-width:900px){.search-grid{grid-template-columns:1fr}}
+.search-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:4px 14px}.search-note{margin:4px 0 0;color:var(--muted);font-size:12px}.pagination{display:flex;justify-content:flex-end;margin-top:18px}.judge-test-result{display:grid;gap:14px}.judge-test-result code{overflow-wrap:anywhere}.judge-test-result details summary{cursor:pointer;color:var(--brand)}.judge-test-result pre{max-height:360px;overflow:auto;padding:12px;border-radius:8px;background:#151a18;color:#e7eee9;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:900px){.search-grid{grid-template-columns:1fr}}
 </style>

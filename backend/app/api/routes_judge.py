@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -9,6 +11,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.auth import employee_from_request
 from app.config import RUNS_ROOT
+from app.session_metric_judge import judge_session_metrics
+from app.session_task_classifier import classify_session_task
 
 
 router = APIRouter(prefix="/api/judge-interactions", tags=["judge-interactions"])
@@ -113,6 +117,71 @@ def judge_interaction_filters(request: Request, include_local: bool = Query(True
         "models": sorted({str(row.get("model")) for row in rows if row.get("model")}),
         "users": sorted({str(row.get("user_id")) for row in rows if row.get("user_id")}),
         "statuses": sorted({str(row.get("status")) for row in rows if row.get("status")}),
+    }
+
+
+@router.post("/test")
+def test_judge_availability(request: Request) -> dict[str, Any]:
+    """Exercise the same classification and metric Judge paths used by session metrics."""
+    employee = employee_from_request(request)
+    started = time.perf_counter()
+    context_id = f"judge-self-test-{uuid.uuid4().hex[:12]}"
+    stamp = datetime.now(timezone.utc).isoformat()
+    conversation = {
+        "root_session_id": context_id,
+        "timeline": [
+            {
+                "request_id": uuid.uuid4().hex,
+                "start_time": stamp,
+                "end_time": stamp,
+                "status": "success",
+                "proxy_server_request": {
+                    "body": {
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": "请生成一个包含电源、MCU和LED驱动的简易智能路灯原理图。",
+                            }
+                        ]
+                    }
+                },
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "请生成一个包含电源、MCU和LED驱动的简易智能路灯原理图。",
+                    }
+                ],
+                "response": {
+                    "role": "assistant",
+                    "content": "这是 Judge 可用性测试的模拟会话响应。",
+                },
+                "metadata": {"request_purpose": "judge_self_test"},
+            }
+        ],
+    }
+    classification = classify_session_task(conversation, employee_no=employee)
+    metrics = judge_session_metrics(conversation, employee_no=employee)
+    classification_ok = classification.get("status") == "completed"
+    metrics_ok = metrics.get("status") == "completed"
+    ok = classification_ok and metrics_ok
+    return {
+        "ok": ok,
+        "status": "ok" if ok else "failed",
+        "message": (
+            "Judge 模型已通过任务分类和会话指标两项真实 JSON 推理测试"
+            if ok
+            else "Judge 模型未通过完整可用性测试，请查看失败步骤"
+        ),
+        "context_id": context_id,
+        "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+        "checks": {
+            "task_classification": classification,
+            "session_metric_judge": metrics,
+        },
+        "limitations": [
+            "该测试使用短会话，不能排除真实长会话的上下文长度限制",
+            "测试通过后仍可能因后续额度耗尽、限流或上游临时故障而失败",
+        ],
     }
 
 

@@ -75,6 +75,7 @@ export const fetchMetricDetail = (sessionId) => data(http.get(`/session-metrics/
 export const fetchJudgeInteractions = (params = {}) => data(http.get('/judge-interactions', { params }))
 export const fetchJudgeInteractionFilters = () => data(http.get('/judge-interactions/filters'))
 export const fetchJudgeInteraction = (id) => data(http.get(`/judge-interactions/${encodeURIComponent(id)}`))
+export const testJudgeAvailability = () => data(http.post('/judge-interactions/test', {}, { timeout: 300000 }))
 
 export const fetchPrismDashboard = () => data(prism.get('/dashboard'))
 export const fetchBenchmarks = () => data(prism.get('/benchmarks'))

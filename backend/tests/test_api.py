@@ -411,6 +411,36 @@ def test_judge_interactions_are_listed_as_summaries_and_opened_separately(tmp_pa
     assert detail["output"]["content"] == "ok"
 
 
+def test_judge_availability_uses_session_metric_production_paths(monkeypatch):
+    monkeypatch.setattr(
+        "app.api.routes_judge.classify_session_task",
+        lambda conversation, employee_no=None: {
+            "status": "completed",
+            "task_type": "block_to_schematic",
+            "model": "judge-model",
+            "usage": {"total_tokens": 12},
+        },
+    )
+    monkeypatch.setattr(
+        "app.api.routes_judge.judge_session_metrics",
+        lambda conversation, employee_no=None: {
+            "status": "completed",
+            "models": ["judge-model"],
+            "chunks_total": 1,
+            "chunks_completed": 1,
+            "usage": {"total_tokens": 18},
+        },
+    )
+
+    response = client.post("/api/judge-interactions/test")
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["ok"] is True
+    assert result["checks"]["task_classification"]["task_type"] == "block_to_schematic"
+    assert result["checks"]["session_metric_judge"]["chunks_completed"] == 1
+
+
 def test_batch_rejects_duplicate_combinations_before_queueing():
     response = client.post(
         "/api/batches",
