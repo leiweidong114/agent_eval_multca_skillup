@@ -694,7 +694,10 @@ class MetricJobManager:
 
     @staticmethod
     def _public(job: dict[str, Any]) -> dict[str, Any]:
-        return {key: value for key, value in job.items() if key != "_id"}
+        return {
+            **{key: value for key, value in job.items() if key != "_id"},
+            "server_time": datetime.now(timezone.utc),
+        }
 
 
 metric_job_manager = MetricJobManager()

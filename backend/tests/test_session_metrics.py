@@ -34,7 +34,9 @@ def test_failed_metric_job_still_persists_its_process(monkeypatch):
     finally:
         manager._executor.shutdown(wait=True)
 
-    assert manager.get("metrics-test")["status"] == "completed_with_errors"
+    public_job = manager.get("metrics-test")
+    assert public_job["status"] == "completed_with_errors"
+    assert public_job["server_time"].tzinfo is not None
     assert store.saved_process[0] == "session-1"
     assert any(event["stage"] == "session_failed" for event in store.saved_process[1])
 
