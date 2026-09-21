@@ -6,6 +6,9 @@
 仍是模型交互事实源。计算完成的衍生指标通过 Java HTTP 接口写入 MongoDB 的
 `HDschematicRationalityCollection`，使用原会话 `sessionId` 关联，`checkType` 固定为
 `agent_eval_session_metrics`。项目本地不再保存 SQLite 指标数据库。
+每次计算的过程事件另存为同一集合、同一 `sessionId` 的
+`agent_eval_metric_process` 记录；指标记录与过程记录通过不同 `checkType` 区分，
+不会把过程记录误当作原理图质量分析。旧版本完成的计算没有持久化过程，需重新计算才能回看。
 
 原理图合理性分析记录不由评测后端直连 MongoDB。后端通过 HTTP 查询接口读取
 `HDschematicRationalityCollection`，并按真实 LiteLLM 根 `sessionId` 或评测运行 ID
@@ -143,6 +146,9 @@ MongoDB 对应 `sessionId` 的 `agent_eval_session_metrics` 记录中。
 后还会显示所选记录的业务字段及最多 4000 字符的 `resultText` 摘要；Cookie 等请求头
 不会进入过程日志。接口失败时会显示证书、超时或 HTTP 错误，查询失败不会伪装成
 “未找到记录”，插入失败则明确标记指标没有保存成功。
+计算结束后，在会话列表点击“查看过程”可从 MongoDB 回读这条会话最新的过程记录；
+“查看指标”的弹窗底部也提供同一入口。过程记录同时保存失败会话的错误事件。
+为控制单条 MongoDB 文档大小，每个过长事件会截断详情，并在记录中标明是否截断。
 
 自动任务配置保持不变：
 
@@ -176,6 +182,7 @@ curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/jobs/任务ID
 curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics?limit=20&offset=0"
 curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/summary"
 curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/会话ID"
+curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/会话ID/process"
 
 # 原理图生成总览按分类筛选；也可传具体子类 block_to_schematic 等
 curl.exe -b cookies.txt -G "http://127.0.0.1:8000/api/schematic/conversations" `

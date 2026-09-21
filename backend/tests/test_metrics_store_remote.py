@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from app.metrics_store import MetricsStore, SESSION_METRICS_CHECK_TYPE
+from app.metrics_store import MetricsStore, SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE
 
 
 class FakeClient:
@@ -73,3 +73,32 @@ def test_write_read_verification_rejects_missing_uuid():
 
     assert verification["verified"] is False
     assert "没有找到本次 UUID" in verification["reason"]
+
+
+def test_completed_process_trace_round_trip_and_rationality_exclusion():
+    client = FakeClient()
+    store = MetricsStore.__new__(MetricsStore)
+    store._client = client
+    job = {
+        "job_id": "metrics-test",
+        "user_id": "100001",
+        "use_llm_judge": True,
+        "created_at": datetime(2026, 9, 21, tzinfo=timezone.utc),
+        "events": [
+            {"sequence": 1, "session_id": "session-1", "stage": "session_loaded", "message": "读取成功"},
+            {"sequence": 2, "session_id": "session-1", "stage": "session_completed", "message": "计算完成"},
+            {"sequence": 3, "session_id": "another", "stage": "session_failed", "message": "其他会话"},
+        ],
+    }
+
+    saved = store.save_process_trace(job, "session-1")
+    loaded = store.get_process_trace("session-1")
+
+    assert saved["status"] == "completed"
+    assert client.records[0]["checkType"] == SESSION_PROCESS_CHECK_TYPE
+    assert loaded["job_id"] == "metrics-test"
+    assert [event["stage"] for event in loaded["events"]] == ["session_loaded", "session_completed"]
+    assert loaded["mongo_record_id"] == "mongo-1"
+    record, count, _ = store.latest_rationality_analysis("session-1")
+    assert record is None
+    assert count == 0

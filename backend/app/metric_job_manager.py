@@ -9,7 +9,7 @@ from typing import Any
 
 from agent_eval.database import get_conversation
 from app.config import BACKEND_ROOT
-from app.metrics_store import MetricsStore
+from app.metrics_store import MetricsStore, SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE
 from app.schematic_rationality_judge import extract_rationality_metrics, judge_rationality_result
 from app.session_metrics import calculate_rule_metrics
 from app.session_metric_judge import judge_session_metrics
@@ -95,6 +95,7 @@ class MetricJobManager:
             "total": len(session_ids),
             "completed": 0,
             "failed": 0,
+            "process_trace_failures": 0,
             "session_ids": session_ids,
             "use_llm_judge": use_llm_judge,
             "user_id": user_id,
@@ -278,7 +279,7 @@ class MetricJobManager:
                             "collectionName": "HDschematicRationalityCollection",
                             "session_ids": query_ids,
                             "accepted_statuses": ["completed", "success", "ok"],
-                            "excluded_check_type": "agent_eval_session_metrics",
+                            "excluded_check_types": [SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE],
                         },
                         interface={
                             "method": "GET",
@@ -375,7 +376,7 @@ class MetricJobManager:
                                 "collectionName": "HDschematicRationalityCollection",
                                 "session_ids": query_ids,
                                 "accepted_statuses": ["completed", "success", "ok"],
-                                "excluded_check_type": "agent_eval_session_metrics",
+                                "excluded_check_types": [SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE],
                             },
                             output={
                                 **_rationality_analysis_summary(result["schematic_rationality"]),
@@ -646,10 +647,33 @@ class MetricJobManager:
                     job["failed"] += 1
                     job["errors"] = [*job["errors"], {"session_id": session_id, "detail": str(exc)}][-100:]
                     self._append_event(job, "session_failed", "会话指标计算失败", session_id=session_id, detail=str(exc), outcome="failed", output={"error": str(exc)})
+            try:
+                with self._lock:
+                    trace_snapshot = {**job, "events": list(job.get("events") or [])}
+                store.save_process_trace(trace_snapshot, session_id)
+                with self._lock:
+                    self._append_event(
+                        job, "process_trace_saved", "计算过程已保存到 MongoDB",
+                        session_id=session_id, outcome="success",
+                    )
+            except Exception as exc:
+                with self._lock:
+                    job["process_trace_failures"] += 1
+                    job["errors"] = [
+                        *job["errors"],
+                        {"session_id": session_id, "detail": f"计算过程保存失败: {exc}"},
+                    ][-100:]
+                    self._append_event(
+                        job, "process_trace_failed", "计算过程保存到 MongoDB 失败",
+                        session_id=session_id, detail=str(exc), outcome="failed",
+                    )
             with self._lock:
                 self._save(job, store)
         with self._lock:
-            job["status"] = "completed" if not job["failed"] else "completed_with_errors"
+            job["status"] = (
+                "completed" if not job["failed"] and not job["process_trace_failures"]
+                else "completed_with_errors"
+            )
             job["phase"] = "completed"
             job["progress"] = 100
             job["current_session_id"] = None

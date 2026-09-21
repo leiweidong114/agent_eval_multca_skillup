@@ -207,3 +207,15 @@ def metric_detail(request: Request, session_id: str) -> dict[str, Any]:
     if result is None:
         raise HTTPException(status_code=404, detail="会话指标不存在")
     return result
+
+
+@router.get("/{session_id}/process")
+def metric_process(request: Request, session_id: str) -> dict[str, Any]:
+    employee_from_request(request)
+    try:
+        result = MetricsStore().get_process_trace(session_id)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="该会话没有已保存的计算过程；旧任务需重新计算")
+    return result

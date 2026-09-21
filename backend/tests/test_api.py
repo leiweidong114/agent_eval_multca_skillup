@@ -526,6 +526,25 @@ def test_historical_metric_sessions_filter_calculated_and_uncalculated(monkeypat
     assert uncalculated["conversations"][0]["metric_status"] == "not_calculated"
 
 
+def test_completed_metric_process_can_be_loaded_by_session_id(monkeypatch):
+    class FakeMetricsStore:
+        def get_process_trace(self, session_id):
+            return {
+                "session_id": session_id,
+                "job_id": "metrics-test",
+                "status": "completed",
+                "events": [{"stage": "session_completed", "session_id": session_id}],
+            } if session_id == "completed-session" else None
+
+    monkeypatch.setattr("app.api.routes_metrics.MetricsStore", FakeMetricsStore)
+    result = client.get("/api/session-metrics/completed-session/process")
+    missing = client.get("/api/session-metrics/missing-session/process")
+
+    assert result.status_code == 200
+    assert result.json()["events"][0]["stage"] == "session_completed"
+    assert missing.status_code == 404
+
+
 def test_batch_rejects_duplicate_combinations_before_queueing():
     response = client.post(
         "/api/batches",

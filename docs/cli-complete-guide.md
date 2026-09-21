@@ -446,6 +446,23 @@ AGENT_EVAL_RESULTS_ROOT=D:/agent-eval-results
 单次评测的目录。程序还会对 Windows 下 Skill 文件复制使用长路径兼容写法，
 但外部 Agent/Skill-Up 也会访问评测产物，所以仍建议配置短目录。
 
+如需在 Windows 操作系统层面启用长路径，可先只读检查（不修改系统）：
+
+```powershell
+Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled
+```
+
+若值不是 `1`，且获得本机管理员批准，可在**管理员 PowerShell** 中设置：
+
+```powershell
+New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force
+```
+
+之后重启相关进程，必要时重启 Windows。此开关不能让所有程序自动支持长路径：
+相关可执行程序还需声明 `longPathAware` 或自行使用 `\\?\` 扩展路径。
+因此评测系统仍推荐短的 `AGENT_EVAL_RESULTS_ROOT`，尤其涉及第三方 Agent、Skill-Up
+和命令行工具时。参见 [微软官方说明](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation)。
+
 ## 9. 使用多个 Agent 同时评测同一个 Skill
 
 ```powershell

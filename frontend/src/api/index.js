@@ -72,6 +72,7 @@ export const fetchMetricSessions = (params = {}) => data(http.get('/session-metr
 export const createMetricJob = (payload) => data(http.post('/session-metrics/jobs', payload))
 export const fetchMetricJob = (jobId) => data(http.get(`/session-metrics/jobs/${encodeURIComponent(jobId)}`))
 export const fetchMetricDetail = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}`))
+export const fetchMetricProcess = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}/process`))
 export const fetchJudgeInteractions = (params = {}) => data(http.get('/judge-interactions', { params }))
 export const fetchJudgeInteractionFilters = () => data(http.get('/judge-interactions/filters'))
 export const fetchJudgeInteraction = (id) => data(http.get(`/judge-interactions/${encodeURIComponent(id)}`))

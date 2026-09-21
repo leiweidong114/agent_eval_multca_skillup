@@ -10,6 +10,8 @@ from app.schematic_data_client import RATIONALITY_COLLECTION, SchematicDataClien
 
 SESSION_METRICS_CHECK_TYPE = "agent_eval_session_metrics"
 SESSION_METRICS_MESSAGE = "Agent Eval 历史会话指标计算结果"
+SESSION_PROCESS_CHECK_TYPE = "agent_eval_metric_process"
+SESSION_PROCESS_MESSAGE = "Agent Eval 历史会话指标计算过程"
 
 
 def _json_default(value: Any) -> str:
@@ -63,6 +65,32 @@ def _latest_metric(records: Iterable[Mapping[str, Any]]) -> dict[str, Any] | Non
         reverse=True,
     )
     return candidates[0][1] if candidates else None
+
+
+def _bounded_process_value(value: Any, depth: int = 0) -> Any:
+    """Keep a retrievable trace below MongoDB's document limit without secrets in headers."""
+    if isinstance(value, str):
+        return value[:4000] + ("…[已截断]" if len(value) > 4000 else "")
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if depth >= 8:
+        return "[嵌套内容已截断]"
+    if isinstance(value, Mapping):
+        return {str(key): _bounded_process_value(item, depth + 1) for key, item in list(value.items())[:100]}
+    if isinstance(value, (list, tuple)):
+        return [_bounded_process_value(item, depth + 1) for item in value[:100]]
+    return value
+
+
+def _bounded_process_event(event: Mapping[str, Any]) -> dict[str, Any]:
+    bounded = _bounded_process_value(event)
+    if len(json.dumps(bounded, ensure_ascii=False, default=_json_default).encode("utf-8")) <= 8192:
+        return bounded
+    return {
+        key: _bounded_process_value(event[key])
+        for key in ("sequence", "timestamp", "stage", "message", "session_id", "outcome", "detail")
+        if key in event
+    } | {"event_detail_truncated": True}
 
 
 class MetricsStore:
@@ -276,6 +304,72 @@ class MetricsStore:
     def get_metrics(self, session_id: str) -> dict[str, Any] | None:
         return _latest_metric(self._records_for([session_id]))
 
+    def save_process_trace(self, job: Mapping[str, Any], session_id: str) -> dict[str, Any]:
+        """Persist one session's completed pipeline alongside its metric record."""
+        events = [
+            _bounded_process_event(event)
+            for event in job.get("events") or []
+            if isinstance(event, Mapping) and event.get("session_id") == session_id
+        ]
+        original_event_count = len(events)
+        if len(events) > 200:
+            events = [*events[:20], {"stage": "events_truncated", "message": "中间过程事件已截断"}, *events[-179:]]
+        finished_at = datetime.now(timezone.utc)
+        failed = any(event.get("stage") == "session_failed" for event in events)
+        document = {
+            "job_id": str(job.get("job_id") or ""),
+            "session_id": session_id,
+            "status": "failed" if failed else "completed",
+            "user_id": str(job.get("user_id") or ""),
+            "use_llm_judge": bool(job.get("use_llm_judge")),
+            "created_at": job.get("created_at"),
+            "finished_at": finished_at,
+            "event_count": len(events),
+            "original_event_count": original_event_count,
+            "events_truncated": original_event_count > len(events),
+            "events": events,
+        }
+        record = {
+            "uuid": uuid.uuid4().hex,
+            "status": document["status"],
+            "createUser": document["user_id"] or "agent-eval",
+            "createTime": finished_at.isoformat(),
+            "checkType": SESSION_PROCESS_CHECK_TYPE,
+            "checkMessage": SESSION_PROCESS_MESSAGE,
+            "userName": document["user_id"] or "Agent Eval",
+            "hscopeProjectId": "session-metrics-process",
+            "boardNum": str(job.get("job_id") or ""),
+            "sessionId": session_id,
+            "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
+        }
+        client = self._data_client()
+        client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
+        try:
+            read_back = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
+        except TypeError:
+            read_back = client.find_records(RATIONALITY_COLLECTION, [session_id])
+        if not any(
+            item.get("checkType") == SESSION_PROCESS_CHECK_TYPE and item.get("uuid") == record["uuid"]
+            for item in read_back
+        ):
+            raise RuntimeError("计算过程写入接口返回成功，但 MongoDB 回读未找到本次过程记录")
+        return document
+
+    def get_process_trace(self, session_id: str) -> dict[str, Any] | None:
+        records = [
+            item for item in self._records_for([session_id])
+            if item.get("checkType") == SESSION_PROCESS_CHECK_TYPE
+        ]
+        records.sort(key=lambda item: str(item.get("createTime") or ""), reverse=True)
+        for record in records:
+            try:
+                value = json.loads(str(record.get("resultText") or ""))
+            except (TypeError, ValueError):
+                continue
+            if isinstance(value, dict) and value.get("session_id") == session_id:
+                return {**value, "mongo_record_id": str(record.get("_id") or "") or None}
+        return None
+
     def latest_rationality_analysis(
         self,
         session_id: str,
@@ -297,10 +391,15 @@ class MetricsStore:
             for value in all_values
             if str(value.get("checkType") or "") == SESSION_METRICS_CHECK_TYPE
         ]
+        self_processes = [
+            value
+            for value in all_values
+            if str(value.get("checkType") or "") == SESSION_PROCESS_CHECK_TYPE
+        ]
         values = [
             value
             for value in all_values
-            if str(value.get("checkType") or "") != SESSION_METRICS_CHECK_TYPE
+            if str(value.get("checkType") or "") not in {SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE}
         ]
         completed = [
             value
@@ -324,7 +423,7 @@ class MetricsStore:
         if not all_values:
             reason = "Java 查询成功，但没有返回任何 Session ID 精确匹配记录"
         elif not values:
-            reason = "只找到平台自身的 agent_eval_session_metrics，未找到原理图轨迹质量记录"
+            reason = "只找到平台自身的指标或计算过程记录，未找到原理图轨迹质量记录"
         elif not completed:
             reason = "找到了 Session ID 匹配记录，但其 status 不在 completed/success/ok 中"
         else:
@@ -334,9 +433,10 @@ class MetricsStore:
             "exact_match_record_count": len(all_values),
             "rationality_record_count": len(values),
             "self_metric_record_count": len(self_metrics),
+            "self_process_record_count": len(self_processes),
             "eligible_record_count": len(completed),
             "accepted_statuses": ["completed", "success", "ok"],
-            "excluded_check_type": SESSION_METRICS_CHECK_TYPE,
+            "excluded_check_types": [SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE],
             "status_counts": status_counts,
             "check_type_counts": check_type_counts,
             "returned_session_ids": sorted({str(value.get("sessionId") or "") for value in all_values}),
