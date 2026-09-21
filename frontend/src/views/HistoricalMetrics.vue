@@ -39,6 +39,7 @@
 import {computed,onBeforeUnmount,onMounted,ref} from 'vue'
 import {ElMessage} from 'element-plus'
 import {createMetricJob,fetchMetricDetail,fetchMetricHealth,fetchMetricJob,fetchMetricSessions} from '../api'
+defineOptions({name:'HistoricalMetrics'})
 const now=Date.now(),timePreset=ref('1d'),customTimeRange=ref([new Date(now-24*60*60*1000),new Date(now)]),searchedWindow=ref(null),hasSearched=ref(false),endUser=ref(''),sessionId=ref(''),metricStatusFilter=ref('all'),model=ref(''),rows=ref([]),total=ref(0),page=ref(1),pageSize=ref(20),selected=ref([]),loading=ref(false),submitting=ref(false),useJudge=ref(true),health=ref({}),job=ref(null),detailVisible=ref(false),detailLoading=ref(false),detailSession=ref(null),metricDetail=ref(null),calculatingSession=ref('')
 let pollTimer
 const selectedTimeWindow=()=>{const end=new Date();if(timePreset.value==='all')return{start:new Date(0),end};if(timePreset.value==='custom'){const range=customTimeRange.value;if(!range?.[0]||!range?.[1])throw new Error('请选择完整的自定义时间范围');return{start:new Date(range[0]),end:new Date(range[1])}}const days={'1d':1,'7d':7,'30d':30}[timePreset.value]||1;return{start:new Date(end.getTime()-days*24*60*60*1000),end}}
@@ -55,9 +56,9 @@ const pipelineDefinitions=[
   {key:'load',label:'读取会话',description:'从 LiteLLM PostgreSQL 读取完整会话、模型、Agent、Token 与时间信息',stages:['loading_session','session_loaded']},
   {key:'rules',label:'规则指标',description:'确定性计算工具、脚本、Skill 步骤、错误与重试指标',stages:['rule_metrics']},
   {key:'classification',label:'任务分类',description:'Judge LLM 根据第一条用户 Prompt 判断任务类型',stages:['task_classification_started','task_classification_completed','task_classification_unavailable']},
-  {key:'judge',label:'会话 Judge',description:'分片分析 Skill 步骤、错误、重试与疑似伪造输出',stages:['llm_judge_chunk_started','llm_judge_chunk_completed','llm_judge_completed','llm_judge_unavailable','llm_judge_skipped']},
   {key:'mongoQuery',label:'查询原始指标',description:'调用 Java GET 接口查询 MongoDB 中同 Session ID 的 resultText',stages:['schematic_rationality_loading','schematic_data_query_succeeded','schematic_data_query_failed']},
   {key:'rationality',label:'质量指标分析',description:'按 checkType 提取数值，并由 Judge 生成中文结论与问题',stages:['schematic_rationality_not_found','schematic_rationality_judge','schematic_rationality_completed','schematic_rationality_judge_unavailable','schematic_rationality_rules_completed']},
+  {key:'judge',label:'会话 Judge',description:'分片分析 Skill 步骤、错误、重试与疑似伪造输出',stages:['llm_judge_chunk_started','llm_judge_chunk_completed','llm_judge_completed','llm_judge_unavailable','llm_judge_skipped']},
   {key:'persist',label:'保存最终指标',description:'调用 Java POST 接口写入 HDschematicRationalityCollection',stages:['saving_metrics','schematic_data_insert_succeeded','schematic_data_insert_failed']},
 ]
 const terminalStepStatus=(definition,events)=>{if(!events.length)return'pending';const stages=new Set(events.map(item=>item.stage));if([...stages].some(stage=>stage.endsWith('_failed')))return'failed';if(stages.has('task_classification_unavailable')||stages.has('llm_judge_unavailable')||stages.has('schematic_rationality_judge_unavailable'))return'warning';if(stages.has('llm_judge_skipped')||stages.has('schematic_rationality_not_found'))return'skipped';const successStages={load:'session_loaded',rules:'rule_metrics',classification:'task_classification_completed',judge:'llm_judge_completed',mongoQuery:'schematic_data_query_succeeded',rationality:'schematic_rationality_completed',persist:'schematic_data_insert_succeeded'};if(stages.has(successStages[definition.key])||definition.key==='rationality'&&stages.has('schematic_rationality_rules_completed'))return'success';return'running'}

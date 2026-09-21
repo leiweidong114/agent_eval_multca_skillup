@@ -218,6 +218,7 @@ class MetricJobManager:
                         },
                     )
                     self._save(job, store)
+                classification_status = "disabled"
                 if job["use_llm_judge"]:
                     classification_prompt = first_user_prompt(conversation)
                     with self._lock:
@@ -260,57 +261,8 @@ class MetricJobManager:
                         result["task_type_source"] = "first_user_prompt_llm_judge"
                         result["task_type_confidence"] = classification.get("confidence")
 
-                    def judge_progress(stage: str, chunk_index: int, chunk_total: int, message: str) -> None:
-                        with self._lock:
-                            job["phase"] = "llm_judge"
-                            self._append_event(
-                                job,
-                                stage,
-                                message,
-                                session_id=session_id,
-                                chunk_index=chunk_index,
-                                chunk_total=chunk_total,
-                                outcome="success" if stage.endswith("_completed") else "running",
-                            )
-                            self._save(job, store)
-
-                    result["judge"] = judge_session_metrics(
-                        conversation,
-                        employee_no=str(job.get("user_id") or "") or None,
-                        progress_callback=judge_progress,
-                    )
-                    with self._lock:
-                        judge_status = str(result["judge"].get("status") or "unknown")
-                        self._append_event(
-                            job,
-                            "llm_judge_completed" if judge_status == "completed" else "llm_judge_unavailable",
-                            "LLM Judge 分析完成" if judge_status == "completed" else "LLM Judge 不可用，保留规则指标",
-                            session_id=session_id,
-                            judge_status=judge_status,
-                            detail=result["judge"].get("error"),
-                            outcome="success" if judge_status == "completed" else "warning",
-                            output=result["judge"],
-                        )
-                        self._save(job, store)
-                    if result["judge"].get("status") == "completed":
-                        result["metrics"]["suspected_fabrication_count"] = len(
-                            result["judge"].get("suspected_fabrications") or []
-                        )
-                        # Rule-derived task type stays authoritative when it has
-                        # explicit Skill/script markers. Judge classification fills
-                        # only the low-confidence fallback.
-                        if classification_status != "completed" and result.get("task_type_source") == "rule_fallback":
-                            result["task_type"] = result["judge"].get("task_type") or result["task_type"]
-                            result["task_type_source"] = "llm_judge"
-                            result["task_category"], result["task_subtype"] = task_hierarchy(result["task_type"])
-                        result["status"] = "completed"
-                    else:
-                        result["status"] = "rules_completed_judge_unavailable"
                 else:
-                    result["judge"] = {"status": "disabled"}
                     result["task_classification"] = {"status": "disabled"}
-                    with self._lock:
-                        self._append_event(job, "llm_judge_skipped", "本次任务未启用 LLM Judge", session_id=session_id, outcome="skipped", output={"status": "disabled"})
                 with self._lock:
                     job["phase"] = "schematic_rationality"
                     query_ids = list(dict.fromkeys([
@@ -516,6 +468,68 @@ class MetricJobManager:
                             session_id=session_id,
                             outcome="success",
                             output=_rationality_analysis_summary(result["schematic_rationality"]),
+                        )
+                # The full-session Judge intentionally runs after the external
+                # rationality lookup/analysis, making it the sixth visible step.
+                # It still evaluates the LiteLLM conversation evidence only;
+                # rationality analysis remains an independent fifth step.
+                if job["use_llm_judge"]:
+                    def judge_progress(stage: str, chunk_index: int, chunk_total: int, message: str) -> None:
+                        with self._lock:
+                            job["phase"] = "llm_judge"
+                            self._append_event(
+                                job,
+                                stage,
+                                message,
+                                session_id=session_id,
+                                chunk_index=chunk_index,
+                                chunk_total=chunk_total,
+                                outcome="success" if stage.endswith("_completed") else "running",
+                            )
+                            self._save(job, store)
+
+                    result["judge"] = judge_session_metrics(
+                        conversation,
+                        employee_no=str(job.get("user_id") or "") or None,
+                        progress_callback=judge_progress,
+                    )
+                    with self._lock:
+                        judge_status = str(result["judge"].get("status") or "unknown")
+                        self._append_event(
+                            job,
+                            "llm_judge_completed" if judge_status == "completed" else "llm_judge_unavailable",
+                            "LLM Judge 分析完成" if judge_status == "completed" else "LLM Judge 不可用，保留规则指标",
+                            session_id=session_id,
+                            judge_status=judge_status,
+                            detail=result["judge"].get("error"),
+                            outcome="success" if judge_status == "completed" else "warning",
+                            output=result["judge"],
+                        )
+                        self._save(job, store)
+                    if result["judge"].get("status") == "completed":
+                        result["metrics"]["suspected_fabrication_count"] = len(
+                            result["judge"].get("suspected_fabrications") or []
+                        )
+                        # Rule-derived task type stays authoritative when it has
+                        # explicit Skill/script markers. Judge classification fills
+                        # only the low-confidence fallback.
+                        if classification_status != "completed" and result.get("task_type_source") == "rule_fallback":
+                            result["task_type"] = result["judge"].get("task_type") or result["task_type"]
+                            result["task_type_source"] = "llm_judge"
+                            result["task_category"], result["task_subtype"] = task_hierarchy(result["task_type"])
+                        result["status"] = "completed"
+                    else:
+                        result["status"] = "rules_completed_judge_unavailable"
+                else:
+                    result["judge"] = {"status": "disabled"}
+                    with self._lock:
+                        self._append_event(
+                            job,
+                            "llm_judge_skipped",
+                            "本次任务未启用 LLM Judge",
+                            session_id=session_id,
+                            outcome="skipped",
+                            output={"status": "disabled"},
                         )
                 metric_record = store.build_metrics_record(result)
                 metric_record_audit = _metric_record_for_audit(metric_record)

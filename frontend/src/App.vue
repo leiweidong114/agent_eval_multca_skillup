@@ -24,7 +24,7 @@
       <el-button v-if="$route.path !== '/evaluations/new'" type="primary" @click="$router.push('/evaluations/new')">＋ 发起评测</el-button>
     </header>
     <router-view v-slot="{ Component }">
-      <keep-alive include="RuntimeCatalog">
+      <keep-alive include="RuntimeCatalog,HistoricalMetrics">
         <component :is="Component" />
       </keep-alive>
     </router-view>
