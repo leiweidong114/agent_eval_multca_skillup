@@ -48,4 +48,3 @@ done
 
 docker logs --tail 100 "$app_container"
 exit 1
-

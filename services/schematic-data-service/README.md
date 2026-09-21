@@ -10,7 +10,6 @@ GET /schematic/schematicData/query?collectionName=HDschematicRationalityCollecti
 POST /schematic/schematicData/insert?collectionName=HDschematicRationalityCollection
 PUT /schematic/schematicData/update?collectionName=HDschematicRationalityCollection&sessionId=<session>&uuid=<source-uuid>
 ```
-
 写入接口接收 JSON，请求必须包含 `uuid`、`status`、`createUser`、`createTime`、
 `checkType`、`checkMessage`、`userName`、`hscopeProjectId`、`boardNum`、`sessionId`
 和 `resultText`。`_id` 由 MongoDB 生成，`createTime` 使用 ISO-8601。
@@ -38,4 +37,3 @@ export MONGODB_PASSWORD='password'
 # 可选：MONGODB_HOST、MONGODB_PORT、MONGODB_DATABASE、MONGODB_AUTH_DATABASE
 java -jar target/schematic-data-service-1.0.0.jar
 ```
-

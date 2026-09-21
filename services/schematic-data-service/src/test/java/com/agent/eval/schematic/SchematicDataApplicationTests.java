@@ -87,4 +87,3 @@ class SchematicDataApplicationTests {
                 .isInstanceOf(ResponseStatusException.class);
     }
 }
-

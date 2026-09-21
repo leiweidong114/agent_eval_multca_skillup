@@ -9,4 +9,3 @@ public class SchematicDataApplication {
         SpringApplication.run(SchematicDataApplication.class, args);
     }
 }
-
