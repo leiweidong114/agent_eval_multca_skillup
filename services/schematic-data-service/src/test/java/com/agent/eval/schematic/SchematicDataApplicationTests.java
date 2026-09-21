@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -17,7 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import com.mongodb.client.result.UpdateResult;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.web.server.ResponseStatusException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -61,29 +62,30 @@ class SchematicDataApplicationTests {
     }
 
     @Test
-    void updateMetricsMatchesExistingSessionAndUuidWithoutInserting() {
+    void updateMetricsMatchesExistingSessionAndCheckTypeWithoutInserting() {
         MongoTemplate mongoTemplate = mock(MongoTemplate.class);
-        when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(Document.class),
+        when(mongoTemplate.findAndModify(any(Query.class), any(Update.class), any(FindAndModifyOptions.class), eq(Document.class),
                 eq(SchematicDataController.CANONICAL_COLLECTION)))
-                .thenReturn(UpdateResult.acknowledged(1, 1L, null));
+                .thenReturn(new Document("_id", new ObjectId("68cec0000000000000000001")));
         SchematicDataController controller = new SchematicDataController(mongoTemplate);
         Map<String, Object> result = controller.update(SchematicDataController.CANONICAL_COLLECTION,
-                "session-1", "source-uuid", Map.of("field", "agentEvalMetrics", "value", Map.of("status", "completed")));
+                "session-1", "hscope_diagram_lint", Map.of("field", "agentEvalMetrics", "value", Map.of("status", "completed")));
         assertThat(result.get("status")).isEqualTo("updated");
-        assertThat(result.get("matchedCount")).isEqualTo(1L);
-        verify(mongoTemplate).updateFirst(any(Query.class), any(Update.class), eq(Document.class),
+        assertThat(result.get("matchedCount")).isEqualTo(1);
+        ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+        verify(mongoTemplate).findAndModify(query.capture(), any(Update.class), any(FindAndModifyOptions.class), eq(Document.class),
                 eq(SchematicDataController.CANONICAL_COLLECTION));
+        assertThat(query.getValue().getQueryObject().getString("sessionId")).isEqualTo("session-1");
+        assertThat(query.getValue().getQueryObject().containsKey("uuid")).isFalse();
+        assertThat(query.getValue().getSortObject()).containsKey("createTime");
     }
 
     @Test
     void updateNeverUpsertsWhenSourceIsAbsent() {
         MongoTemplate mongoTemplate = mock(MongoTemplate.class);
-        when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(Document.class),
-                eq(SchematicDataController.CANONICAL_COLLECTION)))
-                .thenReturn(UpdateResult.acknowledged(0, 0L, null));
         SchematicDataController controller = new SchematicDataController(mongoTemplate);
         assertThatThrownBy(() -> controller.update(SchematicDataController.CANONICAL_COLLECTION,
-                "session-1", "missing-uuid", Map.of("field", "agentEvalMetrics", "value", Map.of("status", "completed"))))
+                "session-1", "hscope_diagram_lint", Map.of("field", "agentEvalMetrics", "value", Map.of("status", "completed"))))
                 .isInstanceOf(ResponseStatusException.class);
     }
 }

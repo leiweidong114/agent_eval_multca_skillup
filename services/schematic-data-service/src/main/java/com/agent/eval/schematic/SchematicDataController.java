@@ -6,6 +6,7 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -14,7 +15,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import com.mongodb.client.result.UpdateResult;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -119,24 +120,28 @@ public class SchematicDataController {
     public Map<String, Object> update(
             @RequestParam(defaultValue = CANONICAL_COLLECTION) String collectionName,
             @RequestParam String sessionId,
-            @RequestParam String uuid,
+            @RequestParam String checkType,
             @RequestBody Map<String, Object> payload) {
         validateCollection(collectionName);
         String field = String.valueOf(payload.getOrDefault("field", ""));
         if (!List.of("agentEvalMetrics", "agentEvalProcess").contains(field)
                 || !(payload.get("value") instanceof Map<?, ?>)
-                || sessionId.isBlank() || uuid.isBlank()) {
+                || sessionId.isBlank()
+                || !List.of("hscope_diagram_lint", "hscope_block_corpus_check").contains(checkType)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid update target or value");
         }
-        Query query = new Query(Criteria.where("sessionId").is(sessionId).and("uuid").is(uuid));
-        UpdateResult result = mongoTemplate.updateFirst(
-                query, new Update().set(field, payload.get("value")), Document.class, collectionName);
-        if (result.getMatchedCount() != 1) {
+        Query query = new Query(Criteria.where("sessionId").is(sessionId)
+                .and("checkType").regex("^" + Pattern.quote(checkType) + "\\s*$"));
+        query.with(Sort.by(Sort.Order.desc("createTime"), Sort.Order.desc("_id")));
+        Document updated = mongoTemplate.findAndModify(
+                query, new Update().set(field, payload.get("value")),
+                FindAndModifyOptions.options().returnNew(true).upsert(false), Document.class, collectionName);
+        if (updated == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "source record not found");
         }
         return Map.of("status", "updated", "collectionName", collectionName,
-                "sessionId", sessionId, "uuid", uuid, "field", field,
-                "matchedCount", result.getMatchedCount(), "modifiedCount", result.getModifiedCount());
+                "sessionId", sessionId, "checkType", checkType, "field", field,
+                "matchedCount", 1, "recordId", String.valueOf(updated.get("_id")));
     }
 
     private void validateCollection(String collectionName) {

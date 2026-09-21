@@ -43,10 +43,11 @@ def main() -> int:
         document["schematic_rationality"] = analysis
         before = len(rows)
         if args.apply:
-            store._data_client().update_record(session_id=session_id, uuid=str(source["uuid"]),
+            store._data_client().update_record(session_id=session_id,
+                                               check_type=extracted["analysis_type"],
                                                field="agentEvalMetrics", value=document)
             check = store._records_for([session_id])
-            if len(check) != before or not any(row.get("uuid") == source["uuid"]
+            if len(check) != before or not any(str(row.get("checkType") or "").strip() == extracted["analysis_type"]
                 and (row.get("agentEvalMetrics") or {}).get("schematic_rationality", {}).get("summary")
                 == analysis["summary"] for row in check):
                 raise RuntimeError(f"Write-back verification failed: {session_id}")

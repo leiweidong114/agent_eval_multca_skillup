@@ -147,12 +147,10 @@ class MetricsStore:
         if str(source.get("check_type") or source.get("analysis_type") or "").strip() in {
             "hscope_diagram_lint", "hscope_block_corpus_check"
         }:
-            source_uuid = str(source.get("source_uuid") or "")
-            if not source_uuid:
-                raise RuntimeError("原始 MongoDB 记录缺少 UUID，不能安全地原位保存指标")
+            check_type = str(source.get("check_type") or source.get("analysis_type") or "").strip()
             document = json.loads(str(record["resultText"]))
             document["uuid"] = str(record["uuid"])
-            return client.update_record(session_id=str(result["session_id"]), uuid=source_uuid,
+            return client.update_record(session_id=str(result["session_id"]), check_type=check_type,
                                         field="agentEvalMetrics", value=document,
                                         collection_name=RATIONALITY_COLLECTION)
         return client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
@@ -371,14 +369,14 @@ class MetricsStore:
         client = self._data_client()
         source, _, _ = self.latest_rationality_analysis(session_id)
         if source and str(source.get("checkType") or "").strip() in {"hscope_diagram_lint", "hscope_block_corpus_check"}:
-            client.update_record(session_id=session_id, uuid=str(source.get("uuid") or ""),
+            client.update_record(session_id=session_id, check_type=str(source.get("checkType") or "").strip(),
                                  field="agentEvalProcess", value=json.loads(record["resultText"]),
                                  collection_name=RATIONALITY_COLLECTION)
             try:
                 read_back = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
             except TypeError:
                 read_back = client.find_records(RATIONALITY_COLLECTION, [session_id])
-            if not any(item.get("uuid") == source.get("uuid")
+            if not any(str(item.get("checkType") or "").strip() == str(source.get("checkType") or "").strip()
                        and isinstance(item.get("agentEvalProcess"), Mapping)
                        and item["agentEvalProcess"].get("job_id") == document["job_id"]
                        for item in read_back):

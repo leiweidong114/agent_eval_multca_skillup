@@ -130,7 +130,7 @@ curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
 启用 LLM Judge 时，每条会话首先把时间最早请求中的第一条 `user` Prompt 单独送入分类 Judge，分类
 只依据用户原始意图，不读取 Agent 后续执行结果。分类结果随完整指标 JSON 写回 MongoDB。
 上述两类质量源记录通过 Java `PUT /update` 将 `agentEvalMetrics` 和 `agentEvalProcess`
-更新到同一 `sessionId + uuid` 的已有文档；不新增指标或过程文档，不修改原始 `resultText`。
+按 `sessionId + checkType` 更新该类型最新的已有文档，无需源文档 `uuid`；不新增指标或过程文档，不修改原始 `resultText`。
 其他类型保留旧的插入流程。
 Java 服务源码已随项目放在 `services/schematic-data-service/`，新环境需要用 JDK 21 与
 Maven 构建并部署该版本；旧版 Java 服务只有查询和插入接口，会使这两类原位更新明确失败。

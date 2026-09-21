@@ -581,7 +581,7 @@ class MetricJobManager:
                         input={
                             "collectionName": "HDschematicRationalityCollection",
                             "record": metric_record_audit,
-                            "source_uuid": source.get("source_uuid") if update_source else None,
+                            "source_check_type": source.get("check_type") if update_source else None,
                             "target_field": "agentEvalMetrics" if update_source else None,
                         },
                         interface={

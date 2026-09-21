@@ -191,12 +191,13 @@ def test_update_record_uses_put_and_requires_existing_match(monkeypatch):
     monkeypatch.setattr("app.schematic_data_client.httpx.put", fake_put)
     monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
     client = SchematicDataClient()
-    response = client.update_record(session_id="session-1", uuid="source-uuid",
+    response = client.update_record(session_id="session-1", check_type="hscope_diagram_lint",
                                     field="agentEvalMetrics", value={"status": "completed"})
     assert response["matchedCount"] == 1
     assert captured["url"].endswith("/schematic/schematicData/update")
     assert captured["params"]["sessionId"] == "session-1"
-    assert captured["params"]["uuid"] == "source-uuid"
+    assert captured["params"]["checkType"] == "hscope_diagram_lint"
+    assert "uuid" not in captured["params"]
     assert captured["json"]["field"] == "agentEvalMetrics"
 
 

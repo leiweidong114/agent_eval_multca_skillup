@@ -75,18 +75,20 @@ class SchematicDataClient:
         path = getattr(self.settings, "schematic_data_update_path", None) or "/schematic/schematicData/update"
         return self.settings.schematic_data_api_base_url + path
 
-    def update_record(self, *, session_id: str, uuid: str, field: str, value: Mapping[str, Any],
+    def update_record(self, *, session_id: str, check_type: str, field: str, value: Mapping[str, Any],
                       collection_name: str = RATIONALITY_COLLECTION) -> Any:
         """Update one existing source document; the Java endpoint never upserts."""
-        if field not in {"agentEvalMetrics", "agentEvalProcess"} or not session_id or not uuid:
-            raise ValueError("An existing session, UUID and allowed update field are required")
+        if field not in {"agentEvalMetrics", "agentEvalProcess"} or not session_id or check_type not in {
+            "hscope_diagram_lint", "hscope_block_corpus_check"
+        }:
+            raise ValueError("An existing session, supported check type and allowed update field are required")
         started = time.perf_counter()
         diagnostic = {"method": "PUT", "endpoint": self.update_url, "session_id": session_id,
-                      "field": field, "check_type": "source_record"}
+                      "field": field, "check_type": check_type}
         try:
             response = httpx.put(
                 self.update_url,
-                params={"collectionName": collection_name, "sessionId": session_id, "uuid": uuid},
+                params={"collectionName": collection_name, "sessionId": session_id, "checkType": check_type},
                 json={"field": field, "value": dict(value)}, headers=self._headers(),
                 timeout=self.settings.schematic_data_timeout_seconds, trust_env=False, verify=False,
             )
