@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -12,7 +13,7 @@ from app.metrics_store import MetricsStore
 from app.schematic_rationality_judge import extract_rationality_metrics, judge_rationality_result
 from app.session_metrics import calculate_rule_metrics
 from app.session_metric_judge import judge_session_metrics
-from app.session_task_classifier import classify_session_task, task_hierarchy
+from app.session_task_classifier import classify_session_task, first_user_prompt, task_hierarchy
 
 
 def _rationality_record_summary(record: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -57,6 +58,18 @@ def _rationality_analysis_summary(value: Any) -> dict[str, Any]:
         for key, item in value.items()
         if key != "result_text"
     }
+
+
+def _metric_record_for_audit(record: dict[str, Any]) -> dict[str, Any]:
+    """Return the MongoDB payload with resultText decoded for readable UI auditing."""
+    value = dict(record)
+    result_text = value.get("resultText")
+    if isinstance(result_text, str):
+        try:
+            value["resultText"] = json.loads(result_text)
+        except ValueError:
+            pass
+    return value
 
 
 class MetricJobManager:
@@ -206,6 +219,7 @@ class MetricJobManager:
                     )
                     self._save(job, store)
                 if job["use_llm_judge"]:
+                    classification_prompt = first_user_prompt(conversation)
                     with self._lock:
                         job["phase"] = "task_classification"
                         self._append_event(
@@ -214,6 +228,11 @@ class MetricJobManager:
                             "Judge LLM 正在根据第一条用户 Prompt 进行任务分类",
                             session_id=session_id,
                             outcome="running",
+                            input={
+                                "first_user_prompt": classification_prompt,
+                                "prompt_found": bool(classification_prompt),
+                                "root_session_id": session_id,
+                            },
                         )
                         self._save(job, store)
                     result["task_classification"] = classify_session_task(
@@ -303,6 +322,12 @@ class MetricJobManager:
                         "schematic_rationality_loading",
                         "正在调用 Java 查询接口读取 MongoDB 原理图分析记录",
                         session_id=session_id,
+                        input={
+                            "collectionName": "HDschematicRationalityCollection",
+                            "session_ids": query_ids,
+                            "accepted_statuses": ["completed", "success", "ok"],
+                            "excluded_check_type": "agent_eval_session_metrics",
+                        },
                         interface={
                             "method": "GET",
                             "endpoint": store.query_endpoint(),
@@ -390,7 +415,17 @@ class MetricJobManager:
                             "当前会话暂无统计原理图生成轨迹指标",
                             session_id=session_id,
                             outcome="not_found",
-                            output=_rationality_analysis_summary(result["schematic_rationality"]),
+                            input={
+                                "collectionName": "HDschematicRationalityCollection",
+                                "session_ids": query_ids,
+                                "accepted_statuses": ["completed", "success", "ok"],
+                                "excluded_check_type": "agent_eval_session_metrics",
+                            },
+                            output={
+                                **_rationality_analysis_summary(result["schematic_rationality"]),
+                                "query_succeeded": True,
+                                "reason": "接口调用成功，但没有找到 Session ID 匹配、状态有效且不是指标计算结果的原理图轨迹记录",
+                            },
                         )
                 elif job["use_llm_judge"]:
                     try:
@@ -482,6 +517,8 @@ class MetricJobManager:
                             outcome="success",
                             output=_rationality_analysis_summary(result["schematic_rationality"]),
                         )
+                metric_record = store.build_metrics_record(result)
+                metric_record_audit = _metric_record_for_audit(metric_record)
                 with self._lock:
                     job["phase"] = "saving_metrics"
                     self._append_event(
@@ -489,6 +526,10 @@ class MetricJobManager:
                         "saving_metrics",
                         "正在调用 Java 插入接口写入 MongoDB 会话指标",
                         session_id=session_id,
+                        input={
+                            "collectionName": "HDschematicRationalityCollection",
+                            "record": metric_record_audit,
+                        },
                         interface={
                             "method": "POST",
                             "endpoint": store.write_endpoint(),
@@ -501,7 +542,7 @@ class MetricJobManager:
                     )
                     self._save(job, store)
                 try:
-                    insert_response = store.upsert_metrics(result)
+                    insert_response = store.upsert_metrics(result, record=metric_record)
                 except Exception as exc:
                     with self._lock:
                         self._append_event(
@@ -543,6 +584,8 @@ class MetricJobManager:
                             outcome="success",
                             output={
                                 "session_id": session_id,
+                                "saved_record": metric_record_audit,
+                                "insert_response": _insert_response_summary(insert_response),
                                 "metric_status": result.get("status"),
                                 "task_type": result.get("task_type"),
                                 "metrics": result.get("metrics"),

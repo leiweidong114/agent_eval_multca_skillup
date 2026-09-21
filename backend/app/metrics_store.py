@@ -78,11 +78,12 @@ class MetricsStore:
             self._client = client
         return client
 
-    def upsert_metrics(self, result: dict[str, Any]) -> Any:
+    def build_metrics_record(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Build the exact Java/MongoDB payload so callers can audit it before insertion."""
         session_id = str(result["session_id"])
         now = datetime.now(timezone.utc)
         document = {**result, "session_id": session_id, "updated_at": now}
-        record = {
+        return {
             "uuid": uuid.uuid4().hex,
             "status": "completed",
             "createUser": str(result.get("end_user") or "agent-eval"),
@@ -95,6 +96,14 @@ class MetricsStore:
             "sessionId": session_id,
             "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
         }
+
+    def upsert_metrics(
+        self,
+        result: dict[str, Any],
+        *,
+        record: Mapping[str, Any] | None = None,
+    ) -> Any:
+        record = dict(record) if record is not None else self.build_metrics_record(result)
         client = self._data_client()
         if hasattr(client, "clear_diagnostics"):
             client.clear_diagnostics()
