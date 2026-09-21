@@ -8,6 +8,7 @@ import pytest
 
 from agent_eval.runner import (
     EvaluationCancelled,
+    _copy_skill,
     _execute_process,
     aggregate_scores,
     attach_session_evidence,
@@ -15,7 +16,36 @@ from agent_eval.runner import (
     classify_evaluation_failure,
     cases_completed,
 )
+from agent_eval.results_paths import evaluation_results_root
+from agent_eval.windows_paths import filesystem_path
 from agent_eval.runtime import SUPPORTED_AGENTS, agent_capabilities, backend_agent
+
+
+def test_results_root_from_environment_is_shared_with_default(tmp_path, monkeypatch):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    monkeypatch.delenv("AGENT_EVAL_RESULTS_ROOT", raising=False)
+    assert evaluation_results_root(backend) == backend / "evaluation_results"
+    desired = tmp_path / "short-results"
+    (tmp_path / ".env").write_text(
+        f"AGENT_EVAL_RESULTS_ROOT={desired.as_posix()}\n", encoding="utf-8"
+    )
+    assert evaluation_results_root(backend) == desired.resolve()
+
+
+def test_copy_skill_supports_deep_destination(tmp_path):
+    source = tmp_path / "source"
+    nested = source / "skills" / "02-diagram-logical-connection-mapping" / "rules"
+    nested.mkdir(parents=True)
+    (source / "SKILL.md").write_text("# Demo\n", encoding="utf-8")
+    name = "natural_language_mapping_rules_template.md"
+    (nested / name).write_text("rule content", encoding="utf-8")
+    target = tmp_path / ("deep-directory-" * 4) / ("run-directory-" * 4) / "staging" / "skill"
+    copied = target / "skills" / "02-diagram-logical-connection-mapping" / "rules" / name
+    if os.name == "nt":
+        assert len(str(copied)) >= 260
+    _copy_skill(source, target)
+    assert filesystem_path(copied).read_text(encoding="utf-8") == "rule content"
 
 
 def test_negative_control_failure_is_scored_evidence_not_runtime_failure():

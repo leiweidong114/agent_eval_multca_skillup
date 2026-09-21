@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from agent_eval.skill_sources import resolve_external_skill
+from agent_eval.windows_paths import filesystem_path
 
 
 SCHEMATIC_PIPELINE_SKILLS = (
@@ -153,8 +154,8 @@ def compose_skill_bundle(
     for index, (name, source) in enumerate(sources, start=1):
         folder = f"{index:02d}-{re.sub(r'[^A-Za-z0-9._-]+', '-', name)}"
         shutil.copytree(
-            source,
-            temporary / "skills" / folder,
+            filesystem_path(source),
+            filesystem_path(temporary / "skills" / folder),
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
         )
         lines.append(f"- `{name}`: `skills/{folder}/SKILL.md`")

@@ -430,6 +430,22 @@ backend/evaluation_results/<user>/<task>/<时间__task_id>/
 
 核心报告为 `evaluation-report.json`。
 
+### Windows 项目路径较长时的评测结果目录
+
+组合 Skill 会复制到每次评测的工作目录。若项目放在较深的 Windows 路径，目标文件
+可能超过传统的 260 字符限制，在 Agent 启动前报 `[WinError 3]`。
+不需要移动项目；在根目录 `.env` 增加一个**短的绝对路径**，例如：
+
+```dotenv
+AGENT_EVAL_RESULTS_ROOT=D:/agent-eval-results
+```
+
+重启后端后，网页评测、命令行评测和 `agent-eval results` 都使用这个目录。
+原有 `backend/evaluation_results/` 中的历史结果不会自动移动；如需在网页继续查看旧结果，
+请在停服务后自行备份并复制其目录内容到新目录。`--output-dir` 可临时覆盖命令行
+单次评测的目录。程序还会对 Windows 下 Skill 文件复制使用长路径兼容写法，
+但外部 Agent/Skill-Up 也会访问评测产物，所以仍建议配置短目录。
+
 ## 9. 使用多个 Agent 同时评测同一个 Skill
 
 ```powershell

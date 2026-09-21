@@ -62,6 +62,8 @@ from agent_eval.runtime import (
     validate_evaluation_capabilities,
 )
 from agent_eval.run_lock import agent_run_lock
+from agent_eval.results_paths import evaluation_results_root
+from agent_eval.windows_paths import filesystem_path
 
 
 def _slug(value: str) -> str:
@@ -76,13 +78,20 @@ def _identity(value: str, *, field: str) -> str:
 
 
 def _copy_skill(source: Path, target: Path) -> None:
-    shutil.copytree(
-        source,
-        target,
-        ignore=shutil.ignore_patterns(
-            ".git", ".runtime", ".tools", "runs", "__pycache__", "*.pyc"
-        ),
-    )
+    try:
+        shutil.copytree(
+            filesystem_path(source),
+            filesystem_path(target),
+            ignore=shutil.ignore_patterns(
+                ".git", ".runtime", ".tools", "runs", "__pycache__", "*.pyc"
+            ),
+        )
+    except (OSError, shutil.Error) as exc:
+        raise EvaluationInfrastructureError(
+            f"Skill staging failed while copying {source} to {target}: {exc}",
+            category="skill_staging_failed",
+            retryable=False,
+        ) from exc
 
 
 class EvaluationCancelled(RuntimeError):
@@ -482,7 +491,7 @@ def run_evaluation(
     canonical_task_id = operation_id
     owner = _slug(user_id or "local")
     task = _slug(task_name or source_skill.name)
-    runs_root = Path(output_dir).resolve() if output_dir else project_root / "evaluation_results"
+    runs_root = Path(output_dir).resolve() if output_dir else evaluation_results_root(project_root)
     result_root = runs_root / owner / task / f"{timestamp}__{operation_id}"
     if result_root.exists():
         raise FileExistsError(f"Task output already exists: {canonical_task_id}")
@@ -498,7 +507,7 @@ def run_evaluation(
         if not source.is_file():
             raise FileNotFoundError(f"Case does not exist: {source}")
         target = cases_dir / f"{index:03d}-{source.name}"
-        shutil.copy2(source, target)
+        shutil.copy2(filesystem_path(source), filesystem_path(target))
         staged_cases.append(target.relative_to(staged_skill))
     if prompt:
         target = cases_dir / "cli-prompt.yaml"

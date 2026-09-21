@@ -12,6 +12,7 @@ from typing import Any
 
 from app.config import SKILLS_ROOT
 from agent_eval.skill_sources import resolve_external_skill
+from agent_eval.windows_paths import filesystem_path
 
 
 REGISTRY_ROOT = SKILLS_ROOT / ".registry"
@@ -92,7 +93,7 @@ def upload_skill(name: str, archive: bytes) -> dict[str, Any]:
         source_root = candidates[0].parent
         destination = REGISTRY_ROOT / name / version
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source_root, destination)
+        shutil.copytree(filesystem_path(source_root), filesystem_path(destination))
     item = {
         "name": name, "version": version, "skill_id": f"{name}@{version}",
         "path": str(destination), "sha256": digest,
@@ -173,7 +174,9 @@ def compose_skills(identifiers: list[str]) -> Path:
     ]
     for index, (identifier, source) in enumerate(resolved, start=1):
         folder = f"{index:02d}-{re.sub(r'[^A-Za-z0-9._-]+', '-', identifier)}"
-        shutil.copytree(source, temporary / "skills" / folder)
+        shutil.copytree(
+            filesystem_path(source), filesystem_path(temporary / "skills" / folder)
+        )
         lines.append(f"- `{identifier}`: `skills/{folder}/SKILL.md`")
     (temporary / "SKILL.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     COMPOSED_ROOT.mkdir(parents=True, exist_ok=True)

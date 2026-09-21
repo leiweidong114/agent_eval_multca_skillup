@@ -54,6 +54,7 @@ from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 from agent_eval.failure import describe_evaluation_failure
 from agent_eval.env_config import apply_root_env
 from agent_eval.skill_sources import resolve_external_skill
+from agent_eval.results_paths import evaluation_results_root
 from agent_eval.schematic_tasks import DEFAULT_SCHEMATIC_TASK_TYPE
 
 
@@ -1120,7 +1121,7 @@ def main() -> None:
         )
         return
     if args.command == "results":
-        root = Path(args.results_root).resolve() if args.results_root else PROJECT_ROOT / "evaluation_results"
+        root = Path(args.results_root).resolve() if args.results_root else evaluation_results_root(PROJECT_ROOT)
         print(
             json.dumps(
                 list_results(

@@ -14,6 +14,16 @@ def test_domain_numbers_are_not_misclassified_as_http_statuses():
     assert failure is not None
     assert failure["category"] == "agent_execution_failed"
     assert failure["status_code"] is None
+
+
+def test_skill_staging_failure_is_not_reported_as_agent_failure():
+    failure = describe_evaluation_failure(
+        "Skill staging failed while copying a Skill: [WinError 3] The system cannot find the path",
+        returncode=1,
+    )
+    assert failure is not None
+    assert failure["category"] == "skill_staging_failed"
+    assert "Agent 尚未启动" in failure["detail"]
 from types import SimpleNamespace
 
 from agent_eval.llm_judge import JudgeGatewayError, _judge_request, run_llm_judge

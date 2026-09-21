@@ -154,6 +154,10 @@ def describe_evaluation_failure(
         category, title = "model_incompatible", "指定模型不存在或不兼容"
         detail = "模型网关无法识别当前模型名称，或 Agent 不支持该模型协议。"
         action, retryable = "检查模型 ID、Profile 映射和 Agent 协议配置。", False
+    elif "skill staging failed" in lowered:
+        category, title = "skill_staging_failed", "Skill 暂存失败"
+        detail = "评测启动前复制 Skill 文件失败，Agent 尚未启动。"
+        action, retryable = "确认源 Skill 文件存在，并为 Windows 配置短的 AGENT_EVAL_RESULTS_ROOT。", False
     elif any(marker in lowered for marker in ("doctor --fix", "legacy workspace")):
         category, title = "agent_workspace_invalid", "Agent 工作区配置无效"
         detail = "Agent 使用了旧版或损坏的工作区配置。"
