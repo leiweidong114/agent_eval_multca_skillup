@@ -23,7 +23,11 @@
       <div><span class="eyebrow">UNIFIED EVALUATION</span><h1>{{ $route.meta.title }}</h1><p>{{ $route.meta.description }}</p></div>
       <el-button v-if="$route.path !== '/evaluations/new'" type="primary" @click="$router.push('/evaluations/new')">＋ 发起评测</el-button>
     </header>
-    <router-view />
+    <router-view v-slot="{ Component }">
+      <keep-alive include="RuntimeCatalog">
+        <component :is="Component" />
+      </keep-alive>
+    </router-view>
   </main>
   </template>
 </template>

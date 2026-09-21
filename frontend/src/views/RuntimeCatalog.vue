@@ -47,6 +47,8 @@ import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { fetchAgents, fetchDatabaseHealth, fetchModels, saveAgentPath, testAgentAvailability, testAllModelAvailability, testModelAvailability } from '../api'
 
+defineOptions({ name: 'RuntimeCatalog' })
+
 const agents=ref([]),modelData=ref({models:[],errors:[]}),database=ref({}),keyword=ref(''),loading=ref(false)
 const agentTests=ref({}),agentPathDrafts=ref({}),savingAgent=ref(''),testingAgent=ref(''),testingAgents=ref(false),testingModels=ref(false),testingModel=ref('')
 const models=computed(()=>modelData.value.models||[])
