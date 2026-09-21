@@ -1137,6 +1137,7 @@ def search_conversations(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     allowed_root_session_ids: set[str] | None = None,
+    excluded_root_session_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     """Return root conversations in a bounded window; default to the latest 24 hours."""
     if offset < 0:
@@ -1220,7 +1221,10 @@ def search_conversations(
             conversations.append(conversation)
         filtered = []
         for item in conversations:
-            if allowed_root_session_ids is not None and str(item.get("root_session_id") or "") not in allowed_root_session_ids:
+            root_id = str(item.get("root_session_id") or "")
+            if allowed_root_session_ids is not None and root_id not in allowed_root_session_ids:
+                continue
+            if excluded_root_session_ids is not None and root_id in excluded_root_session_ids:
                 continue
             if source != "all" and item["source_kind"] not in {source, "mixed"}:
                 continue
@@ -1328,7 +1332,10 @@ def search_conversations(
 
     filtered = []
     for conversation in conversations:
-        if allowed_root_session_ids is not None and str(conversation.get("root_session_id") or "") not in allowed_root_session_ids:
+        root_id = str(conversation.get("root_session_id") or "")
+        if allowed_root_session_ids is not None and root_id not in allowed_root_session_ids:
+            continue
+        if excluded_root_session_ids is not None and root_id in excluded_root_session_ids:
             continue
         if source != "all" and conversation["source_kind"] not in {source, "mixed"}:
             continue

@@ -143,6 +143,24 @@ class MetricsStore:
                 }
         return result
 
+    def all_statuses(self) -> dict[str, dict[str, Any]]:
+        """Return the latest persisted metric status keyed by root Session ID."""
+        result: dict[str, dict[str, Any]] = {}
+        for metric in self._all_latest():
+            session_id = str(metric.get("session_id") or "")
+            if not session_id:
+                continue
+            result[session_id] = {
+                "_id": session_id,
+                "status": metric.get("status"),
+                "calculated_at": metric.get("calculated_at"),
+                "metric_definition_version": metric.get("metric_definition_version"),
+                "task_type": metric.get("task_type"),
+                "task_category": metric.get("task_category"),
+                "task_subtype": metric.get("task_subtype"),
+            }
+        return result
+
     def _all_latest(self) -> list[dict[str, Any]]:
         latest: dict[str, tuple[str, dict[str, Any]]] = {}
         for record in self._data_client().iter_collection(RATIONALITY_COLLECTION):

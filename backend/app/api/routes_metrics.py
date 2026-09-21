@@ -56,19 +56,33 @@ def sessions(
     end_user: str | None = None,
     session_id: str | None = None,
     model: str | None = None,
+    metric_status: str = Query("all", pattern="^(all|calculated|uncalculated)$"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
     employee_from_request(request)
     key = cache_key("metric-sessions-v1", {
         "start_time": start_time, "end_time": end_time, "end_user": end_user,
-        "session_id": session_id, "model": model, "limit": limit, "offset": offset,
+        "session_id": session_id, "model": model, "metric_status": metric_status,
+        "limit": limit, "offset": offset,
     })
     cached = get_cached_json(key)
     if cached is not None:
         cached["cache"] = "hit"
         return cached
     try:
+        store: MetricsStore | None = None
+        all_statuses: dict[str, dict[str, Any]] | None = None
+        allowed_session_ids: set[str] | None = None
+        excluded_session_ids: set[str] | None = None
+        if metric_status != "all":
+            store = MetricsStore()
+            all_statuses = store.all_statuses()
+            calculated_ids = set(all_statuses)
+            if metric_status == "calculated":
+                allowed_session_ids = calculated_ids
+            else:
+                excluded_session_ids = calculated_ids
         result = search_conversations(
             BACKEND_ROOT,
             source="non_evaluation",
@@ -79,16 +93,22 @@ def sessions(
             end_time=end_time,
             limit=limit,
             offset=offset,
+            allowed_root_session_ids=allowed_session_ids,
+            excluded_root_session_ids=excluded_session_ids,
         )
-        try:
-            statuses = MetricsStore().statuses(item["root_session_id"] for item in result["conversations"])
-        except Exception:
-            statuses = {}
+        if all_statuses is not None:
+            statuses = all_statuses
+        else:
+            try:
+                statuses = MetricsStore().statuses(item["root_session_id"] for item in result["conversations"])
+            except Exception:
+                statuses = {}
         for item in result["conversations"]:
             metric = statuses.get(item["root_session_id"])
             item["metric_status"] = metric.get("status") if metric else "not_calculated"
             item["metric_calculated_at"] = metric.get("calculated_at") if metric else None
             item["metric_definition_version"] = metric.get("metric_definition_version") if metric else None
+        result["metric_status_filter"] = metric_status
         result["cache"] = "miss"
         set_cached_json(key, result, ttl_seconds=60)
         return result

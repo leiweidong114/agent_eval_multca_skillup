@@ -441,6 +441,53 @@ def test_judge_availability_uses_session_metric_production_paths(monkeypatch):
     assert result["checks"]["session_metric_judge"]["chunks_completed"] == 1
 
 
+def test_historical_metric_sessions_filter_calculated_and_uncalculated(monkeypatch):
+    captured = []
+
+    class FakeMetricsStore:
+        def all_statuses(self):
+            return {
+                "calculated-session": {
+                    "status": "completed",
+                    "calculated_at": "2026-09-21T00:00:00+00:00",
+                    "metric_definition_version": "v1",
+                }
+            }
+
+    def fake_search(root, **kwargs):
+        captured.append(kwargs)
+        session_id = (
+            "calculated-session"
+            if kwargs.get("allowed_root_session_ids") is not None
+            else "uncalculated-session"
+        )
+        return {
+            "status": "ok",
+            "total": 1,
+            "count": 1,
+            "conversations": [{"root_session_id": session_id}],
+        }
+
+    monkeypatch.setattr("app.api.routes_metrics.MetricsStore", FakeMetricsStore)
+    monkeypatch.setattr("app.api.routes_metrics.search_conversations", fake_search)
+    monkeypatch.setattr("app.api.routes_metrics.get_cached_json", lambda key: None)
+    monkeypatch.setattr("app.api.routes_metrics.set_cached_json", lambda *args, **kwargs: None)
+
+    calculated = client.get(
+        "/api/session-metrics/sessions", params={"metric_status": "calculated"}
+    ).json()
+    uncalculated = client.get(
+        "/api/session-metrics/sessions", params={"metric_status": "uncalculated"}
+    ).json()
+
+    assert captured[0]["allowed_root_session_ids"] == {"calculated-session"}
+    assert captured[0]["excluded_root_session_ids"] is None
+    assert calculated["conversations"][0]["metric_status"] == "completed"
+    assert captured[1]["allowed_root_session_ids"] is None
+    assert captured[1]["excluded_root_session_ids"] == {"calculated-session"}
+    assert uncalculated["conversations"][0]["metric_status"] == "not_calculated"
+
+
 def test_batch_rejects_duplicate_combinations_before_queueing():
     response = client.post(
         "/api/batches",

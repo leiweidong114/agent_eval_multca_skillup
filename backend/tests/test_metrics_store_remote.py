@@ -51,6 +51,7 @@ def test_remote_metrics_round_trip_without_local_database():
     assert json.loads(client.records[0]["resultText"])["model"] == "glm-4.5-air"
     assert store.get_metrics("session-1")["model"] == "glm-4.5-air"
     assert store.statuses(["session-1"])["session-1"]["status"] == "completed"
+    assert store.all_statuses()["session-1"]["task_type"] == "block_to_schematic"
     assert store.session_ids_for_task_classification("schematic_generation") == {"session-1"}
     page = store.list_metrics(
         start_time=datetime(2026, 9, 17, tzinfo=timezone.utc),
