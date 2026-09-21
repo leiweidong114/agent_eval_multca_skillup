@@ -106,6 +106,28 @@ def test_judge_rate_limit_preserves_upstream_reason(monkeypatch):
     assert captured.value.failure["reset_after"] == "1hr 5min"
 
 
+def test_judge_request_reports_each_retry_and_http_status(monkeypatch):
+    request = httpx.Request("POST", "http://gateway/v1/chat/completions")
+    responses = iter([
+        httpx.Response(429, request=request, json={"error": "limited"}),
+        httpx.Response(200, request=request, json={"choices": []}),
+    ])
+    monkeypatch.setattr(httpx, "post", lambda *args, **kwargs: next(responses))
+    monkeypatch.setattr("agent_eval.llm_judge.time.sleep", lambda *_: None)
+    events = []
+
+    response = _judge_request(
+        "http://gateway/v1/chat/completions",
+        headers={}, body={}, timeout=1,
+        progress_callback=lambda stage, details: events.append((stage, details)),
+    )
+
+    assert response.status_code == 200
+    assert [stage for stage, _ in events].count("request_started") == 2
+    assert any(stage == "response_received" and details["status_code"] == 429 for stage, details in events)
+    assert any(stage == "retry_wait" and details["status_code"] == 429 for stage, details in events)
+
+
 def test_agent_case_timeout_is_not_reported_as_gateway_failure():
     failure = describe_evaluation_failure(
         "context deadline exceeded (case timeout 1200s via cases.defaults.timeout_seconds)",

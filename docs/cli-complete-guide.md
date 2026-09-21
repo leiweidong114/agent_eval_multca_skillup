@@ -784,6 +784,9 @@ $PROFILE_NAME = "litellm_glm_4_7"
 | `GET /api/settings` | 查看 LLM Judge 与 Agent 可用性测试的默认模型 |
 | `PUT /api/settings` | 保存两个默认模型 ID；不修改地址、密钥或鉴权 |
 | `GET /api/database/health` | 检查 PostgreSQL 和 SpendLogs 读取能力 |
+| `POST /api/judge-interactions/test-jobs` | 后台启动 Judge 模型可用性测试，立即返回 `job_id` |
+| `GET /api/judge-interactions/test-jobs/{job_id}` | 查看两项 Judge 推理的实时阶段、请求、重试、耗时和最终结果 |
+| `POST /api/judge-interactions/test` | 兼容旧调用方式：同步等待完整 Judge 测试结果 |
 
 ```powershell
 curl.exe "$API/health"
@@ -798,6 +801,17 @@ curl.exe --json '{"workers":8,"timeout_seconds":30}' "$API/models/test-batch"
 curl.exe "$API/settings"
 curl.exe -X PUT --json "{`"judge_model`":`"$MODEL`",`"agent_test_model`":`"$MODEL`"}" "$API/settings"
 ```
+
+Judge 页面使用异步测试，避免长时间等待一个没有进度的 HTTP 请求。登录后可手动调用：
+
+```powershell
+$job = curl.exe -b cookies.txt -sS -X POST "$API/judge-interactions/test-jobs" | ConvertFrom-Json
+curl.exe -b cookies.txt "$API/judge-interactions/test-jobs/$($job.job_id)"
+```
+
+进度响应包含 `status`、`events`、已完成的 `checks` 和最终 `result`。任务分类和会话
+指标 Judge 串行执行；每次模型请求默认超时 120 秒，限流或上游错误最多尝试 4 次。
+测试过程中的模型请求、HTTP 状态、重试等待和 JSON 解析状态会逐步显示在 Judge 页面。
 
 创建或更新 Profile 会写入本机且被 Git 忽略的配置文件。下面的 `api_key` 只是占位符；
 也可以省略该字段，改为在 `.env` 中配置 `LITELLM_API_KEY`：

@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import shutil
 import sys
+import time
 
 from fastapi.testclient import TestClient
 
@@ -439,6 +440,43 @@ def test_judge_availability_uses_session_metric_production_paths(monkeypatch):
     assert result["ok"] is True
     assert result["checks"]["task_classification"]["task_type"] == "block_to_schematic"
     assert result["checks"]["session_metric_judge"]["chunks_completed"] == 1
+
+
+def test_judge_availability_job_reports_steps_without_blocking_request(monkeypatch):
+    def classify(conversation, *, employee_no=None, progress_callback=None):
+        assert employee_no == "test-worker"
+        progress_callback("model_resolved", {"model": "judge-model"})
+        progress_callback("request_started", {"attempt": 1, "max_attempts": 4, "timeout_seconds": 120})
+        progress_callback("response_received", {"attempt": 1, "status_code": 200, "duration_ms": 8})
+        return {"status": "completed", "model": "judge-model", "task_type": "block_to_schematic"}
+
+    def metric(conversation, *, employee_no=None, progress_callback=None, request_progress_callback=None):
+        progress_callback("llm_judge_chunk_started", 1, 1, "开始分片")
+        request_progress_callback("request_started", {"attempt": 1, "max_attempts": 4})
+        request_progress_callback("retry_wait", {"attempt": 1, "wait_seconds": 0.5, "status_code": 429})
+        progress_callback("llm_judge_chunk_completed", 1, 1, "完成分片")
+        return {"status": "completed", "models": ["judge-model"], "chunks_completed": 1}
+
+    monkeypatch.setattr("app.api.routes_judge.classify_session_task", classify)
+    monkeypatch.setattr("app.api.routes_judge.judge_session_metrics", metric)
+
+    started = client.post("/api/judge-interactions/test-jobs")
+
+    assert started.status_code == 202
+    job_id = started.json()["job_id"]
+    for _ in range(100):
+        current = client.get(f"/api/judge-interactions/test-jobs/{job_id}")
+        assert current.status_code == 200
+        if current.json()["status"] not in {"queued", "running"}:
+            break
+        time.sleep(0.01)
+    job = current.json()
+    assert job["status"] == "completed"
+    assert job["result"]["ok"] is True
+    assert job["checks"]["task_classification"]["status"] == "completed"
+    assert {event["phase"] for event in job["events"]} == {"setup", "classification", "metrics", "finish"}
+    assert any(event["stage"] == "retry_wait" and event["details"]["status_code"] == 429 for event in job["events"])
+    assert client.get("/api/judge-interactions/test-jobs/missing").status_code == 404
 
 
 def test_historical_metric_sessions_filter_calculated_and_uncalculated(monkeypatch):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from agent_eval.llm_judge import run_json_judge
 from app.config import BACKEND_ROOT
@@ -110,7 +110,8 @@ def _prompt(user_prompt: str) -> str:
 
 
 def classify_session_task(
-    conversation: Mapping[str, Any], *, employee_no: str | None = None
+    conversation: Mapping[str, Any], *, employee_no: str | None = None,
+    progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     prompt = first_user_prompt(conversation)
     if not prompt:
@@ -121,6 +122,7 @@ def classify_session_task(
         }
     bounded_prompt = prompt[:20000]
     try:
+        judge_kwargs = {"progress_callback": progress_callback} if progress_callback else {}
         response = run_json_judge(
             project_root=BACKEND_ROOT,
             system_prompt=SYSTEM_PROMPT,
@@ -128,6 +130,7 @@ def classify_session_task(
             employee_no=employee_no,
             context_id=str(conversation.get("root_session_id") or "") or None,
             purpose="session_task_classification",
+            **judge_kwargs,
         )
         result = response.get("result")
         if not isinstance(result, Mapping):

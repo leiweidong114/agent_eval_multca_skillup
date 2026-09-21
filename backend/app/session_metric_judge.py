@@ -75,6 +75,7 @@ def judge_session_metrics(
     *,
     employee_no: str | None = None,
     progress_callback: Callable[[str, int, int, str], None] | None = None,
+    request_progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     rows = [row for row in conversation.get("timeline", []) if isinstance(row, Mapping)]
     rows.sort(key=lambda row: (str(row.get("start_time") or ""), str(row.get("request_id") or "")))
@@ -89,6 +90,7 @@ def judge_session_metrics(
         for index, chunk in enumerate(chunks, start=1):
             if progress_callback:
                 progress_callback("llm_judge_chunk_started", index, len(chunks), f"LLM Judge 正在分析第 {index} / {len(chunks)} 个上下文分片")
+            judge_kwargs = {"progress_callback": request_progress_callback} if request_progress_callback else {}
             response = run_json_judge(
                 project_root=BACKEND_ROOT,
                 system_prompt=SYSTEM_PROMPT,
@@ -96,6 +98,7 @@ def judge_session_metrics(
                 employee_no=employee_no,
                 context_id=str(conversation.get("root_session_id") or "") or None,
                 purpose="session_metric_judge",
+                **judge_kwargs,
             )
             report = response["result"]
             if not isinstance(report, dict):

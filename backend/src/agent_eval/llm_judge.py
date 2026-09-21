@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -99,18 +99,44 @@ class JudgeGatewayError(RuntimeError):
         self.failure = failure
 
 
-def _judge_request(endpoint: str, *, headers: dict[str, str], body: dict[str, Any], timeout: float) -> httpx.Response:
+def _judge_request(
+    endpoint: str,
+    *,
+    headers: dict[str, str],
+    body: dict[str, Any],
+    timeout: float,
+    progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
+) -> httpx.Response:
+    def progress(stage: str, **details: Any) -> None:
+        if progress_callback is not None:
+            try:
+                progress_callback(stage, details)
+            except Exception:
+                pass
+
     last_error: Exception | None = None
     last_response: httpx.Response | None = None
     for attempt in range(4):
+        progress("request_started", attempt=attempt + 1, max_attempts=4, timeout_seconds=timeout)
+        attempt_started = time.perf_counter()
         try:
             response = httpx.post(
                 endpoint, headers=headers, json=body, timeout=timeout, trust_env=False
             )
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             last_error = exc
+            progress(
+                "request_error", attempt=attempt + 1,
+                duration_ms=round((time.perf_counter() - attempt_started) * 1000, 2),
+                error_type=type(exc).__name__, error=str(exc),
+            )
         else:
             last_response = response
+            progress(
+                "response_received", attempt=attempt + 1,
+                status_code=response.status_code,
+                duration_ms=round((time.perf_counter() - attempt_started) * 1000, 2),
+            )
             if response.status_code not in {429, 500, 502, 503, 504}:
                 return response
             last_error = httpx.HTTPStatusError(
@@ -124,10 +150,14 @@ def _judge_request(endpoint: str, *, headers: dict[str, str], body: dict[str, An
             except ValueError:
                 delay = 0.5 * (2 ** attempt)
             if attempt < 3:
-                time.sleep(min(8.0, max(0.0, delay)))
+                wait_seconds = min(8.0, max(0.0, delay))
+                progress("retry_wait", attempt=attempt + 1, wait_seconds=wait_seconds, status_code=response.status_code)
+                time.sleep(wait_seconds)
                 continue
         if attempt < 3:
-            time.sleep(min(8.0, 0.5 * (2 ** attempt)))
+            wait_seconds = min(8.0, 0.5 * (2 ** attempt))
+            progress("retry_wait", attempt=attempt + 1, wait_seconds=wait_seconds, error_type=type(last_error).__name__)
+            time.sleep(wait_seconds)
     if last_response is not None:
         failure = describe_evaluation_failure(
             last_response.text,
@@ -139,6 +169,7 @@ def _judge_request(endpoint: str, *, headers: dict[str, str], body: dict[str, An
             str(last_error or "Judge gateway unavailable"),
             component="llm_judge",
         )
+    progress("request_failed", failure=failure)
     raise JudgeGatewayError(failure or {
         "category": "gateway_unavailable",
         "retryable": True,
@@ -232,6 +263,7 @@ def run_json_judge(
     timeout: float = 120,
     context_id: str | None = None,
     purpose: str = "session_metric_judge",
+    progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Call the configured LiteLLM judge and require one JSON object.
 
@@ -251,7 +283,15 @@ def run_json_judge(
     )
     if not profile.api_base:
         raise ValueError("LLM judge must use the unified LiteLLM HTTP endpoint")
+    def progress(stage: str, **details: Any) -> None:
+        if progress_callback is not None:
+            try:
+                progress_callback(stage, details)
+            except Exception:
+                pass
+
     endpoint = profile.api_base.rstrip("/") + "/chat/completions"
+    progress("model_resolved", model=profile.model, endpoint=endpoint)
     body = {
         "model": profile.model,
         "temperature": 0,
@@ -279,11 +319,14 @@ def run_json_judge(
     content: Any = None
     response_diagnostics: dict[str, Any] = {}
     try:
-        response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout)
+        request_kwargs = {"progress_callback": progress_callback} if progress_callback else {}
+        response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout, **request_kwargs)
         if response.status_code in {400, 404, 422}:
+            progress("response_format_fallback", status_code=response.status_code, reason="gateway_rejected_json_mode")
             body.pop("response_format", None)
-            response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout)
+            response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout, **request_kwargs)
         response.raise_for_status()
+        progress("response_parsing_started")
         payload = response.json()
         content, response_diagnostics = _judge_response_content(payload)
         response_format_fallback = "response_format" not in body
@@ -296,7 +339,8 @@ def run_json_judge(
             # empty/non-JSON content when response_format is present. Retry once
             # without that field while still enforcing JSON locally.
             body.pop("response_format", None)
-            response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout)
+            progress("response_format_fallback", reason="empty_or_invalid_json", error=str(first_error))
+            response = _judge_request(endpoint, headers=headers, body=body, timeout=timeout, **request_kwargs)
             response.raise_for_status()
             payload = response.json()
             content, response_diagnostics = _judge_response_content(payload)
@@ -308,6 +352,7 @@ def run_json_judge(
                     f"response_format_attempt={first_error}"
                 ) from fallback_error
             response_format_fallback = True
+        progress("response_parsed", model=profile.model, usage=payload.get("usage") or {}, response_format_fallback=response_format_fallback)
         _write_judge_audit(
             project_root,
             interaction_id=interaction_id,
@@ -330,6 +375,7 @@ def run_json_judge(
             "response_format_fallback": response_format_fallback,
         }
     except Exception as exc:
+        progress("judge_failed", error=str(exc), error_type=type(exc).__name__)
         _write_judge_audit(
             project_root,
             interaction_id=interaction_id,
