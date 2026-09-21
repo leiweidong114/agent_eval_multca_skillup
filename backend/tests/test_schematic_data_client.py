@@ -140,7 +140,7 @@ def test_schematic_data_client_inserts_record_with_cookie(monkeypatch):
     assert captured["cache_cleared"] is True
 
 
-def test_schematic_data_insert_route_requires_login_and_forwards_payload(monkeypatch):
+def test_schematic_data_insert_route_needs_no_login_and_forwards_payload(monkeypatch):
     captured = {}
 
     class FakeClient:
@@ -158,8 +158,6 @@ def test_schematic_data_insert_route_requires_login_and_forwards_payload(monkeyp
         "boardNum": "BOARD-1", "sessionId": "session-1", "resultText": "{}",
     }
 
-    assert client.post("/api/schematic-data/insert", json=payload).status_code == 401
-    client.post("/api/auth/login", json={"employee_no": "100001", "password": "ignored"})
     response = client.post("/api/schematic-data/insert", json=payload)
 
     assert response.status_code == 201

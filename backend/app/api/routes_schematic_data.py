@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.auth import employee_from_request
 from app.infrastructure_config import InfrastructureConfigurationError
 from app.schematic_data_client import RATIONALITY_COLLECTION, SchematicDataClient
 
@@ -50,12 +49,10 @@ def query_schematic_data(
 
 @router.post("/insert", status_code=201)
 def insert_schematic_data(
-    request: Request,
     payload: SchematicDataInsertRequest,
     collectionName: str = Query(RATIONALITY_COLLECTION),
 ) -> Any:
-    """Write one validated analysis record through the Java MongoDB facade."""
-    employee_from_request(request)
+    """Write one validated record without requiring a UI login session."""
     try:
         return SchematicDataClient().insert_record(
             payload.model_dump(),

@@ -64,7 +64,7 @@ Python 转发客户端对查询和插入都显式使用 `verify=False`，因此�
   --employee-no "100001"
 ```
 
-前端登录后也可以调用受保护的 Python 代理接口：
+Python 插入代理接口不要求 UI 登录 Cookie：
 
 ```text
 POST /api/schematic-data/insert
@@ -81,8 +81,8 @@ curl.exe -G "http://127.0.0.1:8000/api/schematic-data/query" `
   --data-urlencode "sessionId=实际会话ID" `
   --data-urlencode "refresh=true"
 
-# 插入（浏览器/CLI 访问 Python 接口仍须登录；Python 到 Java 固定 verify=False）
-curl.exe -b cookies.txt -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
+# 插入（无需登录 Cookie；Python 到 Java 固定 verify=False）
+curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
   -H "Content-Type: application/json" `
   -d '{"uuid":"唯一UUID","status":"completed","createUser":"100001","createTime":"2026-09-21T08:00:00Z","checkType":"hscope_diagram_lint","checkMessage":"原理图质量分析","userName":"测试用户","hscopeProjectId":"project-demo","boardNum":"BOARD-001","sessionId":"实际会话ID","resultText":"{}"}'
 ```
