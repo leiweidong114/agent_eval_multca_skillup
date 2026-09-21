@@ -15,7 +15,7 @@ from agent_eval.runner import (
     run_evaluation,
 )
 from agent_eval.database import enrich_interaction_rows
-from app.config import BACKEND_ROOT, RUNS_ROOT
+from app.config import BACKEND_ROOT, readable_runs_roots, runs_root
 from app.priority_executor import PriorityExecutor
 from agent_eval.failure import describe_evaluation_failure
 
@@ -36,38 +36,41 @@ class EvaluationJobManager:
         )
         self._futures: dict[str, Future[Any]] = {}
         self._pending: dict[str, tuple[dict[str, Any], Path, threading.Event]] = {}
-        self._state_dir = RUNS_ROOT / "_jobs"
-        self._state_dir.mkdir(parents=True, exist_ok=True)
-        self._batch_dir = RUNS_ROOT / "_batches"
-        self._batch_dir.mkdir(parents=True, exist_ok=True)
         self._load_existing()
 
     def _load_existing(self) -> None:
-        for path in self._state_dir.glob("*.json"):
-            try:
-                job = json.loads(path.read_text(encoding="utf-8"))
-                if job.get("status") in {"queued", "running", "cancelling"}:
-                    job.update(status="interrupted", message="Service restarted during evaluation")
-                job.setdefault("events", [])
-                job.setdefault("event_seq", len(job["events"]))
-                job.setdefault("live_interactions", [])
-                self._jobs[job["job_id"]] = job
-            except (OSError, ValueError, KeyError):
-                continue
-        for path in self._batch_dir.glob("*.json"):
-            try:
-                batch = json.loads(path.read_text(encoding="utf-8"))
-                self._batches[batch["batch_id"]] = batch
-            except (OSError, ValueError, KeyError):
-                continue
+        for root in readable_runs_roots():
+            for path in (root / "_jobs").glob("*.json"):
+                try:
+                    job = json.loads(path.read_text(encoding="utf-8"))
+                    if job.get("status") in {"queued", "running", "cancelling"}:
+                        job.update(status="interrupted", message="Service restarted during evaluation")
+                    job.setdefault("events", [])
+                    job.setdefault("event_seq", len(job["events"]))
+                    job.setdefault("live_interactions", [])
+                    job.setdefault("results_root", str(root))
+                    self._jobs[job["job_id"]] = job
+                except (OSError, ValueError, KeyError):
+                    continue
+            for path in (root / "_batches").glob("*.json"):
+                try:
+                    batch = json.loads(path.read_text(encoding="utf-8"))
+                    batch.setdefault("results_root", str(root))
+                    self._batches[batch["batch_id"]] = batch
+                except (OSError, ValueError, KeyError):
+                    continue
 
     def _save(self, job: dict[str, Any]) -> None:
-        (self._state_dir / f"{job['job_id']}.json").write_text(
+        state_dir = Path(job.get("results_root") or runs_root()) / "_jobs"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / f"{job['job_id']}.json").write_text(
             json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
     def _save_batch(self, batch: dict[str, Any]) -> None:
-        (self._batch_dir / f"{batch['batch_id']}.json").write_text(
+        batch_dir = Path(batch.get("results_root") or runs_root()) / "_batches"
+        batch_dir.mkdir(parents=True, exist_ok=True)
+        (batch_dir / f"{batch['batch_id']}.json").write_text(
             json.dumps(batch, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
@@ -89,6 +92,7 @@ class EvaluationJobManager:
             "model": request.get("model"), "profile": request.get("profile"),
             "result": None, "error": None, "events": [], "event_seq": 0,
             "live_interactions": [],
+            "results_root": str(runs_root()),
         }
         cancel = threading.Event()
         with self._lock:
@@ -124,6 +128,7 @@ class EvaluationJobManager:
             "evaluator_id": requests[0].get("evaluator_id"),
             "skills": requests[0].get("skills") or [skill_dir.name],
             "user_id": requests[0].get("user_id", "local"),
+            "results_root": jobs[0]["results_root"] if jobs else str(runs_root()),
         }
         with self._lock:
             self._batches[batch_id] = batch
@@ -214,10 +219,12 @@ class EvaluationJobManager:
     def _monitor_transcripts(self, job_id: str, stop: threading.Event) -> None:
         offsets: dict[Path, int] = {}
         run_dir: Path | None = None
+        with self._lock:
+            result_root = Path(self._jobs[job_id].get("results_root") or runs_root())
         while True:
             stopping = stop.wait(0.4)
             if run_dir is None:
-                run_dir = next(RUNS_ROOT.glob(f"*/*/*__{job_id}"), None)
+                run_dir = next(result_root.glob(f"*/*/*__{job_id}"), None)
                 if run_dir is None:
                     if stopping:
                         return
@@ -274,7 +281,7 @@ class EvaluationJobManager:
                 must_contain=request.get("must_contain"), must_not_contain=request.get("must_not_contain"),
                 parallelism=request.get("parallelism", 1), iterations=request.get("iterations", 1),
                 timeout_seconds=request.get("timeout_seconds", 1800), max_turns=request.get("max_turns", 60),
-                benchmark=request.get("benchmark", True), output_dir=str(RUNS_ROOT),
+                benchmark=request.get("benchmark", True), output_dir=str(self._jobs[job_id].get("results_root") or runs_root()),
                 extra_args=request.get("extra_args"), validate_only=False,
                 collect_database_trace=request.get("collect_database_trace", True),
                 require_model_verification=request.get("require_model_verification", True),

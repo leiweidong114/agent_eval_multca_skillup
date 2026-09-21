@@ -7,15 +7,17 @@ from pathlib import Path
 from typing import Any
 
 from agent_eval.database import resolve_database_config
-from app.config import BACKEND_ROOT, RUNS_ROOT
+from app.config import BACKEND_ROOT, readable_runs_roots
 
 
 def expired_runs() -> dict[str, Any]:
     days = resolve_database_config(BACKEND_ROOT).retention_days
     cutoff = datetime.now() - timedelta(days=days)
     items = []
-    if RUNS_ROOT.is_dir():
-        for report in RUNS_ROOT.rglob("evaluation-report.json"):
+    for root in readable_runs_roots():
+        if not root.is_dir():
+            continue
+        for report in root.rglob("evaluation-report.json"):
             path = report.parent
             if "_jobs" not in path.parts and datetime.fromtimestamp(path.stat().st_mtime) < cutoff:
                 try:
@@ -28,11 +30,11 @@ def expired_runs() -> dict[str, Any]:
 
 def cleanup_expired_runs() -> dict[str, Any]:
     report = expired_runs()
-    root = RUNS_ROOT.resolve()
+    roots = tuple(root.resolve() for root in readable_runs_roots())
     deleted = []
     for item in report["expired"]:
         target = Path(item["path"]).resolve()
-        if root not in target.parents:
+        if not any(root in target.parents for root in roots):
             continue
         shutil.rmtree(target)
         deleted.append(item["run_id"])

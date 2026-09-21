@@ -11,16 +11,21 @@ from pathlib import Path
 from typing import Any
 
 from app.config import SKILLS_ROOT
+from agent_eval.results_paths import evaluation_results_root
 from agent_eval.skill_sources import resolve_external_skill
 from agent_eval.windows_paths import filesystem_path
 
 
 REGISTRY_ROOT = SKILLS_ROOT / ".registry"
-COMPOSED_ROOT = SKILLS_ROOT.parent / ".runtime" / "composed-skills"
 MAX_ARCHIVE_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED_BYTES = 50 * 1024 * 1024
 MAX_FILES = 500
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$")
+
+
+def composed_root() -> Path:
+    """Keep generated Skill bundles beside the selected short result root."""
+    return evaluation_results_root(SKILLS_ROOT.parent) / "_composed_skills"
 
 
 def _safe_name(value: str) -> str:
@@ -151,10 +156,11 @@ def compose_skills(identifiers: list[str]) -> Path:
         hasher.update(skill_md)
         resolved.append((identifier, path))
     bundle_name = f"combined-{hasher.hexdigest()[:12]}"
-    destination = COMPOSED_ROOT / bundle_name
+    bundle_root = composed_root()
+    destination = bundle_root / bundle_name
     if (destination / "SKILL.md").is_file():
         return destination
-    temporary = COMPOSED_ROOT / f".{bundle_name}-{datetime.now().timestamp():.0f}"
+    temporary = bundle_root / f".{bundle_name}-{datetime.now().timestamp():.0f}"
     temporary.mkdir(parents=True, exist_ok=False)
     lines = [
         "---",
@@ -179,7 +185,7 @@ def compose_skills(identifiers: list[str]) -> Path:
         )
         lines.append(f"- `{identifier}`: `skills/{folder}/SKILL.md`")
     (temporary / "SKILL.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    COMPOSED_ROOT.mkdir(parents=True, exist_ok=True)
+    bundle_root.mkdir(parents=True, exist_ok=True)
     try:
         temporary.replace(destination)
     except FileExistsError:

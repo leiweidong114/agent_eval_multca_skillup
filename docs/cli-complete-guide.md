@@ -434,15 +434,21 @@ backend/evaluation_results/<user>/<task>/<时间__task_id>/
 
 组合 Skill 会复制到每次评测的工作目录。若项目放在较深的 Windows 路径，目标文件
 可能超过传统的 260 字符限制，在 Agent 启动前报 `[WinError 3]`。
-不需要移动项目；在根目录 `.env` 增加一个**短的绝对路径**，例如：
+不需要移动项目。打开网页「设置中心 → 系统服务 → 运行产物短路径」，填写本机可写的
+绝对目录，例如 `D:\ae-runs`，点击「保存并用于后续任务」。保存时会检测目录是否可写，
+Windows 根路径超过 80 个字符会被拒绝。设置立即对**新任务**生效；已经启动的任务
+仍在启动时选定的目录完成。网页可以继续读取旧目录中的结果，不会自动迁移或删除。
+
+也可以在根目录 `.env` 手动设置：
 
 ```dotenv
 AGENT_EVAL_RESULTS_ROOT=D:/agent-eval-results
 ```
 
-重启后端后，网页评测、命令行评测和 `agent-eval results` 都使用这个目录。
-原有 `backend/evaluation_results/` 中的历史结果不会自动移动；如需在网页继续查看旧结果，
-请在停服务后自行备份并复制其目录内容到新目录。`--output-dir` 可临时覆盖命令行
+网页保存可立即生效；手动修改 `.env` 后，新启动的任务和命令行调用会读取新路径。
+网页评测、命令行评测和 `agent-eval results` 默认使用该目录；组合 Skill 的生成缓存也
+放在其 `_composed_skills/` 下。旧目录仍由网页读取；命令行查看旧目录可用
+`agent-eval results --results-root <旧目录>`。`--output-dir` 可临时覆盖命令行
 单次评测的目录。程序还会对 Windows 下 Skill 文件复制使用长路径兼容写法，
 但外部 Agent/Skill-Up 也会访问评测产物，所以仍建议配置短目录。
 

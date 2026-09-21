@@ -48,7 +48,7 @@ def test_uploaded_skill_rejects_path_traversal(tmp_path, monkeypatch):
 
 def test_compose_skills_builds_a_deterministic_joint_bundle(tmp_path, monkeypatch):
     monkeypatch.setattr(registry, "SKILLS_ROOT", tmp_path / "skills")
-    monkeypatch.setattr(registry, "COMPOSED_ROOT", tmp_path / ".runtime" / "composed")
+    monkeypatch.setattr(registry, "composed_root", lambda: tmp_path / ".runtime" / "composed")
     for name in ("alpha", "beta"):
         skill = registry.SKILLS_ROOT / name
         skill.mkdir(parents=True)
@@ -65,7 +65,7 @@ def test_compose_skills_builds_a_deterministic_joint_bundle(tmp_path, monkeypatc
 
 def test_compose_skills_has_no_artificial_selection_limit(tmp_path, monkeypatch):
     monkeypatch.setattr(registry, "SKILLS_ROOT", tmp_path / "skills")
-    monkeypatch.setattr(registry, "COMPOSED_ROOT", tmp_path / ".runtime" / "composed")
+    monkeypatch.setattr(registry, "composed_root", lambda: tmp_path / ".runtime" / "composed")
     identifiers = [f"skill-{index:02d}" for index in range(31)]
     for name in identifiers:
         skill = registry.SKILLS_ROOT / name

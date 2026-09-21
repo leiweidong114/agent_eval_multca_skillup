@@ -16,7 +16,7 @@ from agent_eval.runner import (
     classify_evaluation_failure,
     cases_completed,
 )
-from agent_eval.results_paths import evaluation_results_root
+from agent_eval.results_paths import evaluation_results_root, evaluation_results_roots, validate_results_root
 from agent_eval.windows_paths import filesystem_path
 from agent_eval.runtime import SUPPORTED_AGENTS, agent_capabilities, backend_agent
 
@@ -31,6 +31,27 @@ def test_results_root_from_environment_is_shared_with_default(tmp_path, monkeypa
         f"AGENT_EVAL_RESULTS_ROOT={desired.as_posix()}\n", encoding="utf-8"
     )
     assert evaluation_results_root(backend) == desired.resolve()
+
+
+def test_results_root_switch_keeps_prior_locations_readable(tmp_path, monkeypatch):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    monkeypatch.delenv("AGENT_EVAL_RESULTS_ROOT", raising=False)
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    (tmp_path / ".env").write_text(f"AGENT_EVAL_RESULTS_ROOT={first.as_posix()}\n", encoding="utf-8")
+    assert evaluation_results_root(backend) == first.resolve()
+    (tmp_path / ".env").write_text(
+        f"AGENT_EVAL_RESULTS_ROOT={second.as_posix()}\n"
+        f'AGENT_EVAL_RESULTS_ROOT_HISTORY_JSON=["{first.as_posix()}"]\n',
+        encoding="utf-8",
+    )
+    assert evaluation_results_root(backend) == second.resolve()
+    assert evaluation_results_roots(backend) == (
+        second.resolve(), (backend / "evaluation_results").resolve(), first.resolve(),
+    )
+    with pytest.raises(ValueError, match="绝对路径"):
+        validate_results_root("relative/run-results")
 
 
 def test_copy_skill_supports_deep_destination(tmp_path):

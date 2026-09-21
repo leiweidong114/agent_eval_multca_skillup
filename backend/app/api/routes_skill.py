@@ -17,7 +17,8 @@ import httpx
 from pydantic import BaseModel, Field, SecretStr
 
 from agent_eval.database import database_health
-from agent_eval.env_config import effective_environment, update_root_env
+from agent_eval.env_config import effective_environment, load_root_env, update_root_env
+from agent_eval.results_paths import evaluation_results_root, evaluation_results_roots, validate_results_root
 from agent_eval.failure import describe_evaluation_failure
 from agent_eval.agent_contract import describe_agent_contract
 from agent_eval.model_config import (
@@ -91,6 +92,10 @@ class BatchModelTestRequest(BaseModel):
 
 class AgentPathRequest(BaseModel):
     path: str = Field(default="", max_length=4096)
+
+
+class ResultsRootRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=512)
 
 
 class JustDoHttpRequest(BaseModel):
@@ -422,6 +427,35 @@ def get_runtime_settings() -> dict[str, object]:
         "schematic_skills": configured.get("schematic_skills") or list(SCHEMATIC_PIPELINE_SKILLS),
         "schematic_task_profiles": configured.get("schematic_task_profiles") or {},
     }
+
+
+@router.get("/settings/results-root")
+def get_results_root_setting() -> dict[str, object]:
+    path = evaluation_results_root(BACKEND_ROOT)
+    configured = bool(load_root_env(BACKEND_ROOT).get("AGENT_EVAL_RESULTS_ROOT", "").strip())
+    return {
+        "path": str(path),
+        "configured": configured,
+        "default_path": str(BACKEND_ROOT / "evaluation_results"),
+        "readable_roots": [str(root) for root in evaluation_results_roots(BACKEND_ROOT)],
+    }
+
+
+@router.put("/settings/results-root")
+def put_results_root_setting(request: ResultsRootRequest) -> dict[str, object]:
+    try:
+        selected = validate_results_root(request.path)
+        previous = evaluation_results_root(BACKEND_ROOT)
+        roots = [str(root) for root in evaluation_results_roots(BACKEND_ROOT) if root != selected]
+        if previous != selected and str(previous) not in roots:
+            roots.insert(0, str(previous))
+        update_root_env(BACKEND_ROOT, {
+            "AGENT_EVAL_RESULTS_ROOT": str(selected),
+            "AGENT_EVAL_RESULTS_ROOT_HISTORY_JSON": json.dumps(roots[:16], ensure_ascii=False),
+        })
+        return get_results_root_setting()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put("/settings")

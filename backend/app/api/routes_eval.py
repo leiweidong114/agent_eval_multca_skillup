@@ -15,7 +15,7 @@ from agent_eval.schematic_tasks import (
     DEFAULT_SCHEMATIC_TASK_TYPE,
     list_schematic_task_types,
 )
-from app.config import BACKEND_ROOT, RUNS_ROOT
+from app.config import BACKEND_ROOT, runs_root
 from app.auth import employee_from_request
 from app.job_manager import job_manager
 from app.skill_registry import compose_skills, resolve_skill
@@ -143,7 +143,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         timeout_seconds=request.timeout_seconds,
         max_turns=request.max_turns,
         benchmark=request.benchmark,
-        output_dir=str(RUNS_ROOT),
+        output_dir=str(runs_root()),
         extra_args=request.extra_args,
         validate_only=validate_only,
         collect_database_trace=request.collect_database_trace,

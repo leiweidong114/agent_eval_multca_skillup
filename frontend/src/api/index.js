@@ -20,6 +20,8 @@ export const testModelAvailability = (model, profile) => data(http.post('/models
 export const testAllModelAvailability = (workers = 8, timeout_seconds = 30) => data(http.post('/models/test-batch', { workers, timeout_seconds }, { timeout: 300000 }))
 export const fetchSettings = () => data(http.get('/settings'))
 export const saveSettings = (payload) => data(http.put('/settings', payload))
+export const fetchResultsRoot = () => data(http.get('/settings/results-root'))
+export const saveResultsRoot = (path) => data(http.put('/settings/results-root', {path}))
 export const fetchEvaluators = () => data(http.get('/evaluators'))
 export const fetchSchematicTaskTypes = () => data(http.get('/schematic-task-types'))
 export const fetchModelConfig = () => data(http.get('/model-config'))

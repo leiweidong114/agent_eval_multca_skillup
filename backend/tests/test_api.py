@@ -159,6 +159,37 @@ def test_runtime_settings_save_non_secret_default_models(tmp_path, monkeypatch):
     assert "api_key" not in saved.lower()
 
 
+def test_results_root_setting_changes_new_output_without_hiding_old_root(tmp_path, monkeypatch):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    selected = tmp_path / "short-runs"
+    monkeypatch.setattr("app.api.routes_skill.BACKEND_ROOT", backend)
+    monkeypatch.setattr("app.api.routes_skill.validate_results_root", lambda value: selected.resolve())
+
+    response = client.put("/api/settings/results-root", json={"path": str(selected)})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["path"] == str(selected.resolve())
+    assert str((backend / "evaluation_results").resolve()) in response.json()["readable_roots"]
+    assert client.get("/api/settings/results-root").json()["configured"] is True
+    assert "AGENT_EVAL_RESULTS_ROOT=" in (tmp_path / ".env").read_text(encoding="utf-8")
+
+
+def test_results_list_and_detail_keep_old_root_after_switch(tmp_path, monkeypatch):
+    old_root = tmp_path / "old"
+    new_root = tmp_path / "new"
+    run_dir = old_root / "test-worker" / "demo" / "20260921-120000__run-old"
+    run_dir.mkdir(parents=True)
+    (run_dir / "evaluation-report.json").write_text(
+        json.dumps({"run_id": "run-old", "user_id": "test-worker", "status": "completed"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.api.routes_runs.readable_runs_roots", lambda: (new_root, old_root))
+
+    assert any(item["run_id"] == "run-old" for item in client.get("/api/runs", params={"summary_only": True}).json())
+    assert client.get("/api/runs/run-old").json()["run_id"] == "run-old"
+
+
 def test_batch_model_probe_endpoint_returns_real_probe_summary(monkeypatch):
     captured = {}
 
@@ -304,7 +335,7 @@ def test_run_interactions_and_open_folder_are_scoped_to_result_dir(tmp_path, mon
         encoding="utf-8",
     )
     opened = []
-    monkeypatch.setattr("app.api.routes_runs.RUNS_ROOT", tmp_path)
+    monkeypatch.setattr("app.api.routes_runs.readable_runs_roots", lambda: (tmp_path,))
     if sys.platform == "win32":
         monkeypatch.setattr("app.api.routes_runs.os.startfile", lambda path: opened.append(path))
     else:
@@ -338,7 +369,7 @@ def test_run_interactions_can_filter_main_and_subagent_calls(tmp_path, monkeypat
         '{"run_id":"run-actors","database_trace_file":"' + str(trace).replace("\\", "\\\\") + '"}',
         encoding="utf-8",
     )
-    monkeypatch.setattr("app.api.routes_runs.RUNS_ROOT", tmp_path)
+    monkeypatch.setattr("app.api.routes_runs.readable_runs_roots", lambda: (tmp_path,))
 
     main = client.get("/api/runs/run-actors/interactions", params={"scope": "main_agent"}).json()
     child = client.get("/api/runs/run-actors/interactions", params={"scope": "subagent"}).json()
@@ -360,7 +391,7 @@ def test_run_summary_can_include_machine_local_cli_results(tmp_path, monkeypatch
         '"started_at":"2026-09-15T12:00:00+00:00","scores":{"overall_score":99}}',
         encoding="utf-8",
     )
-    monkeypatch.setattr("app.api.routes_runs.RUNS_ROOT", tmp_path)
+    monkeypatch.setattr("app.api.routes_runs.readable_runs_roots", lambda: (tmp_path,))
     monkeypatch.setattr("app.api.routes_runs.get_cached_json", lambda key: None)
     monkeypatch.setattr("app.api.routes_runs.set_cached_json", lambda *args, **kwargs: None)
 
@@ -376,8 +407,9 @@ def test_run_summary_can_include_machine_local_cli_results(tmp_path, monkeypatch
 
 
 def test_judge_interactions_are_listed_as_summaries_and_opened_separately(tmp_path, monkeypatch):
-    records = tmp_path / "records"
-    records.mkdir()
+    audit_root = tmp_path / "_judge"
+    records = audit_root / "records"
+    records.mkdir(parents=True)
     interaction_id = "a" * 32
     summary = {
         "interaction_id": interaction_id,
@@ -388,13 +420,12 @@ def test_judge_interactions_are_listed_as_summaries_and_opened_separately(tmp_pa
         "started_at": "2026-09-15T12:00:00+00:00",
         "usage": {"total_tokens": 42},
     }
-    (tmp_path / "index.jsonl").write_text(json.dumps(summary) + "\n", encoding="utf-8")
+    (audit_root / "index.jsonl").write_text(json.dumps(summary) + "\n", encoding="utf-8")
     (records / f"{interaction_id}.json").write_text(
         json.dumps({**summary, "input": {"system": [], "user": []}, "output": {"content": "ok"}}),
         encoding="utf-8",
     )
-    monkeypatch.setattr("app.api.routes_judge.AUDIT_ROOT", tmp_path)
-    monkeypatch.setattr("app.api.routes_judge.RECORDS_ROOT", records)
+    monkeypatch.setattr("app.api.routes_judge.readable_runs_roots", lambda: (tmp_path,))
 
     listed = client.get("/api/judge-interactions").json()
     filtered = client.get(

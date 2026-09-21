@@ -157,7 +157,8 @@ def test_batch_runs_in_parallel_and_one_failure_does_not_cancel_others(
                 active -= 1
 
     monkeypatch.setenv("AGENT_EVAL_WORKERS", "3")
-    monkeypatch.setattr(job_manager_module, "RUNS_ROOT", tmp_path / "runs")
+    monkeypatch.setattr(job_manager_module, "runs_root", lambda: tmp_path / "runs")
+    monkeypatch.setattr(job_manager_module, "readable_runs_roots", lambda: (tmp_path / "runs",))
     monkeypatch.setattr(job_manager_module, "BACKEND_ROOT", tmp_path)
     monkeypatch.setattr(job_manager_module, "run_evaluation", fake_run_evaluation)
     skill_dir = tmp_path / "skill"
@@ -236,7 +237,8 @@ def test_prioritized_job_runs_before_jobs_already_waiting_in_queue(monkeypatch, 
         return {"status": "completed", "scores": {"overall_score": 1}}
 
     monkeypatch.setenv("AGENT_EVAL_WORKERS", "1")
-    monkeypatch.setattr(job_manager_module, "RUNS_ROOT", tmp_path / "runs")
+    monkeypatch.setattr(job_manager_module, "runs_root", lambda: tmp_path / "runs")
+    monkeypatch.setattr(job_manager_module, "readable_runs_roots", lambda: (tmp_path / "runs",))
     monkeypatch.setattr(job_manager_module, "BACKEND_ROOT", tmp_path)
     monkeypatch.setattr(job_manager_module, "run_evaluation", fake_run_evaluation)
     skill_dir = tmp_path / "skill"
@@ -265,3 +267,30 @@ def test_prioritized_job_runs_before_jobs_already_waiting_in_queue(monkeypatch, 
     finally:
         release_first.set()
         manager._executor.shutdown(wait=True)
+
+
+def test_new_jobs_use_new_results_root_without_moving_running_jobs(monkeypatch, tmp_path):
+    roots = [tmp_path / "short-a", tmp_path / "short-b"]
+    current = [roots[0]]
+    outputs = {}
+
+    def fake_run_evaluation(**kwargs):
+        outputs[kwargs["run_id"]] = kwargs["output_dir"]
+        return {"status": "completed", "scores": {"overall_score": 1}}
+
+    monkeypatch.setattr(job_manager_module, "runs_root", lambda: current[0])
+    monkeypatch.setattr(job_manager_module, "readable_runs_roots", lambda: tuple(roots))
+    monkeypatch.setattr(job_manager_module, "run_evaluation", fake_run_evaluation)
+    skill_dir = tmp_path / "skill"
+    skill_dir.mkdir()
+    manager = EvaluationJobManager()
+    try:
+        first = manager.submit({"agent": "codex"}, skill_dir)
+        current[0] = roots[1]
+        second = manager.submit({"agent": "codex"}, skill_dir)
+    finally:
+        manager._executor.shutdown(wait=True)
+    assert outputs[first["job_id"]] == str(roots[0])
+    assert outputs[second["job_id"]] == str(roots[1])
+    assert (roots[0] / "_jobs" / f"{first['job_id']}.json").is_file()
+    assert (roots[1] / "_jobs" / f"{second['job_id']}.json").is_file()

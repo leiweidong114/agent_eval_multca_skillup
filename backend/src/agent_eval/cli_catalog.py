@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from agent_eval.results_paths import evaluation_results_root
 from agent_eval.skill_sources import resolve_external_skill
 from agent_eval.windows_paths import filesystem_path
 
@@ -129,7 +130,7 @@ def compose_skill_bundle(
             digest.update(file_path.read_bytes())
         sources.append((name, source))
     bundle_name = f"schematic-pipeline-bundle-{digest.hexdigest()[:12]}"
-    bundles_root = backend_root / ".runtime" / "composed-skills"
+    bundles_root = evaluation_results_root(backend_root) / "_composed_skills"
     destination = bundles_root / bundle_name
     if (destination / "SKILL.md").is_file():
         return destination

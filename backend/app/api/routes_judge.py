@@ -13,14 +13,12 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.auth import employee_from_request
-from app.config import RUNS_ROOT
+from app.config import readable_runs_roots
 from app.session_metric_judge import judge_session_metrics
 from app.session_task_classifier import classify_session_task
 
 
 router = APIRouter(prefix="/api/judge-interactions", tags=["judge-interactions"])
-AUDIT_ROOT = RUNS_ROOT / "_judge"
-RECORDS_ROOT = AUDIT_ROOT / "records"
 SAFE_ID = re.compile(r"^[a-f0-9]{32}$")
 JUDGE_TYPE_BY_PURPOSE = {
     "evaluation_judge": "task_evaluation",
@@ -49,20 +47,21 @@ def _parse_time(value: Any) -> datetime | None:
 
 
 def _summaries() -> list[dict[str, Any]]:
-    index = AUDIT_ROOT / "index.jsonl"
-    if not index.is_file():
-        return []
     rows: list[dict[str, Any]] = []
-    try:
-        for line in index.read_text(encoding="utf-8").splitlines():
-            try:
-                value = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(value, dict):
-                rows.append(_normalized_summary(value))
-    except OSError:
-        return []
+    for root in readable_runs_roots():
+        index = root / "_judge" / "index.jsonl"
+        if not index.is_file():
+            continue
+        try:
+            for line in index.read_text(encoding="utf-8").splitlines():
+                try:
+                    value = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(value, dict):
+                    rows.append(_normalized_summary(value))
+        except OSError:
+            continue
     return sorted(rows, key=lambda item: str(item.get("started_at") or ""), reverse=True)
 
 
@@ -357,8 +356,14 @@ def get_judge_test_job(job_id: str, request: Request) -> dict[str, Any]:
 def get_judge_interaction(interaction_id: str, request: Request) -> dict[str, Any]:
     if not SAFE_ID.fullmatch(interaction_id):
         raise HTTPException(status_code=404, detail="Judge interaction not found")
-    path = (RECORDS_ROOT / f"{interaction_id}.json").resolve()
-    if path.parent != RECORDS_ROOT.resolve() or not path.is_file():
+    path = None
+    for root in readable_runs_roots():
+        records_root = (root / "_judge" / "records").resolve()
+        candidate = (records_root / f"{interaction_id}.json").resolve()
+        if candidate.parent == records_root and candidate.is_file():
+            path = candidate
+            break
+    if path is None:
         raise HTTPException(status_code=404, detail="Judge interaction not found")
     try:
         value = json.loads(path.read_text(encoding="utf-8"))

@@ -20,7 +20,7 @@ from agent_eval.database import (
 from agent_eval.evidence_normalization import normalize_report_evidence
 
 from app.auth import employee_from_request
-from app.config import RUNS_ROOT
+from app.config import readable_runs_roots
 from app.response_cache import cache_key, get_cached_json, set_cached_json
 
 router = APIRouter(prefix="/api", tags=["runs"])
@@ -106,27 +106,29 @@ def _load_run_summary(run_dir: Path) -> dict[str, object] | None:
 
 
 def _find_run(run_id: str) -> tuple[Path, dict[str, object]] | None:
-    root = RUNS_ROOT.resolve()
+    roots = [root.resolve() for root in readable_runs_roots() if root.is_dir()]
     if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", run_id):
-        direct = sorted(
-            (
-                path.resolve() for path in root.glob(f"*/*/*__{run_id}")
-                if path.is_dir() and root in path.resolve().parents
-            ),
-            key=lambda path: path.stat().st_mtime,
-            reverse=True,
-        ) if root.is_dir() else []
-        for run_dir in direct:
+        for root in roots:
+            direct = sorted(
+                (
+                    path.resolve() for path in root.glob(f"*/*/*__{run_id}")
+                    if path.is_dir() and root in path.resolve().parents
+                ),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+            for run_dir in direct:
+                report = _load_report(run_dir)
+                if report is not None and str(report.get("run_id")) == run_id:
+                    return run_dir, report
+    for root in roots:
+        for report_file in root.glob("*/*/*/evaluation-report.json"):
+            run_dir = report_file.parent.resolve()
+            if root not in run_dir.parents:
+                continue
             report = _load_report(run_dir)
             if report is not None and str(report.get("run_id")) == run_id:
                 return run_dir, report
-    for report_file in root.glob("*/*/*/evaluation-report.json") if root.is_dir() else []:
-        run_dir = report_file.parent.resolve()
-        if root not in run_dir.parents:
-            continue
-        report = _load_report(run_dir)
-        if report is not None and str(report.get("run_id")) == run_id:
-            return run_dir, report
     return None
 
 
@@ -136,11 +138,11 @@ def _find_run_dir(run_id: str) -> Path | None:
         return found[0]
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", run_id):
         return None
-    root = RUNS_ROOT.resolve()
     matches = [
         path.resolve()
-        for path in root.glob(f"*/*/*__{run_id}") if root.is_dir() and path.is_dir()
-        if root in path.resolve().parents
+        for root in readable_runs_roots() if root.is_dir()
+        for path in root.glob(f"*/*/*__{run_id}") if path.is_dir()
+        if root.resolve() in path.resolve().parents
     ]
     return max(matches, key=lambda path: path.stat().st_mtime) if matches else None
 
@@ -152,17 +154,18 @@ def list_runs(
     include_local: bool = Query(False),
 ) -> list[dict[str, object]]:
     """List evaluation run directories with a report, newest first."""
-    if not RUNS_ROOT.is_dir():
-        return []
     report_files = sorted(
-        RUNS_ROOT.glob("*/*/*/evaluation-report.json"),
+        (
+            path for root in readable_runs_roots() if root.is_dir()
+            for path in root.glob("*/*/*/evaluation-report.json")
+        ),
         key=lambda item: item.stat().st_mtime,
         reverse=True,
     )
     employee = employee_from_request(request)
     allowed_users = {employee, "local"} if include_local else {employee}
     fingerprint = [
-        (str(path.relative_to(RUNS_ROOT)), path.stat().st_mtime_ns, path.stat().st_size)
+        (str(path), path.stat().st_mtime_ns, path.stat().st_size)
         for path in report_files
     ]
     result_cache_key = cache_key(
