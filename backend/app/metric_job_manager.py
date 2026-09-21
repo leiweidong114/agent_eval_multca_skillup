@@ -444,7 +444,7 @@ class MetricJobManager:
                             "source_record_id": rationality_record.get("_id"),
                             "source_uuid": rationality_record.get("uuid"),
                             "source_create_time": rationality_record.get("createTime"),
-                            "check_type": rationality_record.get("checkType"),
+                            "check_type": str(rationality_record.get("checkType") or "").strip(),
                             "check_message": rationality_record.get("checkMessage"),
                             "record_count": rationality_record_count,
                             "matched_by": rationality_matched_by,
@@ -469,6 +469,7 @@ class MetricJobManager:
                             "source_record_id": rationality_record.get("_id"),
                             "source_uuid": rationality_record.get("uuid"),
                             "source_create_time": rationality_record.get("createTime"),
+                            "check_type": str(rationality_record.get("checkType") or "").strip(),
                             "record_count": rationality_record_count,
                             "matched_by": rationality_matched_by,
                             "result_text": rationality_record.get("resultText"),
@@ -497,6 +498,7 @@ class MetricJobManager:
                         "source_record_id": rationality_record.get("_id"),
                         "source_uuid": rationality_record.get("uuid"),
                         "source_create_time": rationality_record.get("createTime"),
+                        "check_type": str(rationality_record.get("checkType") or "").strip(),
                         "record_count": rationality_record_count,
                         "matched_by": rationality_matched_by,
                         "result_text": rationality_record.get("resultText"),
@@ -563,23 +565,32 @@ class MetricJobManager:
                         )
                 metric_record = store.build_metrics_record(result)
                 metric_record_audit = _metric_record_for_audit(metric_record)
+                source = result.get("schematic_rationality") or {}
+                update_source = str(source.get("check_type") or "").strip() in {
+                    "hscope_diagram_lint", "hscope_block_corpus_check"
+                }
+                persist_method = "PUT" if update_source else "POST"
+                persist_endpoint = store.update_endpoint() if update_source else store.write_endpoint()
                 with self._lock:
                     job["phase"] = "saving_metrics"
                     self._append_event(
                         job,
                         "saving_metrics",
-                        "正在调用 Java 插入接口写入 MongoDB 会话指标",
+                        "正在更新 MongoDB 原始会话指标" if update_source else "正在调用 Java 插入接口写入 MongoDB 会话指标",
                         session_id=session_id,
                         input={
                             "collectionName": "HDschematicRationalityCollection",
                             "record": metric_record_audit,
+                            "source_uuid": source.get("source_uuid") if update_source else None,
+                            "target_field": "agentEvalMetrics" if update_source else None,
                         },
                         interface={
-                            "method": "POST",
-                            "endpoint": store.write_endpoint(),
+                            "method": persist_method,
+                            "endpoint": persist_endpoint,
                             "collection": "HDschematicRationalityCollection",
                             "session_id": session_id,
-                            "check_type": "agent_eval_session_metrics",
+                            "check_type": source.get("check_type") if update_source else "agent_eval_session_metrics",
+                            "target_field": "agentEvalMetrics" if update_source else "resultText",
                             "status": "calling",
                         },
                         outcome="running",
@@ -601,15 +612,16 @@ class MetricJobManager:
                         self._append_event(
                             job,
                             "schematic_data_insert_failed",
-                            "Java 插入或 MongoDB 写后回读验证失败，指标未确认保存",
+                            "Java 写入或 MongoDB 写后回读验证失败，指标未确认保存",
                             session_id=session_id,
                             detail=str(exc),
                             interface={
-                                "method": "POST",
-                                "endpoint": store.write_endpoint(),
+                                "method": persist_method,
+                                "endpoint": persist_endpoint,
                                 "collection": "HDschematicRationalityCollection",
                                 "session_id": session_id,
-                                "check_type": "agent_eval_session_metrics",
+                                "check_type": source.get("check_type") if update_source else "agent_eval_session_metrics",
+                                "target_field": "agentEvalMetrics" if update_source else "resultText",
                                 "status": "failed",
                                 "calls": store.write_diagnostics(),
                                 "read_back_verification": read_back_verification,
@@ -623,14 +635,15 @@ class MetricJobManager:
                     self._append_event(
                         job,
                         "schematic_data_insert_succeeded",
-                        "Java 插入成功并通过 MongoDB 写后回读验证",
+                        "Java 更新成功并通过 MongoDB 写后回读验证" if update_source else "Java 插入成功并通过 MongoDB 写后回读验证",
                         session_id=session_id,
                         interface={
-                            "method": "POST",
-                            "endpoint": store.write_endpoint(),
+                            "method": persist_method,
+                            "endpoint": persist_endpoint,
                             "collection": "HDschematicRationalityCollection",
                             "session_id": session_id,
-                            "check_type": "agent_eval_session_metrics",
+                            "check_type": source.get("check_type") if update_source else "agent_eval_session_metrics",
+                            "target_field": "agentEvalMetrics" if update_source else "resultText",
                             "status": "success",
                             "calls": store.write_diagnostics(),
                             "response": _insert_response_summary(insert_response),

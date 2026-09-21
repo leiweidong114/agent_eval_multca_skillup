@@ -16,6 +16,7 @@ class InfrastructureSettings:
     schematic_data_api_base_url: str | None
     schematic_data_query_path: str
     schematic_data_write_path: str | None
+    schematic_data_update_path: str | None
     schematic_data_api_cookie: str | None
     schematic_data_timeout_seconds: float
     schematic_data_query_page_size: int
@@ -47,6 +48,7 @@ def load_infrastructure_settings(*, force: bool = False) -> InfrastructureSettin
         environment.get("SCHEMATIC_DATA_WRITE_PATH")
         or "/schematic/schematicData/insert"
     ).strip()
+    update_path = str(environment.get("SCHEMATIC_DATA_UPDATE_PATH") or "/schematic/schematicData/update").strip()
     api_cookie = str(environment.get("SCHEMATIC_DATA_API_COOKIE") or "").strip()
     try:
         timeout = max(1.0, float(environment.get("SCHEMATIC_DATA_API_TIMEOUT_SECONDS") or 15))
@@ -56,6 +58,7 @@ def load_infrastructure_settings(*, force: bool = False) -> InfrastructureSettin
         schematic_data_api_base_url=base_url or None,
         schematic_data_query_path="/" + query_path.lstrip("/"),
         schematic_data_write_path=("/" + write_path.lstrip("/")) if write_path else None,
+        schematic_data_update_path=("/" + update_path.lstrip("/")) if update_path else None,
         schematic_data_api_cookie=api_cookie or None,
         schematic_data_timeout_seconds=timeout,
         schematic_data_query_page_size=_positive_int(

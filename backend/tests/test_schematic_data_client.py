@@ -172,6 +172,34 @@ def test_schematic_data_insert_route_needs_no_login_and_forwards_payload(monkeyp
     assert captured["collection_name"] == "HDschematicRationalityCollection"
 
 
+def test_update_record_uses_put_and_requires_existing_match(monkeypatch):
+    captured = {}
+
+    class Response:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"status": "updated", "matchedCount": 1}
+
+    def fake_put(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return Response()
+
+    monkeypatch.setattr("app.schematic_data_client.httpx.put", fake_put)
+    monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
+    client = SchematicDataClient()
+    response = client.update_record(session_id="session-1", uuid="source-uuid",
+                                    field="agentEvalMetrics", value={"status": "completed"})
+    assert response["matchedCount"] == 1
+    assert captured["url"].endswith("/schematic/schematicData/update")
+    assert captured["params"]["sessionId"] == "session-1"
+    assert captured["params"]["uuid"] == "source-uuid"
+    assert captured["json"]["field"] == "agentEvalMetrics"
+
+
 def test_schematic_data_insert_with_trailing_slash_needs_no_login(monkeypatch):
     class FakeClient:
         def insert_record(self, record, *, collection_name):

@@ -70,6 +70,41 @@ class SchematicDataClient:
             raise InfrastructureConfigurationError("SCHEMATIC_DATA_WRITE_PATH 尚未配置")
         return self.settings.schematic_data_api_base_url + self.settings.schematic_data_write_path
 
+    @property
+    def update_url(self) -> str:
+        path = getattr(self.settings, "schematic_data_update_path", None) or "/schematic/schematicData/update"
+        return self.settings.schematic_data_api_base_url + path
+
+    def update_record(self, *, session_id: str, uuid: str, field: str, value: Mapping[str, Any],
+                      collection_name: str = RATIONALITY_COLLECTION) -> Any:
+        """Update one existing source document; the Java endpoint never upserts."""
+        if field not in {"agentEvalMetrics", "agentEvalProcess"} or not session_id or not uuid:
+            raise ValueError("An existing session, UUID and allowed update field are required")
+        started = time.perf_counter()
+        diagnostic = {"method": "PUT", "endpoint": self.update_url, "session_id": session_id,
+                      "field": field, "check_type": "source_record"}
+        try:
+            response = httpx.put(
+                self.update_url,
+                params={"collectionName": collection_name, "sessionId": session_id, "uuid": uuid},
+                json={"field": field, "value": dict(value)}, headers=self._headers(),
+                timeout=self.settings.schematic_data_timeout_seconds, trust_env=False, verify=False,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if payload.get("status") != "updated" or payload.get("matchedCount") != 1:
+                raise InfrastructureConfigurationError("原理图数据更新接口未确认匹配现有记录")
+        except (httpx.HTTPError, ValueError, InfrastructureConfigurationError) as exc:
+            diagnostic.update({"status": "failed", "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                               "http_status": getattr(getattr(exc, "response", None), "status_code", None), "error": str(exc)})
+            self._write_diagnostics.append(diagnostic)
+            raise InfrastructureConfigurationError(f"原理图数据更新接口调用失败: {exc}") from exc
+        diagnostic.update({"status": "success", "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                           "http_status": response.status_code})
+        self._write_diagnostics.append(diagnostic)
+        clear_response_cache()
+        return payload
+
     def _headers(self) -> dict[str, str]:
         return (
             {"Cookie": self.settings.schematic_data_api_cookie}

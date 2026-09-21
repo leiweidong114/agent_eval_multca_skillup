@@ -13,6 +13,13 @@ class FakeClient:
         self.records.append(saved)
         return {"status": "inserted", "record": saved, "collection": collection_name}
 
+    def update_record(self, *, session_id, uuid, field, value, collection_name):
+        matches = [item for item in self.records if item.get("sessionId") == session_id and item.get("uuid") == uuid]
+        if len(matches) != 1:
+            raise RuntimeError("source record not found")
+        matches[0][field] = value
+        return {"status": "updated", "matchedCount": 1, "field": field}
+
     def find_records(self, collection_name, identifiers):
         expected = set(identifiers)
         return [item for item in self.records if item.get("sessionId") in expected]
@@ -102,3 +109,25 @@ def test_completed_process_trace_round_trip_and_rationality_exclusion():
     record, count, _ = store.latest_rationality_analysis("session-1")
     assert record is None
     assert count == 0
+
+
+def test_quality_metrics_and_process_update_source_without_new_documents():
+    client = FakeClient()
+    source = {"_id": "mongo-source", "uuid": "source-uuid", "sessionId": "session-1",
+              "checkType": "hscope_block_corpus_check  ", "status": "pending", "resultText": "语料库覆盖率: 75.0%"}
+    client.records.append(source)
+    store = MetricsStore.__new__(MetricsStore)
+    store._client = client
+    result = {"session_id": "session-1", "status": "completed", "end_user": "100001",
+              "task_type": "other", "metric_definition_version": "v1", "metrics": {},
+              "schematic_rationality": {"check_type": "hscope_block_corpus_check", "source_uuid": "source-uuid"}}
+    record = store.build_metrics_record(result)
+    response = store.upsert_metrics(result, record=record)
+    assert response["status"] == "updated"
+    assert len(client.records) == 1
+    assert store.verify_metric_persisted("session-1", record["uuid"])["verified"] is True
+    assert store.get_metrics("session-1")["schematic_rationality"]["source_uuid"] == "source-uuid"
+    store.save_process_trace({"job_id": "job-1", "events": [
+        {"session_id": "session-1", "stage": "session_completed"}]}, "session-1")
+    assert len(client.records) == 1
+    assert store.get_process_trace("session-1")["job_id"] == "job-1"

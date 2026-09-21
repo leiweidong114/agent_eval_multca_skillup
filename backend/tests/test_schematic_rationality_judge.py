@@ -150,3 +150,57 @@ def test_store_accepts_matching_session_regardless_of_status(monkeypatch):
     assert diagnostic["status_filter"] == "none"
     assert diagnostic["eligible_record_count"] == 1
     assert diagnostic["reason"] is None
+
+
+def test_block_corpus_report_with_padded_check_type_extracts_counts():
+    record = {"checkType": "hscope_block_corpus_check  ", "resultText": """
+【hscope block 语料库覆盖检查报告】 project_id=201
+  图页总数: 12
+  block 条目总数: 12
+  唯一编码数: 12
+  语料库有数据: 9 (9/12)
+  语料库无数据: 3 (3/12)
+  不在语料库比例: 25.0%
+  语料库覆盖率: 75.0%
+不在语料库中的编码列表（共 3 个）:
+----------------------------------------
+  13040588
+    所在图页: TXFB1
+  0302104397
+  0302094006
+在语料库中的编码样例（前 20 个）:
+"""}
+    result = subject.extract_rationality_metrics(record)
+    assert result["analysis_type"] == "hscope_block_corpus_check"
+    assert result["metrics"]["coverage_rate"] == 75.0
+    assert result["metrics"]["missing_codes"] == ["13040588", "0302104397", "0302094006"]
+    assert result["metrics"]["counts_consistent"] is True
+
+
+def test_diagram_lint_markdown_report_aggregates_observed_checks():
+    record = {"checkType": "hscope_diagram_lint", "resultText": """# 框图规范检查报告
+## 图页：甲 — ❌ 发现问题
+检查1：block缺少器件标识（通过: 1/2 | 通过率: 50.0%）：
+附加：无连接的block（通过: 2/2 | 通过率: 100.0%）：
+## 图页：乙 — ❌ 发现问题
+检查1：block缺少器件标识（通过: 2/4 | 通过率: 50.0%）：
+附加：无连接的block（通过: 3/4 | 通过率: 75.0%）：
+"""}
+    result = subject.extract_rationality_metrics(record)["metrics"]
+    assert result["pages_observed"] == 2
+    assert result["dimension_success_rates"][0]["passed"] == 3
+    assert result["dimension_success_rates"][0]["total"] == 6
+    assert result["dimension_success_rates"][1]["success_rate"] == 83.33
+
+
+def test_structured_report_does_not_display_hallucinated_judge_numbers(monkeypatch):
+    monkeypatch.setattr(subject, "run_json_judge", lambda **kwargs: {
+        "model": "judge-model", "result": {"quality_level": "poor", "metrics": {},
+            "summary": "4页全部通过，成功率22%", "issues": [{"message": "所有图页合格"}]}})
+    record = {"sessionId": "session-lint", "checkType": "hscope_diagram_lint",
+              "resultText": "## 图页：甲 — 发现问题\n检查1：器件标识（通过: 1/450 | 通过率: 0.22%）：\n"}
+    result = subject.judge_rationality_result(record)
+    assert "0.22%" in result["summary"]
+    assert "4页全部通过" not in result["summary"]
+    assert result["judge_unverified_summary"] == "4页全部通过，成功率22%"
+    assert result["metrics"]["dimension_success_rates"][0]["success_rate"] == 0.22

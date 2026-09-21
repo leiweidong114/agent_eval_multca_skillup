@@ -34,6 +34,13 @@ def _parse_time(value: Any) -> datetime | None:
 
 
 def _metric_document(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    embedded = record.get("agentEvalMetrics")
+    if isinstance(embedded, Mapping):
+        result = dict(embedded)
+        result["session_id"] = str(result.get("session_id") or record.get("sessionId") or "")
+        result["mongo_record_id"] = str(record.get("_id") or "") or None
+        result["mongo_uuid"] = str(record.get("uuid") or "") or None
+        return result
     if str(record.get("checkType") or "") != SESSION_METRICS_CHECK_TYPE:
         return None
     value = record.get("resultText")
@@ -61,7 +68,7 @@ def _latest_metric(records: Iterable[Mapping[str, Any]]) -> dict[str, Any] | Non
         if document is not None
     ]
     candidates.sort(
-        key=lambda pair: str(pair[0].get("createTime") or pair[1].get("calculated_at") or ""),
+        key=lambda pair: str(pair[1].get("updated_at") or pair[0].get("createTime") or pair[1].get("calculated_at") or ""),
         reverse=True,
     )
     return candidates[0][1] if candidates else None
@@ -136,6 +143,18 @@ class MetricsStore:
         client = self._data_client()
         if hasattr(client, "clear_diagnostics"):
             client.clear_diagnostics()
+        source = result.get("schematic_rationality") or {}
+        if str(source.get("check_type") or source.get("analysis_type") or "").strip() in {
+            "hscope_diagram_lint", "hscope_block_corpus_check"
+        }:
+            source_uuid = str(source.get("source_uuid") or "")
+            if not source_uuid:
+                raise RuntimeError("原始 MongoDB 记录缺少 UUID，不能安全地原位保存指标")
+            document = json.loads(str(record["resultText"]))
+            document["uuid"] = str(record["uuid"])
+            return client.update_record(session_id=str(result["session_id"]), uuid=source_uuid,
+                                        field="agentEvalMetrics", value=document,
+                                        collection_name=RATIONALITY_COLLECTION)
         return client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
 
     def verify_metric_persisted(
@@ -169,6 +188,10 @@ class MetricsStore:
             ),
             None,
         )
+        if matching is None:
+            matching = next((item for item in records
+                             if isinstance(item.get("agentEvalMetrics"), Mapping)
+                             and str(item["agentEvalMetrics"].get("uuid") or "") == str(expected_uuid)), None)
         parsed = _metric_document(matching) if matching is not None else None
         verified = matching is not None and parsed is not None
         reason = None
@@ -202,6 +225,9 @@ class MetricsStore:
 
     def write_endpoint(self) -> str:
         return self._data_client().write_url
+
+    def update_endpoint(self) -> str:
+        return self._data_client().update_url
 
     def _records_for(self, session_ids: Iterable[str]) -> list[dict[str, Any]]:
         return self._data_client().find_records(RATIONALITY_COLLECTION, session_ids)
@@ -248,7 +274,7 @@ class MetricsStore:
             if not metric or not metric.get("session_id"):
                 continue
             session_id = str(metric["session_id"])
-            stamp = str(record.get("createTime") or metric.get("calculated_at") or "")
+            stamp = str(metric.get("updated_at") or record.get("createTime") or metric.get("calculated_at") or "")
             if session_id not in latest or stamp > latest[session_id][0]:
                 latest[session_id] = (stamp, metric)
         return [value[1] for value in latest.values()]
@@ -343,6 +369,21 @@ class MetricsStore:
             "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
         }
         client = self._data_client()
+        source, _, _ = self.latest_rationality_analysis(session_id)
+        if source and str(source.get("checkType") or "").strip() in {"hscope_diagram_lint", "hscope_block_corpus_check"}:
+            client.update_record(session_id=session_id, uuid=str(source.get("uuid") or ""),
+                                 field="agentEvalProcess", value=json.loads(record["resultText"]),
+                                 collection_name=RATIONALITY_COLLECTION)
+            try:
+                read_back = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
+            except TypeError:
+                read_back = client.find_records(RATIONALITY_COLLECTION, [session_id])
+            if not any(item.get("uuid") == source.get("uuid")
+                       and isinstance(item.get("agentEvalProcess"), Mapping)
+                       and item["agentEvalProcess"].get("job_id") == document["job_id"]
+                       for item in read_back):
+                raise RuntimeError("计算过程更新接口返回成功，但 MongoDB 回读未找到本次过程")
+            return document
         client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
         try:
             read_back = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
@@ -356,8 +397,15 @@ class MetricsStore:
         return document
 
     def get_process_trace(self, session_id: str) -> dict[str, Any] | None:
+        all_records = self._records_for([session_id])
+        embedded = [(record, record.get("agentEvalProcess")) for record in all_records
+                    if isinstance(record.get("agentEvalProcess"), Mapping)]
+        embedded.sort(key=lambda pair: str(pair[1].get("finished_at") or ""), reverse=True)
+        if embedded:
+            record, value = embedded[0]
+            return {**value, "mongo_record_id": str(record.get("_id") or "") or None}
         records = [
-            item for item in self._records_for([session_id])
+            item for item in all_records
             if item.get("checkType") == SESSION_PROCESS_CHECK_TYPE
         ]
         records.sort(key=lambda item: str(item.get("createTime") or ""), reverse=True)

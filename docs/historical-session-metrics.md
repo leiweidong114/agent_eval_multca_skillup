@@ -4,11 +4,11 @@
 
 “历史会话指标计算”默认查询最近 24 小时的 LiteLLM 普通会话。LiteLLM PostgreSQL
 仍是模型交互事实源。计算完成的衍生指标通过 Java HTTP 接口写入 MongoDB 的
-`HDschematicRationalityCollection`，使用原会话 `sessionId` 关联，`checkType` 固定为
-`agent_eval_session_metrics`。项目本地不再保存 SQLite 指标数据库。
-每次计算的过程事件另存为同一集合、同一 `sessionId` 的
-`agent_eval_metric_process` 记录；指标记录与过程记录通过不同 `checkType` 区分，
-不会把过程记录误当作原理图质量分析。旧版本完成的计算没有持久化过程，需重新计算才能回看。
+`HDschematicRationalityCollection`，使用原会话 `sessionId` 关联。对于
+`hscope_diagram_lint` 和 `hscope_block_corpus_check`，指标和过程分别更新到原始文档的
+`agentEvalMetrics`、`agentEvalProcess` 字段，不增加文档。其他任务沿用独立的
+`agent_eval_session_metrics` 和 `agent_eval_metric_process` 记录。
+项目本地不再保存 SQLite 指标数据库；旧版本完成的计算若没有过程记录，需重新计算才能回看。
 
 原理图合理性分析记录不由评测后端直连 MongoDB。后端通过 HTTP 查询接口读取
 `HDschematicRationalityCollection`，并按真实 LiteLLM 根 `sessionId` 或评测运行 ID
@@ -24,6 +24,7 @@ SCHEMATIC_DATA_API_BASE_URL=http://10.0.0.8:8080
 SCHEMATIC_DATA_QUERY_PATH=/schematic/schematicData/query
 SCHEMATIC_DATA_API_COOKIE=JSESSIONID=请替换为实际值
 SCHEMATIC_DATA_WRITE_PATH=/schematic/schematicData/insert
+SCHEMATIC_DATA_UPDATE_PATH=/schematic/schematicData/update
 SCHEMATIC_DATA_API_TIMEOUT_SECONDS=15
 SCHEMATIC_DATA_QUERY_PAGE_SIZE=20
 SCHEMATIC_DATA_QUERY_MAX_PAGES=50
@@ -117,16 +118,22 @@ curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
 
 `resultText` 按 `checkType` 路由分析：
 
-- `hscope_diagram_lint`：由确定性脚本递归提取总成功率和6项指标成功率；Judge LLM
-  只负责结合原始内容生成中文质量结论和问题说明，不能覆盖脚本提取的数值。
+- `hscope_diagram_lint`：JSON 报告提取总成功率和六项成功率；Markdown 报告按图页和检查项提取
+  通过数、总数及加权成功率。源报告疑似截断时仅报告已观察部分，不能称作全工程总分。
+- `hscope_block_corpus_check`（容忍末尾空格）：提取图页、Block、编码数量、语料库覆盖率及缺失编码。
+  Judge LLM 用中文解释，不能改写脚本已提取的数值。
 - 其他类型：沿用通用原理图质量 schema，JSON 中的显式数值优先，Judge 只补充缺失
   指标和中文说明。
 
 固定数值不直接交给 LLM 提取，是为了保证重复计算结果一致，并避免模型漏项、改值或
 把 `0.9` 与 `90%` 混淆。提取不满总计7项时，详情页会保留已提取结果并显示结构告警。
 启用 LLM Judge 时，每条会话首先把时间最早请求中的第一条 `user` Prompt 单独送入分类 Judge，分类
-只依据用户原始意图，不读取 Agent 后续执行结果。分类结果随完整指标 JSON 写回
-MongoDB 对应 `sessionId` 的 `agent_eval_session_metrics` 记录中。
+只依据用户原始意图，不读取 Agent 后续执行结果。分类结果随完整指标 JSON 写回 MongoDB。
+上述两类质量源记录通过 Java `PUT /update` 将 `agentEvalMetrics` 和 `agentEvalProcess`
+更新到同一 `sessionId + uuid` 的已有文档；不新增指标或过程文档，不修改原始 `resultText`。
+其他类型保留旧的插入流程。
+Java 服务源码已随项目放在 `services/schematic-data-service/`，新环境需要用 JDK 21 与
+Maven 构建并部署该版本；旧版 Java 服务只有查询和插入接口，会使这两类原位更新明确失败。
 
 分类枚举如下：
 
@@ -141,11 +148,11 @@ MongoDB 对应 `sessionId` 的 `agent_eval_session_metrics` 记录中。
 错误原因。分类 Judge 的请求与响应使用 `session_task_classification` 用途记录，可在
 “Judge 交互记录”页面单独筛选。
 
-“指标计算过程”会记录 MongoDB Java 代理的查询与插入过程，包括 HTTP 方法、接口
+“指标计算过程”会记录 MongoDB Java 代理的查询与写入过程，包括 HTTP 方法、接口
 地址、集合、Session ID、HTTP 状态、缓存命中、耗时、返回记录数和字段列表。查询命中
 后还会显示所选记录的业务字段及最多 4000 字符的 `resultText` 摘要；Cookie 等请求头
 不会进入过程日志。接口失败时会显示证书、超时或 HTTP 错误，查询失败不会伪装成
-“未找到记录”，插入失败则明确标记指标没有保存成功。
+“未找到记录”，写入失败则明确标记指标没有保存成功。
 计算结束后，在会话列表点击“查看过程”可从 MongoDB 回读这条会话最新的过程记录；
 “查看指标”的弹窗底部也提供同一入口。过程记录同时保存失败会话的错误事件。
 为控制单条 MongoDB 文档大小，每个过长事件会截断详情，并在记录中标明是否截断。
