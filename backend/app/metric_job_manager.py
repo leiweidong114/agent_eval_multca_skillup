@@ -18,6 +18,11 @@ from app.session_metric_judge import judge_session_metrics
 from app.session_task_classifier import classify_session_task, first_user_prompt, task_hierarchy
 
 
+def _judge_feature_enabled(name: str) -> bool:
+    """Temporary per-stage switches; unset means disabled."""
+    return resolve_config_secret(BACKEND_ROOT, name).lower() in {"1", "true", "yes", "on"}
+
+
 def _rationality_record_summary(record: dict[str, Any] | None) -> dict[str, Any] | None:
     if record is None:
         return None
@@ -108,6 +113,12 @@ class MetricJobManager:
             "process_trace_failures": 0,
             "session_ids": session_ids,
             "use_llm_judge": use_llm_judge,
+            "classification_judge_enabled": use_llm_judge and _judge_feature_enabled(
+                "SESSION_METRICS_CLASSIFICATION_JUDGE_ENABLED"
+            ),
+            "conversation_judge_enabled": use_llm_judge and _judge_feature_enabled(
+                "SESSION_METRICS_CONVERSATION_JUDGE_ENABLED"
+            ),
             "user_id": user_id,
             "start_time": start_time,
             "end_time": end_time,
@@ -232,7 +243,7 @@ class MetricJobManager:
                         },
                     )
                     self._save(job, store)
-                if job["use_llm_judge"]:
+                if job.get("conversation_judge_enabled", False):
                     def judge_progress(stage: str, chunk_index: int, chunk_total: int, message: str,
                                        *, active=judge_active, callback_session_id=session_id) -> None:
                         if not active.is_set():
@@ -257,7 +268,7 @@ class MetricJobManager:
 
                     judge_future = self._judge_executor.submit(run_session_judge)
                 classification_status = "disabled"
-                if job["use_llm_judge"]:
+                if job.get("classification_judge_enabled", False):
                     classification_prompt = first_user_prompt(conversation)
                     with self._judge_slots:
                         with self._lock:
@@ -301,7 +312,11 @@ class MetricJobManager:
                         result["task_type_confidence"] = classification.get("confidence")
 
                 else:
-                    result["task_classification"] = {"status": "disabled"}
+                    result["task_classification"] = {"status": "disabled", "reason": "任务分类 Judge 已暂时关闭"}
+                    with self._lock:
+                        self._append_event(job, "task_classification_skipped", "任务分类 Judge 已暂时关闭，保留规则分类",
+                                           session_id=session_id, outcome="skipped")
+                        self._save(job, store)
                 with self._lock:
                     job["phase"] = "schematic_rationality"
                     query_ids = list(dict.fromkeys([
@@ -542,7 +557,7 @@ class MetricJobManager:
                 # rationality lookup/analysis, making it the sixth visible step.
                 # It still evaluates the LiteLLM conversation evidence only;
                 # rationality analysis remains an independent fifth step.
-                if job["use_llm_judge"]:
+                if job.get("conversation_judge_enabled", False):
                     with self._lock:
                         job["phase"] = "llm_judge"
                         self._save(job, store)
@@ -575,7 +590,7 @@ class MetricJobManager:
                     else:
                         result["status"] = "rules_completed_judge_unavailable"
                 else:
-                    result["judge"] = {"status": "disabled"}
+                    result["judge"] = {"status": "disabled", "reason": "会话 Judge 已暂时关闭"}
                     with self._lock:
                         self._append_event(
                             job,

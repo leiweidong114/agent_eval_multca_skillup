@@ -176,8 +176,15 @@ SESSION_METRICS_AUTO_INTERVAL_SECONDS=3600
 SESSION_METRICS_AUTO_INITIAL_DELAY_SECONDS=60
 SESSION_METRICS_AUTO_MAX_SESSIONS=100
 SESSION_METRICS_AUTO_USE_LLM_JUDGE=true
+SESSION_METRICS_CLASSIFICATION_JUDGE_ENABLED=false
+SESSION_METRICS_CONVERSATION_JUDGE_ENABLED=false
 SESSION_METRICS_AUTO_USER_ID=system
 ```
+
+任务分类 Judge 和会话 Judge 当前默认关闭；规则分类、规则指标、MongoDB 质量报告提取与
+质量分析 Judge 保持运行。前端的“使用质量分析 Judge”只控制质量分析 Judge。
+需要恢复两项会话 Judge 时，将上述两个开关分别设为 `true` 并重启后端；
+它们仅影响新提交的计算任务。
 
 ## 5. 后端接口
 

@@ -115,6 +115,7 @@ def test_metric_job_overlaps_independent_classification_and_session_judge(monkey
         "job_id": "metrics-overlap", "status": "queued", "session_ids": ["session-1"],
         "total": 1, "completed": 0, "failed": 0, "process_trace_failures": 0,
         "events": [], "event_seq": 0, "errors": [], "use_llm_judge": True,
+        "classification_judge_enabled": True, "conversation_judge_enabled": True,
         "start_time": now, "end_time": now, "created_at": now,
     }
     try:
@@ -128,6 +129,31 @@ def test_metric_job_overlaps_independent_classification_and_session_judge(monkey
     assert "llm_judge_chunk_started" in stages
     assert "task_classification_started" in stages
     assert "llm_judge_completed" in stages
+
+
+def test_metric_job_disables_classification_and_conversation_judges_by_default(monkeypatch):
+    from datetime import datetime, timezone
+
+    from app.metric_job_manager import MetricJobManager
+
+    class FakeStore:
+        def save_job(self, job):
+            pass
+
+    monkeypatch.setattr("app.metric_job_manager.MetricsStore", FakeStore)
+    monkeypatch.setattr("app.metric_job_manager.resolve_config_secret", lambda *args, **kwargs: "")
+    manager = MetricJobManager()
+    monkeypatch.setattr(manager._executor, "submit", lambda *args, **kwargs: None)
+    now = datetime.now(timezone.utc)
+    try:
+        job = manager.submit(session_ids=["session-1"], user_id="100001", start_time=now,
+                             end_time=now, use_llm_judge=True)
+        assert job["use_llm_judge"] is True
+        assert job["classification_judge_enabled"] is False
+        assert job["conversation_judge_enabled"] is False
+    finally:
+        manager._executor.shutdown(wait=True)
+        manager._judge_executor.shutdown(wait=True)
 
 
 def test_metric_judge_parallelism_can_be_limited_to_one(monkeypatch):
