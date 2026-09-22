@@ -1,5 +1,6 @@
 import json
 
+from app import quality_summary
 from app.quality_summary import summarize_quality_records
 
 
@@ -35,3 +36,32 @@ def test_rate_only_reports_without_denominators_are_not_averaged():
             {"checkType": "signal-interface-checker", "resultText": '{"passRate": 90}'}]
     summary = summarize_quality_records("session-2", rows)
     assert summary["by_check_type"]["signal-interface-checker"]["rates"]["信号接口检查通过率"] is None
+
+
+def test_actual_binary_signal_and_nested_drc_formats():
+    rows = [
+        {"checkType": "signal-interface-checker", "resultText": "信号接口列表检查不通过"},
+        {"checkType": "tianshu-drc-review", "resultText": json.dumps({"result": {"drc_rate": "100%"}})},
+    ]
+    summary = summarize_quality_records("session-3", rows)
+    assert summary["rates"]["信号接口检查通过率"] == "0.00%"
+    assert summary["rates"]["DRC审查通过率"] == "100.00%"
+
+
+def test_judge_audits_all_four_types_without_overwriting_rule_rates(monkeypatch):
+    calls = []
+
+    def fake_judge(**kwargs):
+        calls.append(kwargs)
+        return {"result": {"rates": {"信号接口检查通过率": "100%"}, "evidence": {}},
+                "model": "test-model", "judge_interaction_id": "judge-1"}
+
+    monkeypatch.setattr(quality_summary, "run_json_judge", fake_judge)
+    rows = [{"checkType": check_type, "resultText": "信号接口列表检查不通过"}
+            for check_type in quality_summary.QUALITY_TYPES]
+    summary = summarize_quality_records("session-4", rows)
+    audited = quality_summary.judge_quality_summary(rows, summary)
+    assert audited["status"] == "disagreed"
+    assert audited["disagreements"]["信号接口检查通过率"] == {"rule": "0.00%", "judge": "100.00%"}
+    assert summary["rates"]["信号接口检查通过率"] == "0.00%"
+    assert all(check_type in calls[0]["user_prompt"] for check_type in quality_summary.QUALITY_TYPES)

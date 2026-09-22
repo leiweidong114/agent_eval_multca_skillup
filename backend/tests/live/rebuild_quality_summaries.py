@@ -13,20 +13,26 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.metrics_store import MetricsStore
-from app.quality_summary import summarize_quality_records
+from app.quality_summary import judge_quality_summary, summarize_quality_records
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("session_ids", nargs="+")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--judge", action="store_true", help="Ask the configured Judge LLM to audit all four report types")
     args = parser.parse_args()
     store = MetricsStore()
     for session_id in args.session_ids:
         rows = store.quality_records(session_id)
         quality = summarize_quality_records(session_id, rows)
+        if args.judge and rows:
+            try:
+                quality["judge"] = judge_quality_summary(rows, quality)
+            except Exception as exc:
+                quality["judge"] = {"status": "unavailable", "error": str(exc)}
         print(json.dumps({"session_id": session_id, "source_record_count": len(rows),
-                          "rates": quality["rates"]}, ensure_ascii=False))
+                          "rates": quality["rates"], "judge": quality.get("judge")}, ensure_ascii=False))
         if not args.apply:
             continue
         previous = store.get_metrics(session_id) or {}

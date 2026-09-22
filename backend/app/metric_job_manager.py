@@ -11,7 +11,7 @@ from agent_eval.database import get_conversation
 from agent_eval.model_config import resolve_config_secret
 from app.config import BACKEND_ROOT
 from app.metrics_store import MetricsStore, SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE
-from app.quality_summary import summarize_quality_records
+from app.quality_summary import QUALITY_TYPES, judge_quality_summary, summarize_quality_records
 from app.schematic_rationality_judge import extract_rationality_metrics, judge_rationality_result
 from app.session_metrics import calculate_rule_metrics
 from app.session_metric_judge import judge_session_metrics
@@ -439,7 +439,7 @@ class MetricJobManager:
                                 "selection_diagnostic": rationality_query_diagnostic,
                             },
                         )
-                elif job["use_llm_judge"]:
+                elif job["use_llm_judge"] and str(rationality_record.get("checkType") or "").strip() not in QUALITY_TYPES:
                     try:
                         with self._judge_slots:
                             with self._lock:
@@ -509,7 +509,7 @@ class MetricJobManager:
                     extracted = extract_rationality_metrics(rationality_record)
                     result["schematic_rationality"] = {
                         "status": "completed" if extracted.get("metrics") else "judge_disabled",
-                        "judge_status": "disabled",
+                        "judge_status": "pending_quality_audit" if job["use_llm_judge"] else "disabled",
                         "source_collection": "HDschematicRationalityCollection",
                         "source_record_id": rationality_record.get("_id"),
                         "source_uuid": rationality_record.get("uuid"),
@@ -519,7 +519,7 @@ class MetricJobManager:
                         "matched_by": rationality_matched_by,
                         "result_text": rationality_record.get("resultText"),
                         "quality_level": "unknown",
-                        "summary": "已通过确定性脚本提取原理图轨迹指标；本次未启用 Judge LLM 中文解释。",
+                        "summary": "已通过确定性脚本提取原理图轨迹指标；四类质量检查将统一接受 Judge LLM 校验。" if job["use_llm_judge"] else "已通过确定性脚本提取原理图轨迹指标；本次未启用 Judge LLM 中文解释。",
                         "issues": [],
                         **extracted,
                     }
@@ -537,6 +537,37 @@ class MetricJobManager:
                 try:
                     quality_records = store.quality_records(session_id)
                     result["quality_summary"] = summarize_quality_records(session_id, quality_records)
+                    if job["use_llm_judge"] and quality_records:
+                        with self._lock:
+                            self._append_event(job, "schematic_rationality_judge",
+                                               "Judge LLM 正在校验四类质量指标",
+                                               session_id=session_id, outcome="running",
+                                               input={"record_count": len(quality_records),
+                                                      "check_types": sorted({str(row.get("checkType") or "").strip() for row in quality_records})})
+                            self._save(job, store)
+                        try:
+                            with self._judge_slots:
+                                result["quality_summary"]["judge"] = judge_quality_summary(
+                                    quality_records, result["quality_summary"],
+                                    employee_no=str(job.get("user_id") or "") or None)
+                            if result.get("schematic_rationality", {}).get("judge_status") == "pending_quality_audit":
+                                result["schematic_rationality"]["judge_status"] = result["quality_summary"]["judge"]["status"]
+                            with self._lock:
+                                self._append_event(job, "schematic_rationality_completed",
+                                                   "四类质量指标 Judge 校验完成",
+                                                   session_id=session_id,
+                                                   outcome=result["quality_summary"]["judge"]["status"],
+                                                   output=result["quality_summary"]["judge"])
+                                self._save(job, store)
+                        except Exception as exc:
+                            result["quality_summary"]["judge"] = {"status": "unavailable", "error": str(exc)}
+                            if result.get("schematic_rationality", {}).get("judge_status") == "pending_quality_audit":
+                                result["schematic_rationality"]["judge_status"] = "unavailable"
+                            with self._lock:
+                                self._append_event(job, "schematic_rationality_judge_unavailable",
+                                                   "质量指标 Judge 不可用，保留规则提取值",
+                                                   session_id=session_id, outcome="warning", detail=str(exc))
+                                self._save(job, store)
                     with self._lock:
                         self._append_event(
                             job, "quality_summary_completed", "四类质量检查记录已逐条提取并汇总",
