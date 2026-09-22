@@ -405,7 +405,8 @@ class MetricsStore:
                     and previous.get("rate_only_session_counts") == rollup["rate_only_session_counts"]):
                 return previous
             now = datetime.now(timezone.utc).isoformat()
-            aggregate = {**rollup, "updated_at": now, "status": "completed"}
+            aggregate = {**rollup, "session_id": AGGREGATE_SESSION_ID,
+                         "updated_at": now, "status": "completed"}
             record = {
                 "uuid": uuid.uuid4().hex, "status": "completed", "createUser": "agent-eval",
                 "createTime": now, "checkType": AGGREGATE_CHECK_TYPE,

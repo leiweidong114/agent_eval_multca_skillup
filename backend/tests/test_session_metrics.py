@@ -101,6 +101,11 @@ def test_metric_job_overlaps_independent_classification_and_session_judge(monkey
         def write_diagnostics(self):
             return []
 
+        def refresh_quality_aggregate(self):
+            self.aggregate_refresh_count = getattr(self, "aggregate_refresh_count", 0) + 1
+            return {"rates": {"框图规范检查总通过率": "50.00%"},
+                    "source_session_count": 1, "updated_at": "2026-09-22T00:00:00+00:00"}
+
         def save_process_trace(self, job, session_id):
             self.saved_process = list(job["events"])
 
@@ -129,6 +134,8 @@ def test_metric_job_overlaps_independent_classification_and_session_judge(monkey
     assert "llm_judge_chunk_started" in stages
     assert "task_classification_started" in stages
     assert "llm_judge_completed" in stages
+    assert "quality_aggregate_updated" in stages
+    assert store.aggregate_refresh_count == 1
 
 
 def test_metric_job_disables_classification_and_conversation_judges_by_default(monkeypatch):

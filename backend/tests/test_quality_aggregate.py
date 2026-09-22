@@ -1,4 +1,4 @@
-from app.quality_aggregate import aggregate_quality_metrics
+from app.quality_aggregate import AGGREGATE_SESSION_ID, aggregate_quality_metrics
 from app.metrics_store import MetricsStore
 
 
@@ -16,6 +16,7 @@ def _metric(session, lint_passed, lint_total, drc):
 
 
 def test_cumulative_rates_weight_denominators_and_average_rate_only_drc():
+    assert AGGREGATE_SESSION_ID == "汇总结果"
     result = aggregate_quality_metrics([_metric("a", 1, 2, 50), _metric("b", 9, 10, 100)])
     assert result["rates"]["框图规范检查总通过率"] == "83.33%"
     assert result["rates"]["天枢DRC审查通过率"] == "75.00%"
@@ -33,6 +34,7 @@ def test_rollup_persists_and_reads_back_latest_session_metrics_only():
         metric = _metric(session, passed, total, drc)
         store.upsert_metrics(metric)
     first = store.refresh_quality_aggregate()
+    assert client.records[-1]["sessionId"] == "汇总结果"
     assert first["rates"]["框图规范检查总通过率"] == "83.33%"
     assert first["rates"]["天枢DRC审查通过率"] == "75.00%"
     assert store.get_quality_aggregate()["rates"] == first["rates"]

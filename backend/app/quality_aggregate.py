@@ -7,7 +7,7 @@ from typing import Any, Mapping
 from app.quality_summary import _display_rate, _rate
 
 
-AGGREGATE_SESSION_ID = "__agent_eval_quality_aggregate__"
+AGGREGATE_SESSION_ID = "汇总结果"
 AGGREGATE_CHECK_TYPE = "agent_eval_quality_aggregate"
 CATEGORIES = (
     ("hscope_diagram_lint", "总检查通过率", "框图规范检查总通过率", "overall_pass_rate"),
