@@ -54,6 +54,11 @@ def main() -> None:
         print(json.dumps({"session_id": session_id, "status": "verified",
                           "record_id": verification["record_id"], "agentEvalMetrics": saved["agentEvalMetrics"]},
                          ensure_ascii=False))
+        aggregate = store.refresh_quality_aggregate()
+        print(json.dumps({"session_id": session_id, "aggregate_updated_at": aggregate["updated_at"],
+                          "aggregate_rates": aggregate["rates"],
+                          "aggregate_source_session_count": aggregate["source_session_count"]},
+                         ensure_ascii=False))
 
 
 if __name__ == "__main__":

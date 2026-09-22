@@ -593,6 +593,17 @@ def test_quality_records_endpoint_returns_each_full_result_text(monkeypatch):
     assert all(record["resultText"] == long_report for record in response.json()["records"])
 
 
+def test_quality_aggregate_endpoint_reads_persisted_rollup(monkeypatch):
+    class FakeMetricsStore:
+        def get_quality_aggregate(self):
+            return {"rates": {"语料覆盖率": "75.00%"}, "quality_session_count": 2}
+
+    monkeypatch.setattr("app.api.routes_metrics.MetricsStore", FakeMetricsStore)
+    response = client.get("/api/session-metrics/aggregate/quality")
+    assert response.status_code == 200
+    assert response.json()["rates"]["语料覆盖率"] == "75.00%"
+
+
 def test_batch_rejects_duplicate_combinations_before_queueing():
     response = client.post(
         "/api/batches",

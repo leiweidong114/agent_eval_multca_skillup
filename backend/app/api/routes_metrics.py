@@ -198,6 +198,18 @@ def run_scheduler_now(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@router.get("/aggregate/quality")
+def quality_aggregate(request: Request) -> dict[str, Any]:
+    employee_from_request(request)
+    try:
+        result = MetricsStore().get_quality_aggregate()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="累计质量指标尚未计算")
+    return result
+
+
 @router.get("/{session_id}")
 def metric_detail(request: Request, session_id: str) -> dict[str, Any]:
     employee_from_request(request)

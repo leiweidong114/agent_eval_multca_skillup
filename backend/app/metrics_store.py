@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import json
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
 
 from app.schematic_data_client import RATIONALITY_COLLECTION, SchematicDataClient
 from app.quality_summary import compact_agent_eval_metrics, flatten_agent_eval_metrics
+from app.quality_aggregate import AGGREGATE_CHECK_TYPE, AGGREGATE_SESSION_ID, aggregate_quality_metrics
 
 
 SESSION_METRICS_CHECK_TYPE = "agent_eval_session_metrics"
 SESSION_METRICS_MESSAGE = "Agent Eval 历史会话指标计算结果"
 SESSION_PROCESS_CHECK_TYPE = "agent_eval_metric_process"
 SESSION_PROCESS_MESSAGE = "Agent Eval 历史会话指标计算过程"
+_aggregate_lock = threading.RLock()
 
 
 def _json_default(value: Any) -> str:
@@ -35,6 +38,8 @@ def _parse_time(value: Any) -> datetime | None:
 
 
 def _metric_document(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    if str(record.get("checkType") or "").strip() == AGGREGATE_CHECK_TYPE:
+        return None
     if str(record.get("checkType") or "").strip() == SESSION_METRICS_CHECK_TYPE:
         value = record.get("resultText")
         try:
@@ -336,6 +341,86 @@ class MetricsStore:
             rows = client.find_records(RATIONALITY_COLLECTION, [session_id])
         return [row for row in rows if str(row.get("checkType") or "").strip() in QUALITY_TYPES]
 
+    def get_quality_aggregate(self) -> dict[str, Any] | None:
+        try:
+            records = self._data_client().find_records(RATIONALITY_COLLECTION, [AGGREGATE_SESSION_ID], use_cache=False)
+        except TypeError:
+            records = self._data_client().find_records(RATIONALITY_COLLECTION, [AGGREGATE_SESSION_ID])
+        candidates = [row for row in records if str(row.get("checkType") or "").strip() == AGGREGATE_CHECK_TYPE]
+        candidates.sort(key=lambda row: (str(row.get("createTime") or ""), str(row.get("_id") or "")), reverse=True)
+        for row in candidates:
+            try:
+                value = json.loads(str(row.get("resultText") or ""))
+            except (TypeError, ValueError):
+                continue
+            if isinstance(value, dict):
+                return {**value, "mongo_record_id": str(row.get("_id") or "") or None}
+        return None
+
+    def refresh_quality_aggregate(self) -> dict[str, Any]:
+        """Rebuild after each successful session write, then verify MongoDB readback."""
+        with _aggregate_lock:
+            client = self._data_client()
+            if hasattr(client, "query_page"):
+                rows: list[dict[str, Any]] = []
+                page = 1
+                page_size = 100
+                while True:
+                    page_rows, total = client.query_page(
+                        collection_name=RATIONALITY_COLLECTION, page=page,
+                        size=page_size, use_cache=False)
+                    rows.extend(page_rows)
+                    if total is not None and len(rows) >= total:
+                        break
+                    if not page_rows:
+                        if total is not None and len(rows) < total:
+                            raise RuntimeError(f"MongoDB 分页不完整：读取 {len(rows)}/{total} 条，未写入累计指标")
+                        break
+                    if len(page_rows) < page_size:
+                        if total is not None and len(rows) < total:
+                            raise RuntimeError(f"MongoDB 分页提前结束：读取 {len(rows)}/{total} 条，未写入累计指标")
+                        break
+                    page += 1
+                    if page > 10000:
+                        raise RuntimeError("MongoDB 分页超过 10000 页，未写入可能不完整的累计指标")
+            else:
+                rows = client.iter_collection(RATIONALITY_COLLECTION)
+            latest: dict[str, tuple[tuple[str, str], dict[str, Any]]] = {}
+            for row in rows:
+                if str(row.get("checkType") or "").strip() != SESSION_METRICS_CHECK_TYPE:
+                    continue
+                metric = _metric_document(row)
+                if not metric or not metric.get("session_id"):
+                    continue
+                session_id = str(metric["session_id"])
+                stamp = (str(row.get("createTime") or metric.get("updated_at") or ""),
+                         str(row.get("_id") or ""))
+                if session_id not in latest or stamp > latest[session_id][0]:
+                    latest[session_id] = (stamp, metric)
+            rollup = aggregate_quality_metrics([value[1] for value in latest.values()])
+            previous = self.get_quality_aggregate()
+            if (previous is not None and previous.get("rates") == rollup["rates"]
+                    and previous.get("counts") == rollup["counts"]
+                    and previous.get("metric_session_counts") == rollup["metric_session_counts"]
+                    and previous.get("rate_only_session_counts") == rollup["rate_only_session_counts"]):
+                return previous
+            now = datetime.now(timezone.utc).isoformat()
+            aggregate = {**rollup, "updated_at": now, "status": "completed"}
+            record = {
+                "uuid": uuid.uuid4().hex, "status": "completed", "createUser": "agent-eval",
+                "createTime": now, "checkType": AGGREGATE_CHECK_TYPE,
+                "checkMessage": "Agent Eval 全部已计算会话累计质量指标",
+                "userName": "Agent Eval", "hscopeProjectId": "quality-aggregate",
+                "boardNum": "aggregate-v1", "sessionId": AGGREGATE_SESSION_ID,
+                "agentEvalMetrics": rollup["rates"],
+                "resultText": json.dumps(aggregate, ensure_ascii=False, default=_json_default),
+            }
+            client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
+            saved = self.get_quality_aggregate()
+            if saved is None or saved.get("updated_at") != now or saved.get("rates") != rollup["rates"]:
+                raise RuntimeError("累计质量指标写入后回读不一致")
+            return saved
+
     def save_process_trace(self, job: Mapping[str, Any], session_id: str) -> dict[str, Any]:
         """Persist one session's completed pipeline alongside its metric record."""
         events = [
@@ -438,7 +523,7 @@ class MetricsStore:
         values = [
             value
             for value in all_values
-            if str(value.get("checkType") or "") not in {SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE}
+            if str(value.get("checkType") or "") not in {SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE, AGGREGATE_CHECK_TYPE}
         ]
         # status is supplied by the upstream analysis service and is not a
         # prerequisite for reading its resultText. Session ID is the join key.

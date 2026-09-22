@@ -744,6 +744,22 @@ class MetricJobManager:
                             "persisted_to": "HDschematicRationalityCollection",
                         },
                     )
+                try:
+                    aggregate = store.refresh_quality_aggregate()
+                    with self._lock:
+                        self._append_event(job, "quality_aggregate_updated",
+                                           "全局累计质量指标已更新并从 MongoDB 回读",
+                                           session_id=session_id, outcome="success",
+                                           output={"rates": aggregate.get("rates"),
+                                                   "source_session_count": aggregate.get("source_session_count"),
+                                                   "updated_at": aggregate.get("updated_at")})
+                        self._save(job, store)
+                except Exception as exc:
+                    with self._lock:
+                        self._append_event(job, "quality_aggregate_update_failed",
+                                           "单会话指标已保存，但全局累计指标刷新失败",
+                                           session_id=session_id, outcome="warning", detail=str(exc))
+                        self._save(job, store)
             except Exception as exc:
                 judge_active.clear()
                 if judge_future is not None:

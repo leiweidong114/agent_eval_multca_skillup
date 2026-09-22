@@ -76,6 +76,7 @@ export const fetchMetricJob = (jobId) => data(http.get(`/session-metrics/jobs/${
 export const fetchMetricDetail = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}`))
 export const fetchMetricProcess = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}/process`))
 export const fetchMetricQualityRecords = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}/quality-records`))
+export const fetchMetricQualityAggregate = () => data(http.get('/session-metrics/aggregate/quality'))
 export const fetchJudgeInteractions = (params = {}) => data(http.get('/judge-interactions', { params }))
 export const fetchJudgeInteractionFilters = () => data(http.get('/judge-interactions/filters'))
 export const fetchJudgeInteraction = (id) => data(http.get(`/judge-interactions/${encodeURIComponent(id)}`))
