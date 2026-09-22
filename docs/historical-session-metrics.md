@@ -126,7 +126,8 @@ curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
 
 同一类型出现多条报告时，只有具备分子的报告参与加权汇总；缺失分母的多个百分比不会被简单平均。
 逐条结果仍保存在汇总 JSON 的 `by_check_type.*.records` 内。未发现某类型时标记 `no_record`。
-`agentEvalMetrics.rates` 使用不含句点的稳定键（如 `hscope_diagram_lint__overall_pass_rate`），
+`agentEvalMetrics.rates` 使用中文检查名称作键、带 `%` 的字符串作值（例如
+`"总检查通过率": "47.14%"`、`"block缺少器件标识检查通过率": "0.22%"`），
 避免 Spring Data MongoDB 拒绝包含句点的映射键。历史会话列表显示主要累计指标；
 “查看指标”弹窗显示完整指标卡片和汇总 JSON。
 

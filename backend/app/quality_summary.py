@@ -21,6 +21,12 @@ QUALITY_LABELS = {
     "signal-interface-checker": "信号接口检查",
     "tianshu-drc-review": "天枢 DRC 审查",
 }
+DISPLAY_RATE_LABELS = {
+    "hscope_diagram_lint": {"overall_pass_rate": "总检查通过率"},
+    "hscope_block_corpus_check": {"coverage_rate": "语料覆盖率"},
+    "signal-interface-checker": {"pass_rate": "信号接口检查通过率"},
+    "tianshu-drc-review": {"drc_pass_rate": "DRC审查通过率"},
+}
 RATE_KEYS = {
     "signal-interface-checker": ("检查通过率", "总通过率", "pass_rate", "passRate", "success_rate", "successRate"),
     "tianshu-drc-review": ("DRC审查通过率", "DRC 审查通过率", "DRC通过率", "drc_pass_rate", "drcPassRate", "pass_rate", "passRate"),
@@ -35,6 +41,17 @@ def _rate(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return round(number, 2) if 0 <= number <= 100 else None
+
+
+def _rate_label(check_type: str, key: str) -> str:
+    explicit = DISPLAY_RATE_LABELS.get(check_type, {}).get(key)
+    if explicit:
+        return explicit
+    return key if key.endswith("检查通过率") else f"{key}检查通过率"
+
+
+def _display_rate(value: float | None) -> str | None:
+    return f"{value:.2f}%" if value is not None else None
 
 
 def _nested_rate(value: Any, keys: tuple[str, ...]) -> float | None:
@@ -154,7 +171,7 @@ def summarize_quality_records(session_id: str, records: list[Mapping[str, Any]])
     for item in items:
         groups[item["check_type"]].append(item)
     results: dict[str, Any] = {}
-    flat_rates: dict[str, float | None] = {}
+    flat_rates: dict[str, str | None] = {}
     for check_type in QUALITY_TYPES:
         entries = groups.get(check_type, [])
         counts: dict[str, dict[str, int]] = defaultdict(lambda: {"passed": 0, "total": 0})
@@ -180,17 +197,22 @@ def summarize_quality_records(session_id: str, records: list[Mapping[str, Any]])
             # possibly different check definitions with count-backed reports.
             rates = {key: value for key, value in rates.items() if key in counts}
         status = "no_record" if not entries else "parsed" if rates else "no_rate_found"
+        display_rates = {_rate_label(check_type, key): _display_rate(rate) for key, rate in rates.items()}
         results[check_type] = {
             "label": QUALITY_LABELS[check_type],
             "status": status,
             "record_count": len(entries),
-            "rates": rates,
+            "rates": display_rates,
             "counts": dict(counts),
-            "records": entries,
+            "records": [
+                {**entry, "rates": {
+                    _rate_label(check_type, key): _display_rate(rate)
+                    for key, rate in entry["rates"].items()
+                }}
+                for entry in entries
+            ],
         }
-        for key, rate in rates.items():
-            # Spring Data's MongoDB converter rejects dots in map keys.
-            flat_rates[f"{check_type}__{key}"] = rate
+        flat_rates.update(display_rates)
     return {
         "session_id": session_id,
         "status": "completed" if items else "no_record",

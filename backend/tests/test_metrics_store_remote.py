@@ -122,13 +122,13 @@ def test_quality_metrics_and_process_are_new_documents_without_mutating_source()
     result = {"session_id": "session-1", "status": "completed", "end_user": "100001",
               "task_type": "other", "metric_definition_version": "v1", "metrics": {},
               "schematic_rationality": {"check_type": "hscope_block_corpus_check"},
-              "quality_summary": {"session_id": "session-1", "rates": {"hscope_block_corpus_check__coverage_rate": 75}}}
+              "quality_summary": {"session_id": "session-1", "rates": {"语料覆盖率": "75.00%"}}}
     record = store.build_metrics_record(result)
     response = store.upsert_metrics(result, record=record)
     assert response["status"] == "inserted"
     assert len(client.records) == 2
     assert "agentEvalMetrics" not in source
-    assert client.records[1]["agentEvalMetrics"]["rates"]["hscope_block_corpus_check__coverage_rate"] == 75
+    assert client.records[1]["agentEvalMetrics"]["rates"]["语料覆盖率"] == "75.00%"
     assert store.verify_metric_persisted("session-1", record["uuid"])["verified"] is True
     assert store.get_metrics("session-1")["schematic_rationality"]["check_type"] == "hscope_block_corpus_check"
     store.save_process_trace({"job_id": "job-1", "events": [

@@ -24,14 +24,14 @@ def test_all_four_types_and_repeated_records_are_summarized():
     assert summary["source_record_count"] == 5
     lint = summary["by_check_type"]["hscope_diagram_lint"]
     assert lint["record_count"] == 2
-    assert lint["rates"] == {"器件标识": 75.0, "端口": 75.0, "overall_pass_rate": 75.0}
-    assert summary["rates"]["hscope_block_corpus_check__coverage_rate"] == 75.0
-    assert summary["rates"]["signal-interface-checker__pass_rate"] == 88.0
-    assert summary["rates"]["tianshu-drc-review__drc_pass_rate"] == 91.5
+    assert lint["rates"] == {"器件标识检查通过率": "75.00%", "端口检查通过率": "75.00%", "总检查通过率": "75.00%"}
+    assert summary["rates"]["语料覆盖率"] == "75.00%"
+    assert summary["rates"]["信号接口检查通过率"] == "88.00%"
+    assert summary["rates"]["DRC审查通过率"] == "91.50%"
 
 
 def test_rate_only_reports_without_denominators_are_not_averaged():
     rows = [{"checkType": "signal-interface-checker", "resultText": '{"passRate": 80}'},
             {"checkType": "signal-interface-checker", "resultText": '{"passRate": 90}'}]
     summary = summarize_quality_records("session-2", rows)
-    assert summary["by_check_type"]["signal-interface-checker"]["rates"]["pass_rate"] is None
+    assert summary["by_check_type"]["signal-interface-checker"]["rates"]["信号接口检查通过率"] is None
