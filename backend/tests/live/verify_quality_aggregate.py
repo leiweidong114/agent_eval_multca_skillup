@@ -94,8 +94,10 @@ def main() -> None:
     if not verified["verified"] or saved.get("agentEvalMetrics") != compact_agent_eval_metrics(quality):
         raise RuntimeError(f"新会话指标写入或回读失败：{verified}")
     rollup = store.refresh_quality_aggregate()
-    if rollup.get("session_id") != AGGREGATE_SESSION_ID or rollup.get("mongo_record_id") == baseline.get("mongo_record_id"):
-        raise RuntimeError("新会话计算后，汇总结果记录未更新")
+    if (rollup.get("session_id") != AGGREGATE_SESSION_ID
+            or rollup.get("mongo_record_id") != baseline.get("mongo_record_id")
+            or rollup.get("aggregate_record_count") != 1):
+        raise RuntimeError("新会话计算后，汇总结果未保持原记录唯一更新")
     for label, source in (("框图规范检查总通过率", "overall_pass_rate"),
                           ("语料覆盖率", "coverage_rate"),
                           ("信号接口列表检查通过率", "pass_rate")):

@@ -44,6 +44,9 @@ def test_rollup_persists_and_reads_back_latest_session_metrics_only():
     # Recalculation inserts a newer metric for the same Session ID; old value
     # must not be counted twice.
     store.upsert_metrics(_metric("s1", 2, 2, 100))
+    before_refresh_count = len(client.records)
     second = store.refresh_quality_aggregate()
     assert second["rates"]["框图规范检查总通过率"] == "91.67%"
     assert second["source_session_count"] == 2
+    assert second["mongo_record_id"] == first["mongo_record_id"]
+    assert len(client.records) == before_refresh_count

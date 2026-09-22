@@ -135,7 +135,8 @@ curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
 把 `0.9` 与 `90%` 混淆。提取不满总计7项时，详情页会保留已提取结果并显示结构告警。
 启用 LLM Judge 时，每条会话首先把时间最早请求中的第一条 `user` Prompt 单独送入分类 Judge，分类
 只依据用户原始意图，不读取 Agent 后续执行结果。分类结果随完整指标 JSON 写回 MongoDB。
-所有类型统一使用 Java `POST /insert` 新增汇总和过程文档，不修改原始 `resultText` 或原始记录。
+会话级汇总和过程文档使用 Java `POST /insert`，不修改原始 `resultText` 或原始记录；
+跨会话累计的唯一“汇总结果”则使用 Java `PUT /aggregate` 原位刷新。
 Java 服务源码在同级 `原理图_java/`；新环境需要部署支持查询和插入的版本。
 重复计算会产生新的汇总版本，详情接口以最新 `createTime` 为准。
 

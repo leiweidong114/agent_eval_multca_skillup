@@ -354,7 +354,12 @@ class MetricsStore:
             except (TypeError, ValueError):
                 continue
             if isinstance(value, dict):
-                return {**value, "mongo_record_id": str(row.get("_id") or "") or None}
+                current = row.get("agentEvalMetrics")
+                if isinstance(current, Mapping) and isinstance(current.get("rates"), Mapping):
+                    value.update(current)
+                return {**value, "mongo_record_id": str(row.get("_id") or "") or None,
+                        "mongo_uuid": str(row.get("uuid") or "") or None,
+                        "aggregate_record_count": len(candidates)}
         return None
 
     def refresh_quality_aggregate(self) -> dict[str, Any]:
@@ -399,6 +404,8 @@ class MetricsStore:
                     latest[session_id] = (stamp, metric)
             rollup = aggregate_quality_metrics([value[1] for value in latest.values()])
             previous = self.get_quality_aggregate()
+            if previous is not None and previous.get("aggregate_record_count") != 1:
+                raise RuntimeError("汇总结果存在重复记录；需先清理到唯一一条再刷新")
             if (previous is not None and previous.get("rates") == rollup["rates"]
                     and previous.get("counts") == rollup["counts"]
                     and previous.get("metric_session_counts") == rollup["metric_session_counts"]
@@ -407,18 +414,11 @@ class MetricsStore:
             now = datetime.now(timezone.utc).isoformat()
             aggregate = {**rollup, "session_id": AGGREGATE_SESSION_ID,
                          "updated_at": now, "status": "completed"}
-            record = {
-                "uuid": uuid.uuid4().hex, "status": "completed", "createUser": "agent-eval",
-                "createTime": now, "checkType": AGGREGATE_CHECK_TYPE,
-                "checkMessage": "Agent Eval 全部已计算会话累计质量指标",
-                "userName": "Agent Eval", "hscopeProjectId": "quality-aggregate",
-                "boardNum": "aggregate-v1", "sessionId": AGGREGATE_SESSION_ID,
-                "agentEvalMetrics": rollup["rates"],
-                "resultText": json.dumps(aggregate, ensure_ascii=False, default=_json_default),
-            }
-            client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
+            client.upsert_aggregate_metrics(value=aggregate, collection_name=RATIONALITY_COLLECTION)
             saved = self.get_quality_aggregate()
-            if saved is None or saved.get("updated_at") != now or saved.get("rates") != rollup["rates"]:
+            if (saved is None or saved.get("aggregate_record_count") != 1
+                    or saved.get("updated_at") != now or saved.get("rates") != rollup["rates"]
+                    or (previous is not None and saved.get("mongo_record_id") != previous.get("mongo_record_id"))):
                 raise RuntimeError("累计质量指标写入后回读不一致")
             return saved
 

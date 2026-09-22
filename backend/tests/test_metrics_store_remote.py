@@ -21,6 +21,21 @@ class FakeClient:
         matches[-1][field] = value
         return {"status": "updated", "matchedCount": 1, "field": field}
 
+    def upsert_aggregate_metrics(self, *, value, collection_name):
+        matches = [item for item in self.records if item.get("sessionId") == "汇总结果"
+                   and item.get("checkType") == "agent_eval_quality_aggregate"]
+        if len(matches) > 1:
+            raise RuntimeError("duplicate aggregate documents")
+        if not matches:
+            self.insert_record({"sessionId": "汇总结果", "checkType": "agent_eval_quality_aggregate",
+                                "uuid": "aggregate-uuid", "createTime": value["updated_at"]},
+                               collection_name=collection_name)
+            matches = [self.records[-1]]
+        matches[0]["agentEvalMetrics"] = dict(value)
+        matches[0]["resultText"] = json.dumps(value, ensure_ascii=False)
+        matches[0]["createTime"] = value["updated_at"]
+        return {"status": "updated", "matchedCount": 1}
+
     def find_records(self, collection_name, identifiers):
         expected = set(identifiers)
         return [item for item in self.records if item.get("sessionId") in expected]

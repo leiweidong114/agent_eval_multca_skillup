@@ -201,6 +201,32 @@ def test_update_record_uses_put_and_requires_existing_match(monkeypatch):
     assert captured["json"]["field"] == "agentEvalMetrics"
 
 
+def test_aggregate_uses_dedicated_atomic_java_put(monkeypatch):
+    captured = {}
+
+    class Response:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"status": "updated", "matchedCount": 1}
+
+    def fake_put(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return Response()
+
+    monkeypatch.setattr("app.schematic_data_client.httpx.put", fake_put)
+    monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
+    client = SchematicDataClient()
+    result = client.upsert_aggregate_metrics(value={"rates": {"语料覆盖率": "75%"}})
+    assert result["matchedCount"] == 1
+    assert captured["url"].endswith("/schematic/schematicData/aggregate")
+    assert captured["params"] == {"collectionName": "HDschematicRationalityCollection"}
+    assert captured["json"]["rates"]["语料覆盖率"] == "75%"
+
+
 def test_schematic_data_insert_with_trailing_slash_needs_no_login(monkeypatch):
     class FakeClient:
         def insert_record(self, record, *, collection_name):
