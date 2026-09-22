@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.metrics_store import MetricsStore
-from app.quality_summary import judge_quality_summary, summarize_quality_records
+from app.quality_summary import compact_agent_eval_metrics, judge_quality_summary, summarize_quality_records
 
 
 def main() -> None:
@@ -47,10 +47,12 @@ def main() -> None:
         store.upsert_metrics(result, record=record)
         verification = store.verify_metric_persisted(session_id, record["uuid"])
         saved = store.get_metrics(session_id) or {}
-        if not verification["verified"] or saved.get("quality_summary", {}).get("rates") != quality["rates"]:
+        compact = compact_agent_eval_metrics(quality)
+        if (not verification["verified"] or saved.get("quality_summary", {}).get("rates") != quality["rates"]
+                or saved.get("agentEvalMetrics") != compact):
             raise RuntimeError(f"MongoDB summary read-back failed: {session_id}: {verification}")
         print(json.dumps({"session_id": session_id, "status": "verified",
-                          "record_id": verification["record_id"], "rates": saved["quality_summary"]["rates"]},
+                          "record_id": verification["record_id"], "agentEvalMetrics": saved["agentEvalMetrics"]},
                          ensure_ascii=False))
 
 

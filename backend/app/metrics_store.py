@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
 
 from app.schematic_data_client import RATIONALITY_COLLECTION, SchematicDataClient
+from app.quality_summary import compact_agent_eval_metrics, flatten_agent_eval_metrics
 
 
 SESSION_METRICS_CHECK_TYPE = "agent_eval_session_metrics"
@@ -44,7 +45,8 @@ def _metric_document(record: Mapping[str, Any]) -> dict[str, Any] | None:
             return None
         if isinstance(record.get("agentEvalMetrics"), Mapping):
             result["agentEvalMetrics"] = dict(record["agentEvalMetrics"])
-            result["quality_summary"] = dict(record["agentEvalMetrics"])
+            if not isinstance(result.get("quality_summary"), Mapping):
+                result["quality_summary"] = dict(record["agentEvalMetrics"])
         result["session_id"] = str(result.get("session_id") or record.get("sessionId") or "")
         result["mongo_record_id"] = str(record.get("_id") or "") or None
         result["mongo_uuid"] = str(record.get("uuid") or "") or None
@@ -133,7 +135,7 @@ class MetricsStore:
             "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
         }
         if isinstance(result.get("quality_summary"), Mapping):
-            record["agentEvalMetrics"] = dict(result["quality_summary"])
+            record["agentEvalMetrics"] = compact_agent_eval_metrics(result["quality_summary"])
         return record
 
     def upsert_metrics(
@@ -237,7 +239,7 @@ class MetricsStore:
                     "task_type": metric.get("task_type"),
                     "task_category": metric.get("task_category"),
                     "task_subtype": metric.get("task_subtype"),
-                    "quality_rates": (metric.get("quality_summary") or {}).get("rates") or {},
+                    "quality_rates": flatten_agent_eval_metrics(metric.get("agentEvalMetrics") or metric.get("quality_summary") or {}),
                 }
         return result
 
@@ -256,7 +258,7 @@ class MetricsStore:
                 "task_type": metric.get("task_type"),
                 "task_category": metric.get("task_category"),
                 "task_subtype": metric.get("task_subtype"),
-                "quality_rates": (metric.get("quality_summary") or {}).get("rates") or {},
+                "quality_rates": flatten_agent_eval_metrics(metric.get("agentEvalMetrics") or metric.get("quality_summary") or {}),
             }
         return result
 

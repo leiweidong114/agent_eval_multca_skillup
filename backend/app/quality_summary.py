@@ -20,18 +20,17 @@ QUALITY_TYPES = (
 QUALITY_LABELS = {
     "hscope_diagram_lint": "框图规范检查",
     "hscope_block_corpus_check": "语料库覆盖",
-    "signal-interface-checker": "信号接口检查",
-    "tianshu-drc-review": "天枢 DRC 审查",
+    "signal-interface-checker": "信号接口列表检查",
+    "tianshu-drc-review": "天枢DRC审查",
 }
 DISPLAY_RATE_LABELS = {
     "hscope_diagram_lint": {"overall_pass_rate": "总检查通过率"},
     "hscope_block_corpus_check": {"coverage_rate": "语料覆盖率"},
-    "signal-interface-checker": {"pass_rate": "信号接口检查通过率"},
-    "tianshu-drc-review": {"drc_pass_rate": "DRC审查通过率"},
+    "signal-interface-checker": {"pass_rate": "信号接口列表检查通过率"},
+    "tianshu-drc-review": {"drc_pass_rate": "天枢DRC审查通过率"},
 }
 RATE_KEYS = {
     "signal-interface-checker": ("检查通过率", "总通过率", "pass_rate", "passRate", "success_rate", "successRate"),
-    "tianshu-drc-review": ("DRC审查通过率", "DRC 审查通过率", "DRC通过率", "drc_rate", "drcRate", "drc_pass_rate", "drcPassRate", "pass_rate", "passRate"),
 }
 
 
@@ -98,6 +97,15 @@ def _fraction(text: str, check_type: str) -> tuple[int, int] | None:
     return None
 
 
+def _signal_checks(text: str) -> tuple[int, int] | None:
+    """Count actual interface checks; BLOCK_INFO is contextual, not an item."""
+    checks = re.findall(r"^\s*(?:\[(?:INFO|WARN|ERROR)\]\s*)?([^\r\n:：]+)\s*[:：]\s*(不通过|未通过|失败|通过)\s*$", text, re.I | re.M)
+    outcomes = [outcome for name, outcome in checks if name.strip().upper() != "BLOCK_INFO"]
+    if not outcomes:
+        return None
+    return sum(outcome == "通过" for outcome in outcomes), len(outcomes)
+
+
 def extract_quality_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
     check_type = str(record.get("checkType") or "").strip()
     if check_type not in QUALITY_TYPES:
@@ -151,9 +159,15 @@ def extract_quality_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
             value = json.loads(text)
         except ValueError:
             value = text
-        keys = RATE_KEYS[check_type]
-        rate = _nested_rate(value, keys) if not isinstance(value, str) else _text_rate(text, keys)
-        fraction = _fraction(text, check_type)
+        if check_type == "tianshu-drc-review":
+            # DRC has one authoritative field; status/code/other rates are not substitutes.
+            drc_result = value.get("result") if isinstance(value, Mapping) else None
+            rate = _rate(drc_result.get("drc_rate")) if isinstance(drc_result, Mapping) else None
+            fraction = None
+        else:
+            keys = RATE_KEYS[check_type]
+            rate = _nested_rate(value, keys) if not isinstance(value, str) else _text_rate(text, keys)
+            fraction = _signal_checks(text) or _fraction(text, check_type)
         metric_key = "pass_rate" if check_type == "signal-interface-checker" else "drc_pass_rate"
         if fraction:
             passed, total = fraction
@@ -231,6 +245,32 @@ def summarize_quality_records(session_id: str, records: list[Mapping[str, Any]])
     }
 
 
+COMPACT_LINT_KEYS = (
+    "总检查通过率", "block缺少器件标识检查通过率", "wire源末端缺失检查通过率",
+    "port未属于block检查通过率", "port缺少name检查通过率",
+    "同名block的partGroup不一致检查通过率", "无连接的block检查通过率",
+)
+
+
+def compact_agent_eval_metrics(summary: Mapping[str, Any]) -> dict[str, dict[str, str | None]]:
+    """Only the approved four indicators are persisted in agentEvalMetrics."""
+    rates = summary.get("rates") or {}
+    return {
+        "框图规范检查": {key: rates.get(key) for key in COMPACT_LINT_KEYS},
+        "语料库覆盖": {"语料覆盖率": rates.get("语料覆盖率")},
+        "信号接口列表检查": {"信号接口列表检查通过率": rates.get("信号接口列表检查通过率")},
+        "天枢DRC审查": {"天枢DRC审查通过率": rates.get("天枢DRC审查通过率")},
+    }
+
+
+def flatten_agent_eval_metrics(value: Mapping[str, Any]) -> dict[str, str | None]:
+    """Read both the approved compact schema and older summary records."""
+    if isinstance(value.get("rates"), Mapping):
+        return dict(value["rates"])
+    return {str(key): rate for group in value.values() if isinstance(group, Mapping)
+            for key, rate in group.items()}
+
+
 def judge_quality_summary(
     records: list[Mapping[str, Any]], summary: Mapping[str, Any], *, employee_no: str | None = None
 ) -> dict[str, Any]:
@@ -254,7 +294,8 @@ def judge_quality_summary(
             '{"rates":{"中文指标名":"xx.xx%"},"evidence":{"中文指标名":"原文依据"},"warnings":[]}。'
             "hscope_diagram_lint：从有数字的六项检查通过数/总数计算六个检查通过率及总检查通过率；"
             "‘—’表示无数据，不计入分母。hscope_block_corpus_check：语料覆盖率=有数据数/总数。"
-            "signal-interface-checker：若只有二元结果，不通过=0%，通过=100%。"
+            "signal-interface-checker：逐项统计‘名称: 通过/不通过’，BLOCK_INFO 为上下文不计入检查项；"
+            "通过率=通过项/检查项，若只有二元结果，不通过=0%，通过=100%。"
             "tianshu-drc-review：优先读取 JSON 的 result.drc_rate。"
             "同类多条记录不要无分母平均；只报告证据充足的值。"
             f"\n规则提取值（请核对，不能盲从）：{json.dumps(expected, ensure_ascii=False)}"

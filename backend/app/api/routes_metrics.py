@@ -220,3 +220,21 @@ def metric_process(request: Request, session_id: str) -> dict[str, Any]:
     if result is None:
         raise HTTPException(status_code=404, detail="该会话没有已保存的计算过程；旧任务需重新计算")
     return result
+
+
+@router.get("/{session_id}/quality-records")
+def quality_records(request: Request, session_id: str) -> dict[str, Any]:
+    """Return complete original resultText for each quality record, never event previews."""
+    employee_from_request(request)
+    try:
+        records = MetricsStore().quality_records(session_id)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "session_id": session_id,
+        "count": len(records),
+        "records": [{"_id": str(row.get("_id") or ""), "uuid": row.get("uuid"),
+                     "checkType": str(row.get("checkType") or "").strip(),
+                     "createTime": row.get("createTime"), "resultText": row.get("resultText")}
+                    for row in records],
+    }

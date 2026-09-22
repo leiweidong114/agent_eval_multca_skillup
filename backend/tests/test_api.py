@@ -576,6 +576,23 @@ def test_completed_metric_process_can_be_loaded_by_session_id(monkeypatch):
     assert missing.status_code == 404
 
 
+def test_quality_records_endpoint_returns_each_full_result_text(monkeypatch):
+    long_report = "检查结果\n" * 1000
+
+    class FakeMetricsStore:
+        def quality_records(self, session_id):
+            assert session_id == "session-4"
+            return [{"_id": str(index), "checkType": kind, "resultText": long_report}
+                    for index, kind in enumerate(("hscope_diagram_lint", "hscope_block_corpus_check",
+                                                  "signal-interface-checker", "tianshu-drc-review"))]
+
+    monkeypatch.setattr("app.api.routes_metrics.MetricsStore", FakeMetricsStore)
+    response = client.get("/api/session-metrics/session-4/quality-records")
+    assert response.status_code == 200
+    assert response.json()["count"] == 4
+    assert all(record["resultText"] == long_report for record in response.json()["records"])
+
+
 def test_batch_rejects_duplicate_combinations_before_queueing():
     response = client.post(
         "/api/batches",
