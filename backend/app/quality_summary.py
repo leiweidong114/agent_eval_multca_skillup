@@ -1,0 +1,200 @@
+"""Extract auditable pass rates from every quality report for one session."""
+from __future__ import annotations
+
+import json
+import re
+from collections import defaultdict
+from typing import Any, Mapping
+
+from app.schematic_rationality_judge import extract_rationality_metrics
+
+
+QUALITY_TYPES = (
+    "hscope_diagram_lint",
+    "hscope_block_corpus_check",
+    "signal-interface-checker",
+    "tianshu-drc-review",
+)
+QUALITY_LABELS = {
+    "hscope_diagram_lint": "框图规范检查",
+    "hscope_block_corpus_check": "语料库覆盖",
+    "signal-interface-checker": "信号接口检查",
+    "tianshu-drc-review": "天枢 DRC 审查",
+}
+RATE_KEYS = {
+    "signal-interface-checker": ("检查通过率", "总通过率", "pass_rate", "passRate", "success_rate", "successRate"),
+    "tianshu-drc-review": ("DRC审查通过率", "DRC 审查通过率", "DRC通过率", "drc_pass_rate", "drcPassRate", "pass_rate", "passRate"),
+}
+
+
+def _rate(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(str(value).strip().rstrip("%"))
+    except (TypeError, ValueError):
+        return None
+    return round(number, 2) if 0 <= number <= 100 else None
+
+
+def _nested_rate(value: Any, keys: tuple[str, ...]) -> float | None:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if str(key).replace(" ", "").lower() in {name.replace(" ", "").lower() for name in keys}:
+                found = _rate(item)
+                if found is not None:
+                    return found
+        for item in value.values():
+            found = _nested_rate(item, keys)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _nested_rate(item, keys)
+            if found is not None:
+                return found
+    return None
+
+
+def _text_rate(text: str, keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        match = re.search(rf"{re.escape(key)}\s*[:：=]?\s*(\d+(?:\.\d+)?)\s*%", text, re.I)
+        if match:
+            return _rate(match.group(1))
+    return None
+
+
+def _fraction(text: str, check_type: str) -> tuple[int, int] | None:
+    prefix = r"(?:检查|检验|审查|通过|合格|成功)" if check_type == "signal-interface-checker" else r"(?:DRC|审查|检查|通过|合格)"
+    patterns = (
+        rf"{prefix}[^\n]{{0,35}}?(?:通过|合格|成功)[^\n]{{0,10}}?(\d+)\s*/\s*(\d+)",
+        rf"{prefix}[^\n]{{0,35}}?(\d+)\s*/\s*(\d+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            passed, total = map(int, match.groups())
+            if 0 <= passed <= total and total > 0:
+                return passed, total
+    return None
+
+
+def extract_quality_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    check_type = str(record.get("checkType") or "").strip()
+    if check_type not in QUALITY_TYPES:
+        return None
+    text = str(record.get("resultText") or "")
+    source_id = str(record.get("_id") or record.get("uuid") or "")
+    item: dict[str, Any] = {
+        "source_id": source_id,
+        "check_type": check_type,
+        "create_time": record.get("createTime"),
+        "status": "parsed",
+        "rates": {},
+        "counts": {},
+    }
+    if check_type == "hscope_diagram_lint":
+        metrics = extract_rationality_metrics(record)["metrics"]
+        dimensions = metrics.get("dimension_success_rates") or []
+        for dimension in dimensions:
+            label = str(dimension.get("label") or dimension.get("key") or "").strip().replace(".", "．")
+            rate = _rate(dimension.get("success_rate"))
+            if label and rate is not None:
+                item["rates"][label] = rate
+                if isinstance(dimension.get("passed"), int) and isinstance(dimension.get("total"), int):
+                    item["counts"][label] = {"passed": dimension["passed"], "total": dimension["total"]}
+        overall = _rate(metrics.get("overall_success_rate"))
+        if item["counts"]:
+            passed = sum(value["passed"] for value in item["counts"].values())
+            total = sum(value["total"] for value in item["counts"].values())
+            item["rates"]["overall_pass_rate"] = round(passed / total * 100, 2) if total else None
+            item["counts"]["overall_pass_rate"] = {"passed": passed, "total": total}
+        elif overall is not None:
+            item["rates"]["overall_pass_rate"] = overall
+        item["source_possibly_truncated"] = bool(metrics.get("source_possibly_truncated"))
+    elif check_type == "hscope_block_corpus_check":
+        metrics = extract_rationality_metrics(record)["metrics"]
+        coverage = _rate(metrics.get("coverage_rate"))
+        if coverage is None:
+            try:
+                value = json.loads(text)
+            except ValueError:
+                value = text
+            coverage = _nested_rate(value, ("coverage_rate", "coverageRate", "语料库覆盖率")) or _text_rate(text, ("语料库覆盖率",))
+        total, covered = metrics.get("block_count"), metrics.get("covered_count")
+        if isinstance(total, int) and isinstance(covered, int) and total > 0 and 0 <= covered <= total:
+            coverage = round(covered / total * 100, 2)
+            item["counts"]["coverage_rate"] = {"passed": covered, "total": total}
+        if coverage is not None:
+            item["rates"]["coverage_rate"] = coverage
+    else:
+        try:
+            value = json.loads(text)
+        except ValueError:
+            value = text
+        keys = RATE_KEYS[check_type]
+        rate = _nested_rate(value, keys) if not isinstance(value, str) else _text_rate(text, keys)
+        fraction = _fraction(text, check_type)
+        metric_key = "pass_rate" if check_type == "signal-interface-checker" else "drc_pass_rate"
+        if fraction:
+            passed, total = fraction
+            rate = round(passed / total * 100, 2)
+            item["counts"][metric_key] = {"passed": passed, "total": total}
+        if rate is not None:
+            item["rates"][metric_key] = rate
+    if not item["rates"]:
+        item["status"] = "no_rate_found"
+    return item
+
+
+def summarize_quality_records(session_id: str, records: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Never count platform-generated summaries as input evidence."""
+    items = [item for record in records if (item := extract_quality_record(record)) is not None]
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in items:
+        groups[item["check_type"]].append(item)
+    results: dict[str, Any] = {}
+    flat_rates: dict[str, float | None] = {}
+    for check_type in QUALITY_TYPES:
+        entries = groups.get(check_type, [])
+        counts: dict[str, dict[str, int]] = defaultdict(lambda: {"passed": 0, "total": 0})
+        rate_only: dict[str, list[float]] = defaultdict(list)
+        for entry in entries:
+            for key, rate in entry["rates"].items():
+                source_count = entry["counts"].get(key)
+                if source_count and source_count["total"] > 0:
+                    counts[key]["passed"] += source_count["passed"]
+                    counts[key]["total"] += source_count["total"]
+                elif rate is not None:
+                    rate_only[key].append(rate)
+        rates: dict[str, float | None] = {}
+        for key in set(counts) | set(rate_only):
+            if counts[key]["total"]:
+                rates[key] = round(counts[key]["passed"] / counts[key]["total"] * 100, 2)
+            elif len(rate_only[key]) == 1:
+                rates[key] = rate_only[key][0]
+            else:
+                rates[key] = None  # Equal averaging percentages without denominators is invalid.
+        if check_type == "hscope_diagram_lint" and counts:
+            # Keep older rate-only reports in `records`, but never blend their
+            # possibly different check definitions with count-backed reports.
+            rates = {key: value for key, value in rates.items() if key in counts}
+        status = "no_record" if not entries else "parsed" if rates else "no_rate_found"
+        results[check_type] = {
+            "label": QUALITY_LABELS[check_type],
+            "status": status,
+            "record_count": len(entries),
+            "rates": rates,
+            "counts": dict(counts),
+            "records": entries,
+        }
+        for key, rate in rates.items():
+            # Spring Data's MongoDB converter rejects dots in map keys.
+            flat_rates[f"{check_type}__{key}"] = rate
+    return {
+        "session_id": session_id,
+        "status": "completed" if items else "no_record",
+        "source_record_count": len(items),
+        "by_check_type": results,
+        "rates": flat_rates,
+    }

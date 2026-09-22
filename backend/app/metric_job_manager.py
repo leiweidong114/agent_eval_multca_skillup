@@ -11,6 +11,7 @@ from agent_eval.database import get_conversation
 from agent_eval.model_config import resolve_config_secret
 from app.config import BACKEND_ROOT
 from app.metrics_store import MetricsStore, SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE
+from app.quality_summary import summarize_quality_records
 from app.schematic_rationality_judge import extract_rationality_metrics, judge_rationality_result
 from app.session_metrics import calculate_rule_metrics
 from app.session_metric_judge import judge_session_metrics
@@ -516,6 +517,27 @@ class MetricJobManager:
                             outcome="success",
                             output=_rationality_analysis_summary(result["schematic_rationality"]),
                         )
+                # The session quality summary reads every original checkType record,
+                # including repeated reports of the same type. No source is changed.
+                try:
+                    quality_records = store.quality_records(session_id)
+                    result["quality_summary"] = summarize_quality_records(session_id, quality_records)
+                    with self._lock:
+                        self._append_event(
+                            job, "quality_summary_completed", "四类质量检查记录已逐条提取并汇总",
+                            session_id=session_id, outcome="success",
+                            output={"source_records": [
+                                _rationality_record_summary(item) for item in quality_records
+                            ], "quality_summary": result["quality_summary"]},
+                        )
+                        self._save(job, store)
+                except Exception as exc:
+                    result["quality_summary"] = {"session_id": session_id, "status": "source_unavailable",
+                                                 "error": str(exc), "by_check_type": {}, "rates": {}}
+                    with self._lock:
+                        self._append_event(job, "quality_summary_failed", "质量指标汇总查询失败",
+                                           session_id=session_id, outcome="warning", detail=str(exc))
+                        self._save(job, store)
                 # The full-session Judge intentionally runs after the external
                 # rationality lookup/analysis, making it the sixth visible step.
                 # It still evaluates the LiteLLM conversation evidence only;
@@ -566,31 +588,28 @@ class MetricJobManager:
                 metric_record = store.build_metrics_record(result)
                 metric_record_audit = _metric_record_for_audit(metric_record)
                 source = result.get("schematic_rationality") or {}
-                update_source = str(source.get("check_type") or "").strip() in {
-                    "hscope_diagram_lint", "hscope_block_corpus_check"
-                }
-                persist_method = "PUT" if update_source else "POST"
-                persist_endpoint = store.update_endpoint() if update_source else store.write_endpoint()
+                persist_method = "POST"
+                persist_endpoint = store.write_endpoint()
                 with self._lock:
                     job["phase"] = "saving_metrics"
                     self._append_event(
                         job,
                         "saving_metrics",
-                        "正在更新 MongoDB 原始会话指标" if update_source else "正在调用 Java 插入接口写入 MongoDB 会话指标",
+                        "正在调用 Java 插入接口写入 MongoDB 会话指标汇总",
                         session_id=session_id,
                         input={
                             "collectionName": "HDschematicRationalityCollection",
                             "record": metric_record_audit,
-                            "source_check_type": source.get("check_type") if update_source else None,
-                            "target_field": "agentEvalMetrics" if update_source else None,
+                            "source_check_type": source.get("check_type"),
+                            "target_field": "agentEvalMetrics",
                         },
                         interface={
                             "method": persist_method,
                             "endpoint": persist_endpoint,
                             "collection": "HDschematicRationalityCollection",
                             "session_id": session_id,
-                            "check_type": source.get("check_type") if update_source else "agent_eval_session_metrics",
-                            "target_field": "agentEvalMetrics" if update_source else "resultText",
+                            "check_type": "agent_eval_session_metrics",
+                            "target_field": "agentEvalMetrics",
                             "status": "calling",
                         },
                         outcome="running",
@@ -620,8 +639,8 @@ class MetricJobManager:
                                 "endpoint": persist_endpoint,
                                 "collection": "HDschematicRationalityCollection",
                                 "session_id": session_id,
-                                "check_type": source.get("check_type") if update_source else "agent_eval_session_metrics",
-                                "target_field": "agentEvalMetrics" if update_source else "resultText",
+                                "check_type": "agent_eval_session_metrics",
+                                "target_field": "agentEvalMetrics",
                                 "status": "failed",
                                 "calls": store.write_diagnostics(),
                                 "read_back_verification": read_back_verification,
@@ -635,15 +654,15 @@ class MetricJobManager:
                     self._append_event(
                         job,
                         "schematic_data_insert_succeeded",
-                        "Java 更新成功并通过 MongoDB 写后回读验证" if update_source else "Java 插入成功并通过 MongoDB 写后回读验证",
+                        "Java 插入成功并通过 MongoDB 写后回读验证",
                         session_id=session_id,
                         interface={
                             "method": persist_method,
                             "endpoint": persist_endpoint,
                             "collection": "HDschematicRationalityCollection",
                             "session_id": session_id,
-                            "check_type": source.get("check_type") if update_source else "agent_eval_session_metrics",
-                            "target_field": "agentEvalMetrics" if update_source else "resultText",
+                            "check_type": "agent_eval_session_metrics",
+                            "target_field": "agentEvalMetrics",
                             "status": "success",
                             "calls": store.write_diagnostics(),
                             "response": _insert_response_summary(insert_response),
@@ -659,6 +678,7 @@ class MetricJobManager:
                             "task_type": result.get("task_type"),
                             "metrics": result.get("metrics"),
                             "schematic_rationality": _rationality_analysis_summary(result.get("schematic_rationality")),
+                            "quality_summary": result.get("quality_summary"),
                         },
                     )
                     job["completed"] += 1

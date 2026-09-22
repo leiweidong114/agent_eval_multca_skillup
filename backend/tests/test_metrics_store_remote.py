@@ -112,7 +112,7 @@ def test_completed_process_trace_round_trip_and_rationality_exclusion():
     assert count == 0
 
 
-def test_quality_metrics_and_process_update_source_without_new_documents():
+def test_quality_metrics_and_process_are_new_documents_without_mutating_source():
     client = FakeClient()
     source = {"_id": "mongo-source", "sessionId": "session-1",
               "checkType": "hscope_block_corpus_check  ", "status": "pending", "resultText": "语料库覆盖率: 75.0%"}
@@ -121,14 +121,17 @@ def test_quality_metrics_and_process_update_source_without_new_documents():
     store._client = client
     result = {"session_id": "session-1", "status": "completed", "end_user": "100001",
               "task_type": "other", "metric_definition_version": "v1", "metrics": {},
-              "schematic_rationality": {"check_type": "hscope_block_corpus_check"}}
+              "schematic_rationality": {"check_type": "hscope_block_corpus_check"},
+              "quality_summary": {"session_id": "session-1", "rates": {"hscope_block_corpus_check__coverage_rate": 75}}}
     record = store.build_metrics_record(result)
     response = store.upsert_metrics(result, record=record)
-    assert response["status"] == "updated"
-    assert len(client.records) == 1
+    assert response["status"] == "inserted"
+    assert len(client.records) == 2
+    assert "agentEvalMetrics" not in source
+    assert client.records[1]["agentEvalMetrics"]["rates"]["hscope_block_corpus_check__coverage_rate"] == 75
     assert store.verify_metric_persisted("session-1", record["uuid"])["verified"] is True
     assert store.get_metrics("session-1")["schematic_rationality"]["check_type"] == "hscope_block_corpus_check"
     store.save_process_trace({"job_id": "job-1", "events": [
         {"session_id": "session-1", "stage": "session_completed"}]}, "session-1")
-    assert len(client.records) == 1
+    assert len(client.records) == 3
     assert store.get_process_trace("session-1")["job_id"] == "job-1"

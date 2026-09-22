@@ -108,6 +108,7 @@ def sessions(
             item["metric_status"] = metric.get("status") if metric else "not_calculated"
             item["metric_calculated_at"] = metric.get("calculated_at") if metric else None
             item["metric_definition_version"] = metric.get("metric_definition_version") if metric else None
+            item["quality_rates"] = metric.get("quality_rates") if metric else {}
         result["metric_status_filter"] = metric_status
         result["cache"] = "miss"
         set_cached_json(key, result, ttl_seconds=60)

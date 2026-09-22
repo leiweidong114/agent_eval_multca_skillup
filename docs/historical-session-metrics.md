@@ -4,10 +4,9 @@
 
 “历史会话指标计算”默认查询最近 24 小时的 LiteLLM 普通会话。LiteLLM PostgreSQL
 仍是模型交互事实源。计算完成的衍生指标通过 Java HTTP 接口写入 MongoDB 的
-`HDschematicRationalityCollection`，使用原会话 `sessionId` 关联。对于
-`hscope_diagram_lint` 和 `hscope_block_corpus_check`，指标和过程分别更新到原始文档的
-`agentEvalMetrics`、`agentEvalProcess` 字段，不增加文档。其他任务沿用独立的
-`agent_eval_session_metrics` 和 `agent_eval_metric_process` 记录。
+`HDschematicRationalityCollection`，使用原会话 `sessionId` 关联。原始质量报告保持不变；
+每次计算新增一条 `agent_eval_session_metrics` 汇总记录，其 `agentEvalMetrics` 字段
+保存四类质量检查的汇总 JSON。计算过程另存为 `agent_eval_metric_process` 记录。
 项目本地不再保存 SQLite 指标数据库；旧版本完成的计算若没有过程记录，需重新计算才能回看。
 
 原理图合理性分析记录不由评测后端直连 MongoDB。后端通过 HTTP 查询接口读取
@@ -113,27 +112,38 @@ curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
 
 规则代码计算工具/脚本调用成功率、Skill 步骤完成度、错误与重试。Worker 还会按根
 `sessionId`（兼容评测运行 ID）从
-`HDschematicRationalityCollection` 按 `sessionId` 精确匹配，排除平台自身的指标与过程记录后读取最新记录；不以原始记录的 `status` 作为筛选条件。查不到时，页面提示
+`HDschematicRationalityCollection` 按 `sessionId` 精确匹配，排除平台自身的指标与过程记录后读取四类质量报告的全部记录；不以原始记录的 `status` 作为筛选条件。查不到时，页面提示
 “当前会话暂无统计原理图生成轨迹指标”。
 
 `resultText` 按 `checkType` 路由分析：
 
-- `hscope_diagram_lint`：JSON 报告提取总成功率和六项成功率；Markdown 报告按图页和检查项提取
-  通过数、总数及加权成功率。源报告疑似截断时仅报告已观察部分，不能称作全工程总分。
+- `hscope_diagram_lint`：JSON 报告提取总通过率和六项通过率；Markdown 报告按图页和检查项提取
+  通过数、总数及加权通过率。若原文在上游被截取，则按实际读到的 `resultText` 计算，并在逐条结果保留截取标志。
 - `hscope_block_corpus_check`（容忍末尾空格）：提取图页、Block、编码数量、语料库覆盖率及缺失编码。
-  Judge LLM 用中文解释，不能改写脚本已提取的数值。
-- 其他类型：沿用通用原理图质量 schema，JSON 中的显式数值优先，Judge 只补充缺失
-  指标和中文说明。
+  覆盖率优先由已覆盖数 / 总数计算。
+- `signal-interface-checker`：提取检查通过率；`tianshu-drc-review`：提取 DRC 审查通过率。
+  支持显式 JSON 百分比和文本百分比；有通过数/总数时以计数为准。
+
+同一类型出现多条报告时，只有具备分子的报告参与加权汇总；缺失分母的多个百分比不会被简单平均。
+逐条结果仍保存在汇总 JSON 的 `by_check_type.*.records` 内。未发现某类型时标记 `no_record`。
+`agentEvalMetrics.rates` 使用不含句点的稳定键（如 `hscope_diagram_lint__overall_pass_rate`），
+避免 Spring Data MongoDB 拒绝包含句点的映射键。历史会话列表显示主要累计指标；
+“查看指标”弹窗显示完整指标卡片和汇总 JSON。
 
 固定数值不直接交给 LLM 提取，是为了保证重复计算结果一致，并避免模型漏项、改值或
 把 `0.9` 与 `90%` 混淆。提取不满总计7项时，详情页会保留已提取结果并显示结构告警。
 启用 LLM Judge 时，每条会话首先把时间最早请求中的第一条 `user` Prompt 单独送入分类 Judge，分类
 只依据用户原始意图，不读取 Agent 后续执行结果。分类结果随完整指标 JSON 写回 MongoDB。
-上述两类质量源记录通过 Java `PUT /update` 将 `agentEvalMetrics` 和 `agentEvalProcess`
-按 `sessionId + checkType` 更新该类型最新的已有文档，无需源文档 `uuid`；不新增指标或过程文档，不修改原始 `resultText`。
-其他类型保留旧的插入流程。
-Java 服务源码已随项目放在 `services/schematic-data-service/`，新环境需要用 JDK 21 与
-Maven 构建并部署该版本；旧版 Java 服务只有查询和插入接口，会使这两类原位更新明确失败。
+所有类型统一使用 Java `POST /insert` 新增汇总和过程文档，不修改原始 `resultText` 或原始记录。
+Java 服务源码在同级 `原理图_java/`；新环境需要部署支持查询和插入的版本。
+重复计算会产生新的汇总版本，详情接口以最新 `createTime` 为准。
+
+可在 `backend/` 目录用下列脚本对指定 Session 先预览，确认后加 `--apply` 写入并回读：
+
+```powershell
+.\.runtime\windows\python\Scripts\python.exe tests\live\rebuild_quality_summaries.py 会话ID
+.\.runtime\windows\python\Scripts\python.exe tests\live\rebuild_quality_summaries.py 会话ID --apply
+```
 
 分类枚举如下：
 

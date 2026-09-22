@@ -34,6 +34,22 @@ def _parse_time(value: Any) -> datetime | None:
 
 
 def _metric_document(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    if str(record.get("checkType") or "").strip() == SESSION_METRICS_CHECK_TYPE:
+        value = record.get("resultText")
+        try:
+            result = dict(value) if isinstance(value, Mapping) else json.loads(str(value or ""))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(result, dict):
+            return None
+        if isinstance(record.get("agentEvalMetrics"), Mapping):
+            result["agentEvalMetrics"] = dict(record["agentEvalMetrics"])
+            result["quality_summary"] = dict(record["agentEvalMetrics"])
+        result["session_id"] = str(result.get("session_id") or record.get("sessionId") or "")
+        result["mongo_record_id"] = str(record.get("_id") or "") or None
+        result["mongo_uuid"] = str(record.get("uuid") or "") or None
+        result["updated_at"] = record.get("createTime") or result.get("calculated_at")
+        return result
     embedded = record.get("agentEvalMetrics")
     if isinstance(embedded, Mapping):
         result = dict(embedded)
@@ -41,23 +57,7 @@ def _metric_document(record: Mapping[str, Any]) -> dict[str, Any] | None:
         result["mongo_record_id"] = str(record.get("_id") or "") or None
         result["mongo_uuid"] = str(record.get("uuid") or "") or None
         return result
-    if str(record.get("checkType") or "") != SESSION_METRICS_CHECK_TYPE:
-        return None
-    value = record.get("resultText")
-    if isinstance(value, Mapping):
-        result = dict(value)
-    else:
-        try:
-            result = json.loads(str(value or ""))
-        except (TypeError, ValueError):
-            return None
-    if not isinstance(result, dict):
-        return None
-    result["session_id"] = str(result.get("session_id") or record.get("sessionId") or "")
-    result["mongo_record_id"] = str(record.get("_id") or "") or None
-    result["mongo_uuid"] = str(record.get("uuid") or "") or None
-    result["updated_at"] = record.get("createTime") or result.get("calculated_at")
-    return result
+    return None
 
 
 def _latest_metric(records: Iterable[Mapping[str, Any]]) -> dict[str, Any] | None:
@@ -119,7 +119,7 @@ class MetricsStore:
         session_id = str(result["session_id"])
         now = datetime.now(timezone.utc)
         document = {**result, "session_id": session_id, "updated_at": now}
-        return {
+        record = {
             "uuid": uuid.uuid4().hex,
             "status": "completed",
             "createUser": str(result.get("end_user") or "agent-eval"),
@@ -132,6 +132,9 @@ class MetricsStore:
             "sessionId": session_id,
             "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
         }
+        if isinstance(result.get("quality_summary"), Mapping):
+            record["agentEvalMetrics"] = dict(result["quality_summary"])
+        return record
 
     def upsert_metrics(
         self,
@@ -143,16 +146,6 @@ class MetricsStore:
         client = self._data_client()
         if hasattr(client, "clear_diagnostics"):
             client.clear_diagnostics()
-        source = result.get("schematic_rationality") or {}
-        if str(source.get("check_type") or source.get("analysis_type") or "").strip() in {
-            "hscope_diagram_lint", "hscope_block_corpus_check"
-        }:
-            check_type = str(source.get("check_type") or source.get("analysis_type") or "").strip()
-            document = json.loads(str(record["resultText"]))
-            document["uuid"] = str(record["uuid"])
-            return client.update_record(session_id=str(result["session_id"]), check_type=check_type,
-                                        field="agentEvalMetrics", value=document,
-                                        collection_name=RATIONALITY_COLLECTION)
         return client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
 
     def verify_metric_persisted(
@@ -244,6 +237,7 @@ class MetricsStore:
                     "task_type": metric.get("task_type"),
                     "task_category": metric.get("task_category"),
                     "task_subtype": metric.get("task_subtype"),
+                    "quality_rates": (metric.get("quality_summary") or {}).get("rates") or {},
                 }
         return result
 
@@ -262,6 +256,7 @@ class MetricsStore:
                 "task_type": metric.get("task_type"),
                 "task_category": metric.get("task_category"),
                 "task_subtype": metric.get("task_subtype"),
+                "quality_rates": (metric.get("quality_summary") or {}).get("rates") or {},
             }
         return result
 
@@ -328,6 +323,17 @@ class MetricsStore:
     def get_metrics(self, session_id: str) -> dict[str, Any] | None:
         return _latest_metric(self._records_for([session_id]))
 
+    def quality_records(self, session_id: str) -> list[dict[str, Any]]:
+        """Fetch every original quality report for one exact Session ID."""
+        from app.quality_summary import QUALITY_TYPES
+
+        client = self._data_client()
+        try:
+            rows = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
+        except TypeError:
+            rows = client.find_records(RATIONALITY_COLLECTION, [session_id])
+        return [row for row in rows if str(row.get("checkType") or "").strip() in QUALITY_TYPES]
+
     def save_process_trace(self, job: Mapping[str, Any], session_id: str) -> dict[str, Any]:
         """Persist one session's completed pipeline alongside its metric record."""
         events = [
@@ -367,21 +373,6 @@ class MetricsStore:
             "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
         }
         client = self._data_client()
-        source, _, _ = self.latest_rationality_analysis(session_id)
-        if source and str(source.get("checkType") or "").strip() in {"hscope_diagram_lint", "hscope_block_corpus_check"}:
-            client.update_record(session_id=session_id, check_type=str(source.get("checkType") or "").strip(),
-                                 field="agentEvalProcess", value=json.loads(record["resultText"]),
-                                 collection_name=RATIONALITY_COLLECTION)
-            try:
-                read_back = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
-            except TypeError:
-                read_back = client.find_records(RATIONALITY_COLLECTION, [session_id])
-            if not any(str(item.get("checkType") or "").strip() == str(source.get("checkType") or "").strip()
-                       and isinstance(item.get("agentEvalProcess"), Mapping)
-                       and item["agentEvalProcess"].get("job_id") == document["job_id"]
-                       for item in read_back):
-                raise RuntimeError("计算过程更新接口返回成功，但 MongoDB 回读未找到本次过程")
-            return document
         client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
         try:
             read_back = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
