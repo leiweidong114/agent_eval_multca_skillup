@@ -62,6 +62,8 @@ def test_composes_all_four_pipeline_skills(tmp_path):
 
     content = (bundle / "SKILL.md").read_text(encoding="utf-8")
     assert all(name in content for name in cli.SCHEMATIC_PIPELINE_SKILLS)
+    assert ".agents/skills/" not in content
+    assert "<bundle-name>" in content
     assert len(list((bundle / "skills").iterdir())) == 4
 
 

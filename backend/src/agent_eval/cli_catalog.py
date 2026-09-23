@@ -114,6 +114,7 @@ def compose_skill_bundle(
     """Create a deterministic local bundle containing all selected Skills."""
     sources: list[tuple[str, Path]] = []
     digest = hashlib.sha256()
+    digest.update(b"schematic-pipeline-bundle-v3\0")
     for name in skill_names:
         source = (backend_root / "skills" / name).resolve()
         if not (source / "SKILL.md").is_file():
@@ -164,11 +165,12 @@ def compose_skill_bundle(
         "",
         "## Execution contract",
         "",
-        "- Resolve this bundle at `.agents/skills/" + bundle_name + "` from the workspace root.",
+        "- Resolve this bundle from the agent-specific installed path recorded by the evaluator;",
+        "  the evaluator rewrites `<bundle-name>` below to that exact path before execution.",
         "- The shell is PowerShell on Windows. Use `Get-ChildItem`, `New-Item -ItemType Directory`",
         "  and Python commands; do not use `ls -la`, `find`, `head`, or `mkdir -p`.",
         "- Never `cd` into the bundle or a `scripts` directory. Stay at the workspace root,",
-        "  set `$bundleRoot = (Resolve-Path '.agents/skills/" + bundle_name + "').Path`, and",
+        "  set `$bundleRoot = (Resolve-Path '<bundle-name>').Path`, and",
         "  invoke scripts as `python \"$bundleRoot/skills/<child>/scripts/<script>.py\"` while",
         "  passing workspace-relative artifact paths such as `out/catalog.json`. A script",
         "  output path outside the workspace is an error and must not be used.",

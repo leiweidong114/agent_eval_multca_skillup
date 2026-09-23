@@ -94,6 +94,64 @@ def _copy_skill(source: Path, target: Path) -> None:
         ) from exc
 
 
+def _prepare_staged_skill(
+    staged_skill: Path,
+    *,
+    source_skill: Path,
+    agent: str,
+    selected_skills: list[str],
+) -> dict[str, Any]:
+    """Make bundled instructions match the actual agent install target and verify the copy."""
+    installed_target = skill_target(agent, source_skill.name).replace("\\", "/")
+    rewritten: list[str] = []
+    for skill_md in staged_skill.rglob("SKILL.md"):
+        text = skill_md.read_text(encoding="utf-8")
+        updated = text.replace(".agents/skills/<bundle-name>", installed_target)
+        updated = updated.replace(f".agents/skills/{source_skill.name}", installed_target)
+        updated = updated.replace("<bundle-name>", installed_target)
+        if updated != text:
+            skill_md.write_text(updated, encoding="utf-8")
+            rewritten.append(skill_md.relative_to(staged_skill).as_posix())
+    copied_files = sorted(
+        path.relative_to(staged_skill).as_posix()
+        for path in staged_skill.rglob("*") if path.is_file()
+    )
+    missing_skill_docs = [
+        name for index, name in enumerate(selected_skills, start=1)
+        if not (staged_skill / "skills" / f"{index:02d}-{_slug(name)}" / "SKILL.md").is_file()
+    ] if len(selected_skills) > 1 else []
+    if missing_skill_docs:
+        raise EvaluationInfrastructureError(
+            "Skill staging verification failed; missing bundled SKILL.md: "
+            + ", ".join(missing_skill_docs),
+            category="skill_staging_failed",
+            retryable=False,
+        )
+    manifest = {
+        "source": str(source_skill),
+        "staged_path": str(staged_skill),
+        "installed_target": installed_target,
+        "selected_skills": selected_skills,
+        "file_count": len(copied_files),
+        "skill_md_count": sum(path.endswith("/SKILL.md") or path == "SKILL.md" for path in copied_files),
+        "rewritten_skill_docs": rewritten,
+        "verified": True,
+    }
+    (staged_skill.parent / "skill-staging-manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return manifest
+
+
+def _configure_skillup_workspace(env: dict[str, str], result_root: Path) -> Path:
+    """Keep Skill-Up's ephemeral workspaces under the configured short run path."""
+    temp_root = result_root / "runtime" / "skill-up-temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    for name in ("TEMP", "TMP", "TMPDIR"):
+        env[name] = str(temp_root)
+    return temp_root
+
+
 class EvaluationCancelled(RuntimeError):
     pass
 
@@ -497,6 +555,12 @@ def run_evaluation(
         raise FileExistsError(f"Task output already exists: {canonical_task_id}")
     staged_skill = result_root / "staging" / "skill"
     _copy_skill(source_skill, staged_skill)
+    skill_staging = _prepare_staged_skill(
+        staged_skill,
+        source_skill=source_skill,
+        agent=agent,
+        selected_skills=selected_skills,
+    )
     skill_quality = evaluate_skill_quality(source_skill)
     cases_dir = staged_skill / "evals" / "cases"
     cases_dir.mkdir(parents=True, exist_ok=True)
@@ -547,6 +611,7 @@ def run_evaluation(
     output = result_root / "skill-up"
     env = os.environ.copy()
     env.update(resolved_profile.environment)
+    skillup_workspace_root = _configure_skillup_workspace(env, result_root)
     if resolved_profile.api_base and agent == "codex":
         # Do not inherit the operator's global Codex plugins/MCP servers into an
         # evaluation. They add unrelated tools and can consume most of a model's
@@ -619,6 +684,8 @@ def run_evaluation(
             "provider_model": provider_model,
             "skill": str(source_skill),
             "skills": selected_skills,
+            "skill_staging": skill_staging,
+            "skillup_workspace_root": str(skillup_workspace_root),
             "evaluation_type": evaluation_type,
             "evaluation": {
                 "evaluator_id": evaluator.id,
@@ -1059,6 +1126,8 @@ def run_evaluation(
         "gateway_model": gateway_model,
         "skill": str(source_skill),
         "skills": selected_skills,
+        "skill_staging": skill_staging,
+        "skillup_workspace_root": str(skillup_workspace_root),
         "evaluation_type": evaluation_type,
         "evaluation": {
             "evaluator_id": evaluator.id,

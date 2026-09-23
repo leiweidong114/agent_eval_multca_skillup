@@ -8,8 +8,10 @@ import pytest
 
 from agent_eval.runner import (
     EvaluationCancelled,
+    _configure_skillup_workspace,
     _copy_skill,
     _execute_process,
+    _prepare_staged_skill,
     aggregate_scores,
     attach_session_evidence,
     build_eval_config,
@@ -67,6 +69,43 @@ def test_copy_skill_supports_deep_destination(tmp_path):
         assert len(str(copied)) >= 260
     _copy_skill(source, target)
     assert filesystem_path(copied).read_text(encoding="utf-8") == "rule content"
+
+
+def test_staged_bundle_uses_actual_agent_skill_root_and_writes_manifest(tmp_path):
+    source = tmp_path / "schematic-pipeline-bundle-test"
+    child = source / "skills" / "01-schematic-pipeline"
+    child.mkdir(parents=True)
+    (source / "SKILL.md").write_text(
+        "resolve .agents/skills/schematic-pipeline-bundle-test\n", encoding="utf-8"
+    )
+    (child / "SKILL.md").write_text(
+        "resolve .agents/skills/<bundle-name>\n", encoding="utf-8"
+    )
+    staged = tmp_path / "run" / "staging" / "skill"
+    _copy_skill(source, staged)
+
+    manifest = _prepare_staged_skill(
+        staged, source_skill=source, agent="openclaw",
+        selected_skills=["schematic-pipeline"],
+    )
+
+    assert manifest["installed_target"] == "skills/schematic-pipeline-bundle-test"
+    assert manifest["verified"] is True
+    assert "skills/schematic-pipeline-bundle-test" in (staged / "SKILL.md").read_text(encoding="utf-8")
+    assert "skills/schematic-pipeline-bundle-test" in (child_md := staged / "skills" / "01-schematic-pipeline" / "SKILL.md").read_text(encoding="utf-8")
+    assert "<bundle-name>" not in child_md.read_text(encoding="utf-8")
+    assert child_md.is_file()
+    assert (staged.parent / "skill-staging-manifest.json").is_file()
+
+
+def test_skillup_temp_workspace_is_scoped_to_run_directory(tmp_path):
+    env = {"TEMP": "old", "TMP": "old"}
+    result_root = tmp_path / "runs" / "one"
+    configured = _configure_skillup_workspace(env, result_root)
+
+    assert configured == result_root / "runtime" / "skill-up-temp"
+    assert configured.is_dir()
+    assert env["TEMP"] == env["TMP"] == env["TMPDIR"] == str(configured)
 
 
 def test_negative_control_failure_is_scored_evidence_not_runtime_failure():
