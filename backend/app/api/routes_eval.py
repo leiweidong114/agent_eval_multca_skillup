@@ -4,9 +4,9 @@ import hashlib
 import json
 import re
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field, model_validator
 
 from agent_eval.runner import run_evaluation
@@ -26,14 +26,29 @@ from app.skill_registry import compose_skills, resolve_skill
 
 router = APIRouter(prefix="/api", tags=["eval"])
 
-MAX_EVALUATION_INPUT_FILES = 20
+MAX_EVALUATION_INPUT_FILES = 500
 MAX_EVALUATION_INPUT_BYTES = 25 * 1024 * 1024
+MAX_EVALUATION_INPUT_TOTAL_BYTES = 500 * 1024 * 1024
 UPLOAD_ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 
 
 class EvaluationInputRef(BaseModel):
     upload_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     filename: str = Field(min_length=1, max_length=255)
+    relative_path: str = Field(min_length=1, max_length=1000)
+
+
+def _safe_relative_upload_path(value: str) -> str:
+    normalized = value.replace("\\", "/").strip("/")
+    path = PurePosixPath(normalized)
+    if (
+        not normalized
+        or path.is_absolute()
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or len(path.parts) < 2
+    ):
+        raise ValueError("上传内容必须来自一个文件夹，且相对路径不能越界")
+    return path.as_posix()
 
 
 def _resolve_evaluation_inputs(
@@ -59,12 +74,16 @@ def _resolve_evaluation_inputs(
             raise ValueError("Uploaded evaluation input belongs to another user")
         if manifest.get("filename") != reference.filename:
             raise ValueError("Uploaded evaluation input filename does not match its manifest")
+        relative_path = _safe_relative_upload_path(reference.relative_path)
+        if manifest.get("relative_path") != relative_path:
+            raise ValueError("Uploaded evaluation input path does not match its manifest")
         payload = upload_dir / "payload"
         if not payload.is_file():
             raise FileNotFoundError(f"Uploaded evaluation input is incomplete: {reference.filename}")
         resolved.append({
             "upload_id": reference.upload_id,
             "filename": reference.filename,
+            "relative_path": relative_path,
             "size": int(manifest.get("size") or payload.stat().st_size),
             "sha256": str(manifest.get("sha256") or ""),
             "source_path": str(payload.resolve()),
@@ -78,6 +97,8 @@ def _run_payload(request: "RunRequest", employee_no: str) -> dict[str, object]:
     payload["input_file_paths"] = _resolve_evaluation_inputs(
         request.input_files, employee_no
     )
+    if sum(int(item["size"]) for item in payload["input_file_paths"]) > MAX_EVALUATION_INPUT_TOTAL_BYTES:
+        raise ValueError("评测输入文件夹总大小不能超过 500 MB")
     return payload
 
 
@@ -233,13 +254,21 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
 
 @router.post("/evaluation-inputs")
 async def upload_evaluation_input(
-    request: Request, file: UploadFile = File(...)
+    request: Request,
+    file: UploadFile = File(...),
+    relative_path: str = Form(...),
 ) -> dict[str, object]:
     """Stage one opaque, user-owned file for a later asynchronous evaluation."""
     employee_no = employee_from_request(request)
     filename = Path(str(file.filename or "input.bin")).name.strip()
     if not filename or filename in {".", ".."} or len(filename) > 255:
         raise HTTPException(status_code=400, detail="上传文件名无效或超过 255 个字符")
+    try:
+        relative_path = _safe_relative_upload_path(relative_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if PurePosixPath(relative_path).name != filename:
+        raise HTTPException(status_code=400, detail="文件名与文件夹相对路径不一致")
     upload_id = uuid.uuid4().hex
     upload_dir = runs_root() / "_uploads" / employee_no / upload_id
     upload_dir.mkdir(parents=True, exist_ok=False)
@@ -260,6 +289,7 @@ async def upload_evaluation_input(
             "upload_id": upload_id,
             "employee_no": employee_no,
             "filename": filename,
+            "relative_path": relative_path,
             "content_type": file.content_type or "application/octet-stream",
             "size": size,
             "sha256": digest.hexdigest(),
@@ -268,7 +298,7 @@ async def upload_evaluation_input(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         return {key: manifest[key] for key in (
-            "upload_id", "filename", "content_type", "size", "sha256"
+            "upload_id", "filename", "relative_path", "content_type", "size", "sha256"
         )}
     except (OSError, ValueError) as exc:
         for child in upload_dir.glob("*"):

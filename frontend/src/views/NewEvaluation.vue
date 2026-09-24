@@ -91,11 +91,11 @@
             <el-input v-model="form.prompt" type="textarea" :rows="6" placeholder="例如：设计一套 24V 转 5V/3A 的降压电源，包含输入保护、状态指示和测试点……" />
             <div v-if="form.schematicTaskType==='block_to_schematic'" class="prompt-example"><span>可直接使用内置 STM32 示例，验证完整原理图链路。</span><el-button link type="primary" @click="form.prompt=schematicExamplePrompt">填入示例 Prompt</el-button></div>
           </el-form-item>
-          <el-form-item label="任务输入文件（可选）">
-            <input class="input-file-picker" type="file" multiple @change="onEvaluationInputFiles" />
-            <div class="field-help">最多 20 个文件、单文件不超过 25 MB。文件会独立复制到每个评测任务工作区的 input/ 目录，例如可上传 JSON、YAML、CSV 或 Excel 格式的信号接口列表。</div>
+          <el-form-item label="任务输入文件夹（可选）">
+            <input class="input-file-picker" type="file" webkitdirectory directory multiple @change="onEvaluationInputFiles" />
+            <div class="field-help">请选择一个完整文件夹。系统会保留内部目录结构并复制到每个评测任务工作区；Prompt保持原样，不会自动追加文件夹说明。最多500个文件，单文件25MB、文件夹总计500MB。</div>
             <div v-if="form.inputFiles.length" class="input-file-list">
-              <el-tag v-for="(file,index) in form.inputFiles" :key="`${file.name}-${file.size}-${index}`" closable @close="removeEvaluationInput(index)">{{file.name}} · {{fileSize(file.size)}}</el-tag>
+              <el-tag v-for="(file,index) in form.inputFiles" :key="`${file.webkitRelativePath}-${file.size}-${index}`" closable @close="removeEvaluationInput(index)">{{file.webkitRelativePath}} · {{fileSize(file.size)}}</el-tag>
             </div>
           </el-form-item>
           <el-alert type="info" :closable="false" show-icon :title="`本次使用评测插件：${schematicEvaluator||'未配置'}`" />
@@ -229,9 +229,10 @@ function modelAvailable(model) { return model.source === 'litellm' || model.sour
 function onModelChange() {}
 function onEvaluationInputFiles(event){
   const picked=[...(event.target.files||[])]
-  if(picked.length>20){ElMessage.warning('最多上传 20 个任务输入文件');event.target.value='';return}
+  if(picked.length>500){ElMessage.warning('文件夹最多包含 500 个文件');event.target.value='';return}
   const oversized=picked.find(file=>file.size>25*1024*1024)
   if(oversized){ElMessage.warning(`${oversized.name} 超过 25 MB`);event.target.value='';return}
+  if(picked.reduce((total,file)=>total+file.size,0)>500*1024*1024){ElMessage.warning('文件夹总大小不能超过 500 MB');event.target.value='';return}
   form.inputFiles=picked
   event.target.value=''
 }
@@ -292,8 +293,8 @@ async function submit() {
 async function submitAgentRun() {
   const selectedSkills = form.type === 'schematic' ? schematicSkills.value : form.skills
   const inputFiles=[]
-  for(const file of form.inputFiles){inputFiles.push(await uploadEvaluationInput(file))}
-  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, input_files: inputFiles.map(item=>({upload_id:item.upload_id,filename:item.filename})), must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
+  for(const file of form.inputFiles){inputFiles.push(await uploadEvaluationInput(file,file.webkitRelativePath))}
+  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, input_files: inputFiles.map(item=>({upload_id:item.upload_id,filename:item.filename,relative_path:item.relative_path})), must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
   if (form.batchMode) {
     const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })
     resultId.value = response.batch_id; resultRouteType.value = 'batch'; job.value = response; pollBatch(response.batch_id)

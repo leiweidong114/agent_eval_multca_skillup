@@ -277,6 +277,7 @@ def test_evaluation_input_upload_is_owned_and_resolvable(tmp_path, monkeypatch):
 
     uploaded = client.post(
         "/api/evaluation-inputs",
+        data={"relative_path": "signal-list/signals.json"},
         files={"file": ("signals.json", b'{"signals":["UART_TX"]}', "application/json")},
     )
 
@@ -291,12 +292,14 @@ def test_evaluation_input_upload_is_owned_and_resolvable(tmp_path, monkeypatch):
         input_files=[{
             "upload_id": payload["upload_id"],
             "filename": payload["filename"],
+            "relative_path": payload["relative_path"],
         }],
     )
     from app.api.routes_eval import _run_payload
 
     resolved = _run_payload(request, "test-worker")
     assert resolved["input_file_paths"][0]["filename"] == "signals.json"
+    assert resolved["input_file_paths"][0]["relative_path"] == "signal-list/signals.json"
     assert Path(resolved["input_file_paths"][0]["source_path"]).read_bytes().startswith(b"{")
 
 

@@ -9,7 +9,7 @@ import subprocess
 import time
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from threading import Event, Thread
 from collections.abc import Callable
@@ -559,7 +559,12 @@ def run_evaluation(
     owner = _slug(user_id or "local")
     task = _slug(task_name or source_skill.name)
     runs_root = Path(output_dir).resolve() if output_dir else evaluation_results_root(project_root)
-    result_root = runs_root / owner / task / f"{timestamp}__{operation_id}"
+    result_folder = (
+        operation_id
+        if re.fullmatch(r"\d{8}-\d{6}-[A-Za-z0-9]{4}", operation_id)
+        else f"{timestamp}-{hashlib.sha256(operation_id.encode('utf-8')).hexdigest()[:4]}"
+    )
+    result_root = runs_root / owner / task / result_folder
     if result_root.exists():
         raise FileExistsError(f"Task output already exists: {canonical_task_id}")
     staged_skill = result_root / "staging" / "skill"
@@ -579,9 +584,8 @@ def run_evaluation(
     if input_files:
         fixture_name = "uploaded-inputs"
         fixture_root = staged_skill / "evals" / "fixtures" / fixture_name
-        workspace_input = fixture_root / "input"
-        workspace_input.mkdir(parents=True, exist_ok=True)
-        used_names: set[str] = set()
+        fixture_root.mkdir(parents=True, exist_ok=True)
+        used_paths: set[str] = set()
         for index, item in enumerate(input_files, start=1):
             source = Path(str(item.get("source_path") or "")).resolve()
             if not source.is_file():
@@ -589,21 +593,21 @@ def run_evaluation(
                     f"Uploaded evaluation input does not exist: {item.get('filename')}"
                 )
             original_name = Path(str(item.get("filename") or f"input-{index}")).name
-            safe_name = re.sub(r"[\x00-\x1f<>:\"/\\|?*]+", "-", original_name).strip(" .")
-            safe_name = safe_name or f"input-{index}"
-            candidate = safe_name
-            suffix = 2
-            while candidate.casefold() in used_names:
-                stem, extension = Path(safe_name).stem, Path(safe_name).suffix
-                candidate = f"{stem}-{suffix}{extension}"
-                suffix += 1
-            used_names.add(candidate.casefold())
-            target = workspace_input / candidate
+            relative_text = str(item.get("relative_path") or original_name).replace("\\", "/")
+            relative = Path(*PurePosixPath(relative_text).parts)
+            if relative.is_absolute() or ".." in relative.parts or len(relative.parts) < 2:
+                raise ValueError(f"Unsafe uploaded folder path: {relative_text}")
+            normalized_key = relative.as_posix().casefold()
+            if normalized_key in used_paths:
+                raise ValueError(f"Duplicate uploaded folder path: {relative_text}")
+            used_paths.add(normalized_key)
+            target = fixture_root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(filesystem_path(source), filesystem_path(target))
             input_manifest.append({
                 "upload_id": item.get("upload_id"),
                 "original_name": original_name,
-                "workspace_path": f"input/{candidate}",
+                "workspace_path": relative.as_posix(),
                 "size": int(item.get("size") or target.stat().st_size),
                 "sha256": item.get("sha256"),
             })
@@ -622,22 +626,9 @@ def run_evaluation(
         staged_cases.append(target.relative_to(staged_skill))
     if prompt:
         target = cases_dir / "cli-prompt.yaml"
-        effective_prompt = prompt
-        if input_manifest:
-            file_lines = "\n".join(
-                f"- `{item['workspace_path']}`（原文件名：{item['original_name']}）"
-                for item in input_manifest
-            )
-            effective_prompt = (
-                f"{prompt.rstrip()}\n\n"
-                "## 本次评测的上传输入文件\n"
-                f"{file_lines}\n\n"
-                "这些文件已经复制到当前任务工作区。必须先实际读取并解析相关文件，"
-                "再按照所选 Skill 完成任务；不要仅根据文件名猜测内容。"
-            )
         _generated_case(
             target,
-            effective_prompt,
+            prompt,
             must_contain or [],
             must_not_contain or [],
             repo_fixture=input_fixture,

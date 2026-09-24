@@ -41,6 +41,24 @@ def test_generated_prompt_case_mounts_uploaded_files_into_workspace(tmp_path):
     assert "input/signals.json" in payload["input"]["prompt"]
 
 
+def test_new_evaluation_job_ids_use_timestamp_and_four_random_characters(tmp_path):
+    import re
+    from app.job_manager import EvaluationJobManager
+
+    manager = EvaluationJobManager.__new__(EvaluationJobManager)
+    manager._lock = __import__("threading").RLock()
+    manager._jobs = {}
+    manager._cancel = {}
+    manager._pending = {}
+    manager._futures = {}
+    manager._save = lambda _job: None
+    manager._executor = type("Executor", (), {"submit": lambda *_args, **_kwargs: None})()
+
+    job = manager.submit({"agent": "codex"}, tmp_path)
+
+    assert re.fullmatch(r"\d{8}-\d{6}-[a-f0-9]{4}", job["job_id"])
+
+
 def test_results_root_from_environment_is_shared_with_default(tmp_path, monkeypatch):
     backend = tmp_path / "backend"
     backend.mkdir()

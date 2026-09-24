@@ -75,7 +75,7 @@ class EvaluationJobManager:
         )
 
     def submit(self, request: dict[str, Any], skill_dir: Path) -> dict[str, Any]:
-        task_id = uuid.uuid4().hex
+        task_id = f"{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:4]}"
         job_id = task_id  # Backward-compatible alias for existing clients.
         now = datetime.now().isoformat()
         job = {
@@ -115,7 +115,7 @@ class EvaluationJobManager:
         *,
         name: str,
     ) -> dict[str, Any]:
-        batch_id = f"batch-{uuid.uuid4().hex}"
+        batch_id = f"batch-{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:4]}"
         jobs = [self.submit(request, skill_dir) for request in requests]
         now = datetime.now().isoformat()
         batch = {
