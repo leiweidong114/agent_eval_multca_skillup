@@ -88,8 +88,8 @@ class SchematicDataClient:
         diagnostic = {"method": "DELETE", "endpoint": self.delete_url, "body": body,
                       "record_id": record_id}
         try:
-            response = httpx.request(
-                "DELETE", self.delete_url, json=body, headers=self._headers(),
+            response = httpx.post(
+                self.delete_url, json=body, headers=self._headers(),
                 timeout=self.settings.schematic_data_timeout_seconds, trust_env=False, verify=False,
             )
             if response.status_code == 404:
@@ -283,27 +283,33 @@ class SchematicDataClient:
         self._query_diagnostics.append(diagnostic)
         return payload
 
-    def insert_record(
+    def insert_documents(
         self,
-        record: Mapping[str, Any],
+        documents: Iterable[Mapping[str, Any]],
         *,
         collection_name: str = RATIONALITY_COLLECTION,
     ) -> Any:
-        """Insert one analysis record through the configured Java facade."""
+        """Insert one or more documents using the intranet Java envelope."""
+        records = [dict(record) for record in documents]
+        if not records:
+            raise ValueError("documents 不能为空")
         started = time.perf_counter()
         diagnostic: dict[str, Any] = {
             "method": "POST",
             "endpoint": self.write_url,
             "body_collection": collection_name,
             "verify_tls": False,
-            "record_fields": sorted(str(key) for key in record),
-            "session_id": record.get("sessionId"),
-            "check_type": record.get("checkType"),
+            "document_count": len(records),
+            "record_fields": sorted({str(key) for record in records for key in record}),
+            "session_id": records[0].get("sessionId"),
+            "check_type": records[0].get("checkType"),
+            "session_ids": [str(record.get("sessionId")) for record in records if record.get("sessionId")],
+            "check_types": [str(record.get("checkType")) for record in records if record.get("checkType")],
         }
         try:
             response = httpx.post(
                 self.write_url,
-                json={**dict(record), "collectionName": collection_name},
+                json={"collectionName": collection_name, "documents": records},
                 headers=self._headers(),
                 timeout=self.settings.schematic_data_timeout_seconds,
                 trust_env=False,
@@ -329,6 +335,15 @@ class SchematicDataClient:
         self._write_diagnostics.append(diagnostic)
         clear_response_cache()
         return payload
+
+    def insert_record(
+        self,
+        record: Mapping[str, Any],
+        *,
+        collection_name: str = RATIONALITY_COLLECTION,
+    ) -> Any:
+        """Insert one document while using the Java batch envelope."""
+        return self.insert_documents([record], collection_name=collection_name)
 
     def find_rationality_records(
         self,

@@ -9,7 +9,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,7 +26,7 @@ public class SchematicDataDeleteController {
     }
 
     /** Supply collectionName and exactly one of _id, sessionId or uuid in the JSON body. */
-    @DeleteMapping("/delete")
+    @PostMapping("/delete")
     public Map<String, Object> delete(@RequestBody Map<String, Object> payload) {
         String collectionName = value(payload, "collectionName");
         if (!COLLECTION.equals(collectionName)) {

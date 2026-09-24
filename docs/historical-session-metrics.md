@@ -41,15 +41,13 @@ AGENT_EVAL_CACHE_MAX_SIZE=1000
 ```powershell
 curl.exe -G "http://10.0.0.8:8080/schematic/schematicData/query" `
   -k `
-  -H "Cookie: JSESSIONID=请替换为实际值" `
   --data-urlencode "collectionName=HDschematicRationalityCollection" `
   --data-urlencode "page=1" `
   --data-urlencode "size=20"
 ```
 
 评测后端还提供只读同源代理接口。它调用上面的 Java 接口并原样返回 Java 的 JSON
-响应。调用本地评测接口不要求 UI 登录 Cookie；评测后端会自动把 `.env` 中的
-`SCHEMATIC_DATA_API_COOKIE` 作为出站 `Cookie` 请求头发送给 Java 服务：
+响应。当前内网接口不要求 Cookie，`.env` 中的 `SCHEMATIC_DATA_API_COOKIE` 保持为空：
 
 ```powershell
 Invoke-RestMethod -Method Get `
@@ -91,10 +89,10 @@ curl.exe -G "http://127.0.0.1:8000/api/schematic-data/query" `
 # 插入（无需登录 Cookie；Python 到 Java 固定 verify=False）
 curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
   -H "Content-Type: application/json" `
-  -d '{"collectionName":"HDschematicRationalityCollection","uuid":"唯一UUID","status":"completed","createUser":"100001","createTime":"2026-09-21T08:00:00Z","checkType":"hscope_diagram_lint","checkMessage":"原理图质量分析","userName":"测试用户","hscopeProjectId":"project-demo","boardNum":"BOARD-001","sessionId":"实际会话ID","resultText":"{}"}'
+  -d '{"collectionName":"HDschematicRationalityCollection","documents":[{"uuid":"唯一UUID","status":"completed","createUser":"100001","createTime":"2026-09-21T08:00:00Z","checkType":"hscope_diagram_lint","checkMessage":"原理图质量分析","userName":"测试用户","hscopeProjectId":"project-demo","boardNum":"BOARD-001","sessionId":"实际会话ID","resultText":"{}"}]}'
 
 # 删除（Python 代理只接受 MongoDB _id）
-curl.exe -X DELETE "http://127.0.0.1:8000/api/schematic-data/delete" `
+curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/delete" `
   -H "Content-Type: application/json" `
   -d '{"collectionName":"HDschematicRationalityCollection","_id":"MongoDB的24位_id"}'
 ```

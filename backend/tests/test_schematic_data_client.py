@@ -140,7 +140,7 @@ def test_schematic_data_client_inserts_record_with_cookie(monkeypatch):
     assert captured["headers"] == {"Cookie": "JSESSIONID=session-secret"}
     assert captured["verify"] is False
     assert captured["json"]["collectionName"] == "HDschematicRationalityCollection"
-    assert captured["json"]["sessionId"] == "session-1"
+    assert captured["json"]["documents"] == [{"sessionId": "session-1", "resultText": "{}"}]
     assert captured["cache_cleared"] is True
     assert client.write_diagnostics()[0]["status"] == "success"
     assert client.write_diagnostics()[0]["session_id"] == "session-1"
@@ -150,26 +150,28 @@ def test_schematic_data_insert_route_needs_no_login_and_forwards_payload(monkeyp
     captured = {}
 
     class FakeClient:
-        def insert_record(self, record, *, collection_name):
-            captured["record"] = record
+        def insert_documents(self, documents, *, collection_name):
+            captured["documents"] = documents
             captured["collection_name"] = collection_name
-            return {"status": "inserted", "record": {"_id": "mongo-1", **record}}
+            return {"status": "inserted", "documents": [{"_id": "mongo-1", **documents[0]}]}
 
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     client = TestClient(app)
     payload = {
         "collectionName": "HDschematicRationalityCollection",
-        "uuid": "uuid-1", "status": "completed", "createUser": "100001",
-        "createTime": "2026-09-20T08:00:00Z", "checkType": "hscope_diagram_lint",
-        "checkMessage": "测试", "userName": "测试用户", "hscopeProjectId": "project-1",
-        "boardNum": "BOARD-1", "sessionId": "session-1", "resultText": "{}",
+        "documents": [{
+            "uuid": "uuid-1", "status": "completed", "createUser": "100001",
+            "createTime": "2026-09-20T08:00:00Z", "checkType": "hscope_diagram_lint",
+            "checkMessage": "测试", "userName": "测试用户", "hscopeProjectId": "project-1",
+            "boardNum": "BOARD-1", "sessionId": "session-1", "resultText": "{}",
+        }],
     }
 
     response = client.post("/api/schematic-data/insert", json=payload)
 
     assert response.status_code == 201
-    assert response.json()["record"]["_id"] == "mongo-1"
-    assert captured["record"] == {key: value for key, value in payload.items() if key != "collectionName"}
+    assert response.json()["documents"][0]["_id"] == "mongo-1"
+    assert captured["documents"] == payload["documents"]
     assert captured["collection_name"] == "HDschematicRationalityCollection"
 
 
@@ -177,23 +179,25 @@ def test_schematic_data_insert_route_accepts_empty_metric_result_text(monkeypatc
     captured = {}
 
     class FakeClient:
-        def insert_record(self, record, *, collection_name):
-            captured["record"] = record
-            return {"status": "inserted", "record": record}
+        def insert_documents(self, documents, *, collection_name):
+            captured["documents"] = documents
+            return {"status": "inserted", "documents": documents}
 
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     payload = {
         "collectionName": "HDschematicRationalityCollection",
-        "uuid": "metric-uuid", "status": "completed", "createUser": "agent-eval",
-        "createTime": "2026-09-24T08:00:00Z", "checkType": "agent_eval_metric",
-        "checkMessage": "指标计算结果", "userName": "Agent Eval", "hscopeProjectId": "session-metrics",
-        "boardNum": "BOARD-1", "sessionId": "session-1", "resultText": "",
+        "documents": [{
+            "uuid": "metric-uuid", "status": "completed", "createUser": "agent-eval",
+            "createTime": "2026-09-24T08:00:00Z", "checkType": "agent_eval_metric",
+            "checkMessage": "指标计算结果", "userName": "Agent Eval", "hscopeProjectId": "session-metrics",
+            "boardNum": "BOARD-1", "sessionId": "session-1", "resultText": "",
+        }],
     }
 
     response = TestClient(app).post("/api/schematic-data/insert", json=payload)
 
     assert response.status_code == 201
-    assert captured["record"]["resultText"] == ""
+    assert captured["documents"][0]["resultText"] == ""
 
 
 def test_update_record_uses_put_and_requires_existing_match(monkeypatch):
@@ -260,15 +264,15 @@ def test_delete_records_sends_id_in_json_body_and_treats_missing_as_idempotent(m
         def raise_for_status(self):
             raise AssertionError("404 replacement delete must not raise")
 
-    def fake_request(method, url, **kwargs):
-        captured.update(method=method, url=url, **kwargs)
+    def fake_post(url, **kwargs):
+        captured.update(method="POST", url=url, **kwargs)
         return Response()
 
-    monkeypatch.setattr("app.schematic_data_client.httpx.request", fake_request)
+    monkeypatch.setattr("app.schematic_data_client.httpx.post", fake_post)
     monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
     result = SchematicDataClient().delete_records(record_id="68cec0000000000000000001")
     assert result == {"status": "not_found", "deletedCount": 0}
-    assert captured["method"] == "DELETE"
+    assert captured["method"] == "POST"
     assert captured["json"] == {
         "collectionName": "HDschematicRationalityCollection",
         "_id": "68cec0000000000000000001",
@@ -285,8 +289,7 @@ def test_schematic_data_delete_route_only_accepts_mongo_id(monkeypatch):
             return {"status": "deleted", "deletedCount": 1}
 
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
-    response = TestClient(app).request(
-        "DELETE",
+    response = TestClient(app).post(
         "/api/schematic-data/delete",
         json={
             "collectionName": "HDschematicRationalityCollection",
@@ -301,8 +304,7 @@ def test_schematic_data_delete_route_only_accepts_mongo_id(monkeypatch):
         "collection_name": "HDschematicRationalityCollection",
     }
 
-    invalid = TestClient(app).request(
-        "DELETE",
+    invalid = TestClient(app).post(
         "/api/schematic-data/delete",
         json={"collectionName": "HDschematicRationalityCollection", "sessionId": "session-1"},
     )
@@ -311,16 +313,18 @@ def test_schematic_data_delete_route_only_accepts_mongo_id(monkeypatch):
 
 def test_schematic_data_insert_with_trailing_slash_needs_no_login(monkeypatch):
     class FakeClient:
-        def insert_record(self, record, *, collection_name):
-            return {"status": "inserted", "record": record}
+        def insert_documents(self, documents, *, collection_name):
+            return {"status": "inserted", "documents": documents}
 
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     payload = {
         "collectionName": "HDschematicRationalityCollection",
-        "uuid": "uuid-2", "status": "completed", "createUser": "100001",
-        "createTime": "2026-09-21T08:00:00Z", "checkType": "hscope_diagram_lint",
-        "checkMessage": "测试", "userName": "测试用户", "hscopeProjectId": "project-2",
-        "boardNum": "BOARD-2", "sessionId": "session-2", "resultText": "{}",
+        "documents": [{
+            "uuid": "uuid-2", "status": "completed", "createUser": "100001",
+            "createTime": "2026-09-21T08:00:00Z", "checkType": "hscope_diagram_lint",
+            "checkMessage": "测试", "userName": "测试用户", "hscopeProjectId": "project-2",
+            "boardNum": "BOARD-2", "sessionId": "session-2", "resultText": "{}",
+        }],
     }
 
     response = TestClient(app).post("/api/schematic-data/insert/", json=payload)

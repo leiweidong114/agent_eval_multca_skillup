@@ -15,7 +15,7 @@ Java 源码位于同级 `原理图_java/src/main/java/com/agent/eval/schematic/`
 ## 查询、插入和删除的 curl 调用
 
 Java 接口可以直接调用，Python 后端同时提供同源代理。查询使用 URL 参数；插入和
-删除使用 JSON body。`collectionName` 必须放在插入、删除请求的 body 中。
+删除使用 POST 和 JSON body。`collectionName` 必须放在插入、删除请求的 body 中。
 
 ```powershell
 $java = "http://127.0.0.1:18081/schematic/schematicData"
@@ -42,7 +42,7 @@ curl.exe -X POST "$python/insert" -H "Content-Type: application/json" `
   --data-binary "@insert.json"
 
 # Python 删除代理只允许按 _id 精确删除
-curl.exe -X DELETE "$python/delete" -H "Content-Type: application/json" `
+curl.exe -X POST "$python/delete" -H "Content-Type: application/json" `
   -d '{"collectionName":"HDschematicRationalityCollection","_id":"MongoDB的24位_id"}'
 ```
 
@@ -51,23 +51,27 @@ curl.exe -X DELETE "$python/delete" -H "Content-Type: application/json" `
 ```json
 {
   "collectionName": "HDschematicRationalityCollection",
-  "uuid": "唯一UUID",
-  "status": "completed",
-  "createUser": "100001",
-  "createTime": "2026-09-24T08:00:00Z",
-  "checkType": "hscope_diagram_lint",
-  "checkMessage": "原理图质量分析",
-  "userName": "测试用户",
-  "hscopeProjectId": "project-demo",
-  "boardNum": "BOARD-001",
-  "sessionId": "实际会话ID",
-  "resultText": "{}"
+  "documents": [
+    {
+      "uuid": "唯一UUID",
+      "status": "completed",
+      "createUser": "100001",
+      "createTime": "2026-09-24T08:00:00Z",
+      "checkType": "hscope_diagram_lint",
+      "checkMessage": "原理图质量分析",
+      "userName": "测试用户",
+      "hscopeProjectId": "project-demo",
+      "boardNum": "BOARD-001",
+      "sessionId": "实际会话ID",
+      "resultText": "{}"
+    }
+  ]
 }
 ```
 
 ## Java 删除接口
 
-`DELETE /schematic/schematicData/delete` 的 JSON body 支持三种互斥选择器：
+`POST /schematic/schematicData/delete` 的 JSON body 支持三种互斥选择器：
 
 - `_id`：MongoDB 24 位十六进制 `_id`，精确删除一条；
 - `sessionId`：删除该会话在集合中的**全部记录**，可能不止一条。
@@ -85,14 +89,14 @@ Java 删除 curl 示例：
 $base = "http://127.0.0.1:18081/schematic/schematicData"
 
 # 精确删除一条
-curl.exe -X DELETE "$base/delete" -H "Content-Type: application/json" `
+curl.exe -X POST "$base/delete" -H "Content-Type: application/json" `
   -d '{"collectionName":"HDschematicRationalityCollection","_id":"MongoDB的24位_id"}'
 
 # 删除该 Session ID 下全部记录
-curl.exe -X DELETE "$base/delete" -H "Content-Type: application/json" `
+curl.exe -X POST "$base/delete" -H "Content-Type: application/json" `
   -d '{"collectionName":"HDschematicRationalityCollection","sessionId":"会话ID"}'
 
 # 按 UUID 删除
-curl.exe -X DELETE "$base/delete" -H "Content-Type: application/json" `
+curl.exe -X POST "$base/delete" -H "Content-Type: application/json" `
   -d '{"collectionName":"HDschematicRationalityCollection","uuid":"业务UUID"}'
 ```

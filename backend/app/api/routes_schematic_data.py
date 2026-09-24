@@ -14,17 +14,7 @@ router = APIRouter(prefix="/api/schematic-data", tags=["schematic-data"])
 
 class SchematicDataInsertRequest(BaseModel):
     collectionName: str = Field(min_length=1, max_length=128)
-    uuid: str = Field(min_length=1, max_length=128)
-    status: str = Field(min_length=1, max_length=64)
-    createUser: str = Field(min_length=1, max_length=128)
-    createTime: str = Field(min_length=1, max_length=64)
-    checkType: str = Field(min_length=1, max_length=128)
-    checkMessage: str = Field(min_length=1, max_length=1000)
-    userName: str = Field(min_length=1, max_length=256)
-    hscopeProjectId: str = Field(min_length=1, max_length=256)
-    boardNum: str = Field(min_length=1, max_length=128)
-    sessionId: str = Field(min_length=1, max_length=256)
-    resultText: str = Field(max_length=2_000_000)
+    documents: list[dict[str, Any]] = Field(min_length=1, max_length=100)
 
 
 class SchematicDataDeleteRequest(BaseModel):
@@ -63,15 +53,16 @@ def insert_schematic_data(
     try:
         document = payload.model_dump()
         collection_name = document.pop("collectionName")
-        return SchematicDataClient().insert_record(
-            document,
+        return SchematicDataClient().insert_documents(
+            document["documents"],
             collection_name=collection_name,
         )
     except InfrastructureConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.delete("/delete")
+@router.post("/delete")
+@router.delete("/delete", include_in_schema=False)
 def delete_schematic_data(payload: SchematicDataDeleteRequest) -> Any:
     """Delete exactly one MongoDB document by _id without requiring UI login."""
     try:
