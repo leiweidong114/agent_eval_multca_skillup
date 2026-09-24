@@ -56,7 +56,7 @@ def test_new_evaluation_job_ids_use_timestamp_and_four_random_characters(tmp_pat
 
     job = manager.submit({"agent": "codex"}, tmp_path)
 
-    assert re.fullmatch(r"\d{8}-\d{6}-[a-f0-9]{4}", job["job_id"])
+    assert re.fullmatch(r"\d{8}-[a-f0-9]{4}", job["job_id"])
 
 
 def test_results_root_from_environment_is_shared_with_default(tmp_path, monkeypatch):

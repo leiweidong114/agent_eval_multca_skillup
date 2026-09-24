@@ -553,7 +553,7 @@ def run_evaluation(
         if requested_agent == "justdo"
         else default_agent_command(requested_agent, project_root)
     )
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d")
     operation_id = _identity(task_id or run_id or uuid.uuid4().hex, field="task_id")
     canonical_task_id = operation_id
     owner = _slug(user_id or "local")
@@ -561,7 +561,7 @@ def run_evaluation(
     runs_root = Path(output_dir).resolve() if output_dir else evaluation_results_root(project_root)
     result_folder = (
         operation_id
-        if re.fullmatch(r"\d{8}-\d{6}-[A-Za-z0-9]{4}", operation_id)
+        if re.fullmatch(r"\d{8}-[A-Za-z0-9]{4}", operation_id)
         else f"{timestamp}-{hashlib.sha256(operation_id.encode('utf-8')).hexdigest()[:4]}"
     )
     result_root = runs_root / owner / task / result_folder
