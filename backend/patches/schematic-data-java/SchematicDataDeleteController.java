@@ -5,7 +5,6 @@ import java.util.Map;
 import com.mongodb.client.result.DeleteResult;
 import org.bson.Document;
 import org.bson.types.ObjectId;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -18,7 +17,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/schematic/schematicData")
-@ConditionalOnProperty(prefix = "schematic.data", name = "delete-enabled", havingValue = "true")
 public class SchematicDataDeleteController {
     private static final String COLLECTION = "HDschematicRationalityCollection";
     private final MongoTemplate mongoTemplate;
