@@ -5,8 +5,12 @@
 “历史会话指标计算”默认查询最近 24 小时的 LiteLLM 普通会话。LiteLLM PostgreSQL
 仍是模型交互事实源。计算完成的衍生指标通过 Java HTTP 接口写入 MongoDB 的
 `HDschematicRationalityCollection`，使用原会话 `sessionId` 关联。原始质量报告保持不变；
-每次计算新增一条 `agent_eval_session_metrics` 汇总记录，其 `agentEvalMetrics` 字段
-保存四类质量检查的汇总 JSON。计算过程另存为 `agent_eval_metric_process` 记录。
+每次成功计算只保留一条 `agent_eval_metric` 记录。写入前按 MongoDB `_id`
+精确删除同一 Session 下旧的 `agent_eval_metric`、`agent_eval_session_metrics`
+和 `agent_eval_metric_process`，不会删除四类原始质量记录。该记录的
+`resultText` 为空，`agentEvalMetrics` 保存四类质量检查汇总 JSON，
+`agentEvalProcess` 保存可回看的计算过程。失败且尚未产生最终指标时，才单独保存
+一条 `agent_eval_metric_process` 故障过程记录。
 项目本地不再保存 SQLite 指标数据库；旧版本完成的计算若没有过程记录，需重新计算才能回看。
 
 原理图合理性分析记录不由评测后端直连 MongoDB。后端通过 HTTP 查询接口读取
@@ -135,7 +139,8 @@ curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
 把 `0.9` 与 `90%` 混淆。提取不满总计7项时，详情页会保留已提取结果并显示结构告警。
 启用 LLM Judge 时，每条会话首先把时间最早请求中的第一条 `user` Prompt 单独送入分类 Judge，分类
 只依据用户原始意图，不读取 Agent 后续执行结果。分类结果随完整指标 JSON 写回 MongoDB。
-会话级汇总和过程文档使用 Java `POST /insert`，不修改原始 `resultText` 或原始记录；
+会话级汇总及其嵌入过程使用 Java `POST /insert` 写成唯一 `agent_eval_metric`，
+不修改四类原始 `resultText` 或原始记录；
 跨会话累计的唯一“汇总结果”则使用 Java `PUT /aggregate` 原位刷新。
 Java 服务源码在同级 `原理图_java/`；新环境需要部署支持查询和插入的版本。
 重复计算会产生新的汇总版本，详情接口以最新 `createTime` 为准。

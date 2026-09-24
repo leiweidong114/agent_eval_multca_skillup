@@ -11,11 +11,15 @@ from app.quality_summary import compact_agent_eval_metrics, flatten_agent_eval_m
 from app.quality_aggregate import AGGREGATE_CHECK_TYPE, AGGREGATE_SESSION_ID, aggregate_quality_metrics
 
 
-SESSION_METRICS_CHECK_TYPE = "agent_eval_session_metrics"
+SESSION_METRICS_CHECK_TYPE = "agent_eval_metric"
 SESSION_METRICS_MESSAGE = "Agent Eval 历史会话指标计算结果"
 SESSION_PROCESS_CHECK_TYPE = "agent_eval_metric_process"
 SESSION_PROCESS_MESSAGE = "Agent Eval 历史会话指标计算过程"
+LEGACY_SESSION_METRICS_CHECK_TYPES = {"agent_eval_session_metrics"}
+SESSION_METRIC_RECORD_TYPES = {SESSION_METRICS_CHECK_TYPE, *LEGACY_SESSION_METRICS_CHECK_TYPES}
+PLATFORM_RECORD_TYPES = {SESSION_METRICS_CHECK_TYPE, *LEGACY_SESSION_METRICS_CHECK_TYPES, SESSION_PROCESS_CHECK_TYPE}
 _aggregate_lock = threading.RLock()
+_metric_replace_lock = threading.RLock()
 
 
 def _json_default(value: Any) -> str:
@@ -40,19 +44,29 @@ def _parse_time(value: Any) -> datetime | None:
 def _metric_document(record: Mapping[str, Any]) -> dict[str, Any] | None:
     if str(record.get("checkType") or "").strip() == AGGREGATE_CHECK_TYPE:
         return None
-    if str(record.get("checkType") or "").strip() == SESSION_METRICS_CHECK_TYPE:
+    if str(record.get("checkType") or "").strip() in SESSION_METRIC_RECORD_TYPES:
         value = record.get("resultText")
-        try:
-            result = dict(value) if isinstance(value, Mapping) else json.loads(str(value or ""))
-        except (TypeError, ValueError):
-            return None
-        if not isinstance(result, dict):
-            return None
+        result: dict[str, Any] = {}
+        if value:
+            try:
+                parsed = dict(value) if isinstance(value, Mapping) else json.loads(str(value))
+            except (TypeError, ValueError):
+                parsed = None
+            if isinstance(parsed, dict):
+                result.update(parsed)
+        process = record.get("agentEvalProcess")
+        if isinstance(process, Mapping):
+            summary = process.get("result_summary")
+            if isinstance(summary, Mapping):
+                result.update(summary)
         if isinstance(record.get("agentEvalMetrics"), Mapping):
             result["agentEvalMetrics"] = dict(record["agentEvalMetrics"])
             if not isinstance(result.get("quality_summary"), Mapping):
                 result["quality_summary"] = dict(record["agentEvalMetrics"])
         result["session_id"] = str(result.get("session_id") or record.get("sessionId") or "")
+        result["status"] = str(result.get("status") or record.get("status") or "completed")
+        result["calculated_at"] = result.get("calculated_at") or record.get("createTime")
+        result["board_num"] = str(result.get("board_num") or record.get("boardNum") or "")
         result["mongo_record_id"] = str(record.get("_id") or "") or None
         result["mongo_uuid"] = str(record.get("uuid") or "") or None
         result["updated_at"] = record.get("createTime") or result.get("calculated_at")
@@ -121,26 +135,44 @@ class MetricsStore:
             self._client = client
         return client
 
-    def build_metrics_record(self, result: dict[str, Any]) -> dict[str, Any]:
+    def build_metrics_record(
+        self,
+        result: dict[str, Any],
+        *,
+        process_trace: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Build the exact Java/MongoDB payload so callers can audit it before insertion."""
         session_id = str(result["session_id"])
         now = datetime.now(timezone.utc)
-        document = {**result, "session_id": session_id, "updated_at": now}
+        board_num = str(result.get("board_num") or result.get("source_board_num") or session_id)
         record = {
             "uuid": uuid.uuid4().hex,
             "status": "completed",
-            "createUser": str(result.get("end_user") or "agent-eval"),
+            "createUser": "agent-eval",
             "createTime": now.isoformat(),
             "checkType": SESSION_METRICS_CHECK_TYPE,
             "checkMessage": SESSION_METRICS_MESSAGE,
-            "userName": str(result.get("end_user") or "Agent Eval"),
+            "userName": "Agent Eval",
             "hscopeProjectId": str(result.get("task_type") or "session-metrics"),
-            "boardNum": str(result.get("metric_definition_version") or ""),
+            "boardNum": board_num,
             "sessionId": session_id,
-            "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
+            "resultText": "",
         }
         if isinstance(result.get("quality_summary"), Mapping):
             record["agentEvalMetrics"] = compact_agent_eval_metrics(result["quality_summary"])
+        else:
+            record["agentEvalMetrics"] = {}
+        process_document = dict(process_trace) if isinstance(process_trace, Mapping) else {}
+        process_document["result_summary"] = {
+            key: _bounded_process_value(result.get(key))
+            for key in (
+                "session_id", "status", "started_at", "finished_at", "calculated_at",
+                "task_type", "task_category", "task_subtype", "agent", "model",
+                "end_user", "metric_definition_version", "metrics", "board_num",
+                "schematic_rationality", "quality_summary", "task_classification", "judge",
+            )
+        }
+        record["agentEvalProcess"] = process_document
         return record
 
     def upsert_metrics(
@@ -153,7 +185,24 @@ class MetricsStore:
         client = self._data_client()
         if hasattr(client, "clear_diagnostics"):
             client.clear_diagnostics()
-        return client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
+        session_id = str(record.get("sessionId") or result.get("session_id") or "")
+        with _metric_replace_lock:
+            try:
+                existing = client.find_records(
+                    RATIONALITY_COLLECTION, [session_id], use_cache=False,
+                )
+            except TypeError:
+                existing = client.find_records(RATIONALITY_COLLECTION, [session_id])
+            stale = [
+                item for item in existing
+                if str(item.get("checkType") or "").strip() in PLATFORM_RECORD_TYPES
+            ]
+            for item in stale:
+                record_id = str(item.get("_id") or "").strip()
+                if not record_id:
+                    raise RuntimeError("旧 Agent Eval 指标记录缺少 _id，无法安全精确删除")
+                client.delete_records(record_id=record_id, collection_name=RATIONALITY_COLLECTION)
+            return client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
 
     def verify_metric_persisted(
         self,
@@ -176,7 +225,7 @@ class MetricsStore:
         metric_records = [
             record
             for record in records
-            if str(record.get("checkType") or "") == SESSION_METRICS_CHECK_TYPE
+            if str(record.get("checkType") or "").strip() in SESSION_METRIC_RECORD_TYPES
         ]
         matching = next(
             (
@@ -196,7 +245,7 @@ class MetricsStore:
         if matching is None:
             reason = "写入接口返回成功，但按相同 Session ID 回读时没有找到本次 UUID"
         elif parsed is None:
-            reason = "已回读到本次 UUID，但 resultText 不是可解析的指标 JSON"
+            reason = "已回读到本次 UUID，但 agentEvalMetrics 或指标元数据不可解析"
         return {
             "verified": verified,
             "reason": reason,
@@ -403,7 +452,7 @@ class MetricsStore:
                 rows = client.iter_collection(RATIONALITY_COLLECTION)
             latest: dict[str, tuple[tuple[str, str], dict[str, Any]]] = {}
             for row in rows:
-                if str(row.get("checkType") or "").strip() != SESSION_METRICS_CHECK_TYPE:
+                if str(row.get("checkType") or "").strip() not in SESSION_METRIC_RECORD_TYPES:
                     continue
                 metric = _metric_document(row)
                 if not metric or not metric.get("session_id"):
@@ -462,8 +511,8 @@ class MetricsStore:
                 "write_diagnostics": client.write_diagnostics() if hasattr(client, "write_diagnostics") else [],
             }
 
-    def save_process_trace(self, job: Mapping[str, Any], session_id: str) -> dict[str, Any]:
-        """Persist one session's completed pipeline alongside its metric record."""
+    def build_process_trace(self, job: Mapping[str, Any], session_id: str) -> dict[str, Any]:
+        """Build the bounded process trace embedded in the sole session metric record."""
         events = [
             _bounded_process_event(event)
             for event in job.get("events") or []
@@ -486,12 +535,39 @@ class MetricsStore:
             "original_event_count": original_event_count,
             "events_truncated": original_event_count > len(events),
             "events": events,
+            "result_summary": {},
         }
+        return _bounded_process_value(document)
+
+    def save_process_trace(self, job: Mapping[str, Any], session_id: str) -> dict[str, Any]:
+        """Keep failed-run diagnostics; successful runs embed process in agent_eval_metric."""
+        document = self.build_process_trace(job, session_id)
+        client = self._data_client()
+        try:
+            current = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
+        except TypeError:
+            current = client.find_records(RATIONALITY_COLLECTION, [session_id])
+        embedded = [
+            item for item in current
+            if str(item.get("checkType") or "").strip() in SESSION_METRIC_RECORD_TYPES
+            and isinstance(item.get("agentEvalProcess"), Mapping)
+        ]
+        if embedded:
+            return dict(embedded[0]["agentEvalProcess"])
+
+        # A failed calculation has no final agent_eval_metric document. Preserve
+        # exactly one standalone failure trace so the UI can still explain it.
+        for item in current:
+            if str(item.get("checkType") or "").strip() != SESSION_PROCESS_CHECK_TYPE:
+                continue
+            record_id = str(item.get("_id") or "").strip()
+            if record_id:
+                client.delete_records(record_id=record_id, collection_name=RATIONALITY_COLLECTION)
         record = {
             "uuid": uuid.uuid4().hex,
             "status": document["status"],
             "createUser": document["user_id"] or "agent-eval",
-            "createTime": finished_at.isoformat(),
+            "createTime": datetime.now(timezone.utc).isoformat(),
             "checkType": SESSION_PROCESS_CHECK_TYPE,
             "checkMessage": SESSION_PROCESS_MESSAGE,
             "userName": document["user_id"] or "Agent Eval",
@@ -500,7 +576,6 @@ class MetricsStore:
             "sessionId": session_id,
             "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
         }
-        client = self._data_client()
         client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
         try:
             read_back = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
@@ -554,7 +629,7 @@ class MetricsStore:
         self_metrics = [
             value
             for value in all_values
-            if str(value.get("checkType") or "") == SESSION_METRICS_CHECK_TYPE
+            if str(value.get("checkType") or "").strip() in SESSION_METRIC_RECORD_TYPES
         ]
         self_processes = [
             value
@@ -564,7 +639,7 @@ class MetricsStore:
         values = [
             value
             for value in all_values
-            if str(value.get("checkType") or "") not in {SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE, AGGREGATE_CHECK_TYPE}
+            if str(value.get("checkType") or "").strip() not in {*SESSION_METRIC_RECORD_TYPES, SESSION_PROCESS_CHECK_TYPE, AGGREGATE_CHECK_TYPE}
         ]
         # status is supplied by the upstream analysis service and is not a
         # prerequisite for reading its resultText. Session ID is the join key.
@@ -596,7 +671,7 @@ class MetricsStore:
             "self_process_record_count": len(self_processes),
             "eligible_record_count": len(values),
             "status_filter": "none",
-            "excluded_check_types": [SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE],
+            "excluded_check_types": [*sorted(SESSION_METRIC_RECORD_TYPES), SESSION_PROCESS_CHECK_TYPE],
             "status_counts": status_counts,
             "check_type_counts": check_type_counts,
             "returned_session_ids": sorted({str(value.get("sessionId") or "") for value in all_values}),

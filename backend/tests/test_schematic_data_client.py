@@ -172,6 +172,28 @@ def test_schematic_data_insert_route_needs_no_login_and_forwards_payload(monkeyp
     assert captured["collection_name"] == "HDschematicRationalityCollection"
 
 
+def test_schematic_data_insert_route_accepts_empty_metric_result_text(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def insert_record(self, record, *, collection_name):
+            captured["record"] = record
+            return {"status": "inserted", "record": record}
+
+    monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
+    payload = {
+        "uuid": "metric-uuid", "status": "completed", "createUser": "agent-eval",
+        "createTime": "2026-09-24T08:00:00Z", "checkType": "agent_eval_metric",
+        "checkMessage": "指标计算结果", "userName": "Agent Eval", "hscopeProjectId": "session-metrics",
+        "boardNum": "BOARD-1", "sessionId": "session-1", "resultText": "",
+    }
+
+    response = TestClient(app).post("/api/schematic-data/insert", json=payload)
+
+    assert response.status_code == 201
+    assert captured["record"]["resultText"] == ""
+
+
 def test_update_record_uses_put_and_requires_existing_match(monkeypatch):
     captured = {}
 

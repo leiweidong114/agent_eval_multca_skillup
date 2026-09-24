@@ -23,7 +23,7 @@ class SchematicDataInsertRequest(BaseModel):
     hscopeProjectId: str = Field(min_length=1, max_length=256)
     boardNum: str = Field(min_length=1, max_length=128)
     sessionId: str = Field(min_length=1, max_length=256)
-    resultText: str = Field(min_length=1, max_length=2_000_000)
+    resultText: str = Field(max_length=2_000_000)
 
 
 @router.get("/query")

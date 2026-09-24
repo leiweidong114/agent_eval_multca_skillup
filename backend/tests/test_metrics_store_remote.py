@@ -71,7 +71,10 @@ def test_remote_metrics_round_trip_without_local_database():
 
     assert client.records[0]["checkType"] == SESSION_METRICS_CHECK_TYPE
     assert verification["verified"] is True
-    assert json.loads(client.records[0]["resultText"])["model"] == "glm-4.5-air"
+    assert client.records[0]["resultText"] == ""
+    assert client.records[0]["createUser"] == "agent-eval"
+    assert client.records[0]["checkType"] == "agent_eval_metric"
+    assert client.records[0]["boardNum"] == "session-1"
     assert store.get_metrics("session-1")["model"] == "glm-4.5-air"
     assert store.statuses(["session-1"])["session-1"]["status"] == "completed"
     assert store.all_statuses()["session-1"]["task_type"] == "block_to_schematic"
@@ -128,11 +131,12 @@ def test_completed_process_trace_round_trip_and_rationality_exclusion():
 def test_quality_metrics_and_process_are_new_documents_without_mutating_source():
     client = FakeClient()
     source = {"_id": "mongo-source", "sessionId": "session-1",
-              "checkType": "hscope_block_corpus_check  ", "status": "pending", "resultText": "语料库覆盖率: 75.0%"}
+              "checkType": "hscope_block_corpus_check  ", "status": "pending", "boardNum": "BOARD-1",
+              "resultText": "语料库覆盖率: 75.0%"}
     client.records.append(source)
     store = MetricsStore.__new__(MetricsStore)
     store._client = client
-    result = {"session_id": "session-1", "status": "completed", "end_user": "100001",
+    result = {"session_id": "session-1", "status": "completed", "end_user": "100001", "board_num": "BOARD-1",
               "task_type": "other", "metric_definition_version": "v1", "metrics": {},
               "schematic_rationality": {"check_type": "hscope_block_corpus_check"},
               "quality_summary": {"session_id": "session-1", "rates": {"语料覆盖率": "75.00%"}}}
@@ -143,9 +147,41 @@ def test_quality_metrics_and_process_are_new_documents_without_mutating_source()
     assert "agentEvalMetrics" not in source
     assert client.records[1]["agentEvalMetrics"]["语料库覆盖"]["语料覆盖率"] == "75.00%"
     assert set(client.records[1]["agentEvalMetrics"]) == {"框图规范检查", "语料库覆盖", "信号接口列表检查", "天枢DRC审查"}
+    assert client.records[1]["resultText"] == ""
+    assert client.records[1]["createUser"] == "agent-eval"
+    assert client.records[1]["boardNum"] == "BOARD-1"
     assert store.verify_metric_persisted("session-1", record["uuid"])["verified"] is True
     assert store.get_metrics("session-1")["schematic_rationality"]["check_type"] == "hscope_block_corpus_check"
     store.save_process_trace({"job_id": "job-1", "events": [
         {"session_id": "session-1", "stage": "session_completed"}]}, "session-1")
-    assert len(client.records) == 3
-    assert store.get_process_trace("session-1")["job_id"] == "job-1"
+    assert len(client.records) == 2
+    assert store.get_process_trace("session-1")["result_summary"]["session_id"] == "session-1"
+
+
+def test_recalculation_replaces_only_old_platform_records():
+    client = FakeClient()
+    client.records.extend([
+        {"_id": "source-1", "sessionId": "session-1", "boardNum": "BOARD-1",
+         "checkType": "hscope_diagram_lint", "resultText": "总检查通过率: 90%"},
+        {"_id": "old-metric", "sessionId": "session-1", "boardNum": "BOARD-1",
+         "checkType": "agent_eval_session_metrics", "resultText": "{}"},
+        {"_id": "old-process", "sessionId": "session-1", "boardNum": "old-job",
+         "checkType": "agent_eval_metric_process", "resultText": "{}"},
+    ])
+    store = MetricsStore.__new__(MetricsStore)
+    store._client = client
+    result = {
+        "session_id": "session-1", "status": "completed", "board_num": "BOARD-1",
+        "quality_summary": {"rates": {"框图规范检查总通过率": "90.00%"}},
+    }
+
+    record = store.build_metrics_record(result)
+    store.upsert_metrics(result, record=record)
+
+    assert [item["_id"] for item in client.records if item.get("checkType") == "hscope_diagram_lint"] == ["source-1"]
+    metrics = [item for item in client.records if item.get("checkType") == "agent_eval_metric"]
+    assert len(metrics) == 1
+    assert metrics[0]["sessionId"] == "session-1"
+    assert metrics[0]["boardNum"] == "BOARD-1"
+    assert metrics[0]["resultText"] == ""
+    assert metrics[0]["createUser"] == "agent-eval"

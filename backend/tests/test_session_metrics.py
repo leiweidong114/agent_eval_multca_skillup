@@ -86,7 +86,10 @@ def test_metric_job_overlaps_independent_classification_and_session_judge(monkey
         def query_diagnostics(self):
             return []
 
-        def build_metrics_record(self, result):
+        def build_process_trace(self, job, session_id):
+            return {"job_id": job["job_id"], "session_id": session_id, "events": list(job["events"])}
+
+        def build_metrics_record(self, result, *, process_trace=None):
             return {"uuid": "metric-1", "resultText": "{}"}
 
         def write_endpoint(self):

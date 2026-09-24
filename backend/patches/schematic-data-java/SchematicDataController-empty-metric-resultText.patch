@@ -1,0 +1,11 @@
+--- a/src/main/java/com/agent/eval/schematic/SchematicDataController.java
++++ b/src/main/java/com/agent/eval/schematic/SchematicDataController.java
+@@ -93,4 +93,7 @@
+         validateCollection(collectionName);
++        boolean emptyMetricResultText = "agent_eval_metric".equals(String.valueOf(payload.get("checkType")));
+         List<String> missing = REQUIRED_INSERT_FIELDS.stream()
+-                .filter(field -> payload.get(field) == null || String.valueOf(payload.get(field)).isBlank())
++                .filter(field -> payload.get(field) == null
++                        || (!emptyMetricResultText || !"resultText".equals(field))
++                        && String.valueOf(payload.get(field)).isBlank())
+                 .toList();

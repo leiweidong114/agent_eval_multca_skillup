@@ -534,6 +534,7 @@ class MetricJobManager:
                         )
                 # The session quality summary reads every original checkType record,
                 # including repeated reports of the same type. No source is changed.
+                quality_records: list[dict[str, Any]] = []
                 try:
                     quality_records = store.quality_records(session_id)
                     result["quality_summary"] = summarize_quality_records(session_id, quality_records)
@@ -584,6 +585,14 @@ class MetricJobManager:
                         self._append_event(job, "quality_summary_failed", "质量指标汇总查询失败",
                                            session_id=session_id, outcome="warning", detail=str(exc))
                         self._save(job, store)
+                result["board_num"] = next(
+                    (
+                        str(record.get("boardNum"))
+                        for record in [*quality_records, rationality_record]
+                        if isinstance(record, dict) and str(record.get("boardNum") or "").strip()
+                    ),
+                    session_id,
+                )
                 # The full-session Judge intentionally runs after the external
                 # rationality lookup/analysis, making it the sixth visible step.
                 # It still evaluates the LiteLLM conversation evidence only;
@@ -631,7 +640,18 @@ class MetricJobManager:
                             outcome="skipped",
                             output={"status": "disabled"},
                         )
-                metric_record = store.build_metrics_record(result)
+                with self._lock:
+                    trace_snapshot = {**job, "events": list(job.get("events") or [])}
+                process_trace = store.build_process_trace(trace_snapshot, session_id)
+                process_trace["result_summary"] = {
+                    key: result.get(key)
+                    for key in (
+                        "session_id", "status", "started_at", "finished_at", "calculated_at",
+                        "task_type", "task_category", "task_subtype", "agent", "model",
+                        "end_user", "metric_definition_version", "metrics", "board_num",
+                    )
+                }
+                metric_record = store.build_metrics_record(result, process_trace=process_trace)
                 metric_record_audit = _metric_record_for_audit(metric_record)
                 source = result.get("schematic_rationality") or {}
                 persist_method = "POST"
@@ -654,7 +674,7 @@ class MetricJobManager:
                             "endpoint": persist_endpoint,
                             "collection": "HDschematicRationalityCollection",
                             "session_id": session_id,
-                            "check_type": "agent_eval_session_metrics",
+                            "check_type": SESSION_METRICS_CHECK_TYPE,
                             "target_field": "agentEvalMetrics",
                             "status": "calling",
                         },
@@ -685,7 +705,7 @@ class MetricJobManager:
                                 "endpoint": persist_endpoint,
                                 "collection": "HDschematicRationalityCollection",
                                 "session_id": session_id,
-                                "check_type": "agent_eval_session_metrics",
+                                "check_type": SESSION_METRICS_CHECK_TYPE,
                                 "target_field": "agentEvalMetrics",
                                 "status": "failed",
                                 "calls": store.write_diagnostics(),
@@ -707,7 +727,7 @@ class MetricJobManager:
                             "endpoint": persist_endpoint,
                             "collection": "HDschematicRationalityCollection",
                             "session_id": session_id,
-                            "check_type": "agent_eval_session_metrics",
+                            "check_type": SESSION_METRICS_CHECK_TYPE,
                             "target_field": "agentEvalMetrics",
                             "status": "success",
                             "calls": store.write_diagnostics(),
