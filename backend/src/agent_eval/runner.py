@@ -252,12 +252,16 @@ def _generated_case(
     prompt: str,
     must_contain: list[str],
     must_not_contain: list[str],
+    *,
+    repo_fixture: str | None = None,
 ) -> None:
     case: dict[str, Any] = {
         "id": "cli-prompt",
         "title": "命令行提示词评测",
         "input": {"prompt": prompt},
     }
+    if repo_fixture:
+        case["context"] = {"repo_fixture": repo_fixture}
     if must_contain or must_not_contain:
         case["expect"] = {
             **({"must_contain": must_contain} if must_contain else {}),
@@ -456,6 +460,7 @@ def run_evaluation(
     profile: str | None = None,
     case_files: list[str] | None = None,
     prompt: str | None = None,
+    input_files: list[dict[str, Any]] | None = None,
     executable: str | None = None,
     must_contain: list[str] | None = None,
     must_not_contain: list[str] | None = None,
@@ -569,6 +574,44 @@ def run_evaluation(
     cases_dir = staged_skill / "evals" / "cases"
     cases_dir.mkdir(parents=True, exist_ok=True)
 
+    input_manifest: list[dict[str, Any]] = []
+    input_fixture: str | None = None
+    if input_files:
+        fixture_name = "uploaded-inputs"
+        fixture_root = staged_skill / "evals" / "fixtures" / fixture_name
+        workspace_input = fixture_root / "input"
+        workspace_input.mkdir(parents=True, exist_ok=True)
+        used_names: set[str] = set()
+        for index, item in enumerate(input_files, start=1):
+            source = Path(str(item.get("source_path") or "")).resolve()
+            if not source.is_file():
+                raise FileNotFoundError(
+                    f"Uploaded evaluation input does not exist: {item.get('filename')}"
+                )
+            original_name = Path(str(item.get("filename") or f"input-{index}")).name
+            safe_name = re.sub(r"[\x00-\x1f<>:\"/\\|?*]+", "-", original_name).strip(" .")
+            safe_name = safe_name or f"input-{index}"
+            candidate = safe_name
+            suffix = 2
+            while candidate.casefold() in used_names:
+                stem, extension = Path(safe_name).stem, Path(safe_name).suffix
+                candidate = f"{stem}-{suffix}{extension}"
+                suffix += 1
+            used_names.add(candidate.casefold())
+            target = workspace_input / candidate
+            shutil.copy2(filesystem_path(source), filesystem_path(target))
+            input_manifest.append({
+                "upload_id": item.get("upload_id"),
+                "original_name": original_name,
+                "workspace_path": f"input/{candidate}",
+                "size": int(item.get("size") or target.stat().st_size),
+                "sha256": item.get("sha256"),
+            })
+        input_fixture = f"evals/fixtures/{fixture_name}"
+        (staged_skill.parent / "evaluation-inputs.json").write_text(
+            json.dumps(input_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
     staged_cases: list[Path] = []
     for index, item in enumerate(case_files or [], start=1):
         source = Path(item).resolve()
@@ -579,11 +622,25 @@ def run_evaluation(
         staged_cases.append(target.relative_to(staged_skill))
     if prompt:
         target = cases_dir / "cli-prompt.yaml"
+        effective_prompt = prompt
+        if input_manifest:
+            file_lines = "\n".join(
+                f"- `{item['workspace_path']}`（原文件名：{item['original_name']}）"
+                for item in input_manifest
+            )
+            effective_prompt = (
+                f"{prompt.rstrip()}\n\n"
+                "## 本次评测的上传输入文件\n"
+                f"{file_lines}\n\n"
+                "这些文件已经复制到当前任务工作区。必须先实际读取并解析相关文件，"
+                "再按照所选 Skill 完成任务；不要仅根据文件名猜测内容。"
+            )
         _generated_case(
             target,
-            prompt,
+            effective_prompt,
             must_contain or [],
             must_not_contain or [],
+            repo_fixture=input_fixture,
         )
         staged_cases.append(target.relative_to(staged_skill))
 
@@ -700,6 +757,7 @@ def run_evaluation(
                 "api_version": evaluator.api_version,
                 "schematic_task_type": schematic_task_type,
             },
+            "input_files": input_manifest,
             "result_dir": str(result_root),
             "validated": True,
             "skill_up_exit_code": 0,
@@ -1142,6 +1200,7 @@ def run_evaluation(
             "api_version": evaluator.api_version,
             "schematic_task_type": schematic_task_type,
         },
+        "input_files": input_manifest,
         "result_dir": str(result_root),
         "skill_up_exit_code": completed.returncode,
         "iterations": len(results),

@@ -271,6 +271,35 @@ def test_schematic_run_request_defaults_to_block_to_schematic():
     assert request.schematic_task_type == "block_to_schematic"
 
 
+def test_evaluation_input_upload_is_owned_and_resolvable(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.api.routes_eval.runs_root", lambda: tmp_path)
+    monkeypatch.setattr("app.api.routes_eval.readable_runs_roots", lambda: (tmp_path,))
+
+    uploaded = client.post(
+        "/api/evaluation-inputs",
+        files={"file": ("signals.json", b'{"signals":["UART_TX"]}', "application/json")},
+    )
+
+    assert uploaded.status_code == 200, uploaded.text
+    payload = uploaded.json()
+    assert payload["filename"] == "signals.json"
+    assert payload["size"] > 0
+    request = RunRequest(
+        agent="codex",
+        skill="example-marker",
+        prompt="process the uploaded signal list",
+        input_files=[{
+            "upload_id": payload["upload_id"],
+            "filename": payload["filename"],
+        }],
+    )
+    from app.api.routes_eval import _run_payload
+
+    resolved = _run_payload(request, "test-worker")
+    assert resolved["input_file_paths"][0]["filename"] == "signals.json"
+    assert Path(resolved["input_file_paths"][0]["source_path"]).read_bytes().startswith(b"{")
+
+
 def test_schematic_task_resolves_its_own_skills_and_evaluator(monkeypatch):
     monkeypatch.setattr(
         "app.api.routes_eval.load_runtime_settings",

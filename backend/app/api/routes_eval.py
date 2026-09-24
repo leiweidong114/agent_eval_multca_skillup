@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field, model_validator
 
 from agent_eval.runner import run_evaluation
@@ -15,12 +19,66 @@ from agent_eval.schematic_tasks import (
     DEFAULT_SCHEMATIC_TASK_TYPE,
     list_schematic_task_types,
 )
-from app.config import BACKEND_ROOT, runs_root
+from app.config import BACKEND_ROOT, readable_runs_roots, runs_root
 from app.auth import employee_from_request
 from app.job_manager import job_manager
 from app.skill_registry import compose_skills, resolve_skill
 
 router = APIRouter(prefix="/api", tags=["eval"])
+
+MAX_EVALUATION_INPUT_FILES = 20
+MAX_EVALUATION_INPUT_BYTES = 25 * 1024 * 1024
+UPLOAD_ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
+
+
+class EvaluationInputRef(BaseModel):
+    upload_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    filename: str = Field(min_length=1, max_length=255)
+
+
+def _resolve_evaluation_inputs(
+    references: list[EvaluationInputRef], employee_no: str
+) -> list[dict[str, object]]:
+    """Resolve opaque upload IDs without trusting a browser-provided path."""
+    resolved: list[dict[str, object]] = []
+    for reference in references:
+        if not UPLOAD_ID_PATTERN.fullmatch(reference.upload_id):
+            raise ValueError("Invalid evaluation input upload id")
+        upload_dir = next(
+            (
+                root / "_uploads" / employee_no / reference.upload_id
+                for root in readable_runs_roots()
+                if (root / "_uploads" / employee_no / reference.upload_id / "manifest.json").is_file()
+            ),
+            None,
+        )
+        if upload_dir is None:
+            raise FileNotFoundError(f"Uploaded evaluation input was not found: {reference.filename}")
+        manifest = json.loads((upload_dir / "manifest.json").read_text(encoding="utf-8"))
+        if manifest.get("employee_no") != employee_no:
+            raise ValueError("Uploaded evaluation input belongs to another user")
+        if manifest.get("filename") != reference.filename:
+            raise ValueError("Uploaded evaluation input filename does not match its manifest")
+        payload = upload_dir / "payload"
+        if not payload.is_file():
+            raise FileNotFoundError(f"Uploaded evaluation input is incomplete: {reference.filename}")
+        resolved.append({
+            "upload_id": reference.upload_id,
+            "filename": reference.filename,
+            "size": int(manifest.get("size") or payload.stat().st_size),
+            "sha256": str(manifest.get("sha256") or ""),
+            "source_path": str(payload.resolve()),
+        })
+    return resolved
+
+
+def _run_payload(request: "RunRequest", employee_no: str) -> dict[str, object]:
+    payload = request.model_dump()
+    payload["user_id"] = employee_no
+    payload["input_file_paths"] = _resolve_evaluation_inputs(
+        request.input_files, employee_no
+    )
+    return payload
 
 
 class RunRequest(BaseModel):
@@ -44,6 +102,11 @@ class RunRequest(BaseModel):
     profile: str | None = Field(default=None, description="Profile from config/models.yaml")
     case: list[str] = Field(default_factory=list, description="Case YAML file paths")
     prompt: str | None = Field(default=None, description="Generate a one-off case from a prompt")
+    input_files: list[EvaluationInputRef] = Field(
+        default_factory=list,
+        max_length=MAX_EVALUATION_INPUT_FILES,
+        description="Previously uploaded files copied into the evaluation workspace",
+    )
     must_contain: list[str] = Field(default_factory=list)
     must_not_contain: list[str] = Field(default_factory=list)
     agent_executable: str | None = Field(default=None)
@@ -141,6 +204,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         profile=request.profile,
         case_files=request.case,
         prompt=request.prompt,
+        input_files=_resolve_evaluation_inputs(request.input_files, request.user_id),
         executable=request.agent_executable,
         must_contain=request.must_contain,
         must_not_contain=request.must_not_contain,
@@ -167,6 +231,54 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
     return result
 
 
+@router.post("/evaluation-inputs")
+async def upload_evaluation_input(
+    request: Request, file: UploadFile = File(...)
+) -> dict[str, object]:
+    """Stage one opaque, user-owned file for a later asynchronous evaluation."""
+    employee_no = employee_from_request(request)
+    filename = Path(str(file.filename or "input.bin")).name.strip()
+    if not filename or filename in {".", ".."} or len(filename) > 255:
+        raise HTTPException(status_code=400, detail="上传文件名无效或超过 255 个字符")
+    upload_id = uuid.uuid4().hex
+    upload_dir = runs_root() / "_uploads" / employee_no / upload_id
+    upload_dir.mkdir(parents=True, exist_ok=False)
+    payload_path = upload_dir / "payload"
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with payload_path.open("wb") as target:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_EVALUATION_INPUT_BYTES:
+                    raise ValueError("单个评测输入文件不能超过 25 MB")
+                digest.update(chunk)
+                target.write(chunk)
+        if size == 0:
+            raise ValueError("不能上传空文件")
+        manifest = {
+            "upload_id": upload_id,
+            "employee_no": employee_no,
+            "filename": filename,
+            "content_type": file.content_type or "application/octet-stream",
+            "size": size,
+            "sha256": digest.hexdigest(),
+        }
+        (upload_dir / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return {key: manifest[key] for key in (
+            "upload_id", "filename", "content_type", "size", "sha256"
+        )}
+    except (OSError, ValueError) as exc:
+        for child in upload_dir.glob("*"):
+            child.unlink(missing_ok=True)
+        upload_dir.rmdir()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        await file.close()
+
+
 @router.post("/run")
 def create_run(request: RunRequest, http_request: Request) -> dict[str, object]:
     """Queue an evaluation and return immediately with a job id."""
@@ -183,8 +295,7 @@ def create_run(request: RunRequest, http_request: Request) -> dict[str, object]:
             request.agent,
             require_model_selection=request.require_model_verification,
         )
-        payload = request.model_dump()
-        payload["user_id"] = employee_from_request(http_request)
+        payload = _run_payload(request, employee_from_request(http_request))
         return job_manager.submit(payload, skill_dir)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -254,7 +365,7 @@ def create_batch(request: BatchRunRequest, http_request: Request) -> dict[str, o
             raise ValueError("Batch evaluation requires at least two unique Agent/model combinations")
         skill_dir = _resolve_request_skill(normalized[0])
         return job_manager.submit_batch(
-            [item.model_dump() for item in normalized],
+            [_run_payload(item, employee_no) for item in normalized],
             skill_dir,
             name=request.name,
         )
@@ -342,6 +453,9 @@ def prioritize_job(job_id: str, request: Request) -> dict[str, object]:
 def validate_run(request: RunRequest, http_request: Request) -> dict[str, object]:
     """Validate a Skill/eval config without executing the full run."""
     try:
+        request = request.model_copy(
+            update={"user_id": employee_from_request(http_request)}
+        )
         request = _apply_schematic_skill_settings(request)
         return _run(request=request, validate_only=True)
     except FileNotFoundError as exc:

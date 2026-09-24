@@ -11,6 +11,7 @@ from agent_eval.runner import (
     _configure_skillup_workspace,
     _copy_skill,
     _execute_process,
+    _generated_case,
     _prepare_staged_skill,
     aggregate_scores,
     attach_session_evidence,
@@ -21,6 +22,23 @@ from agent_eval.runner import (
 from agent_eval.results_paths import evaluation_results_root, evaluation_results_roots, validate_results_root
 from agent_eval.windows_paths import filesystem_path
 from agent_eval.runtime import SUPPORTED_AGENTS, agent_capabilities, backend_agent
+
+
+def test_generated_prompt_case_mounts_uploaded_files_into_workspace(tmp_path):
+    case_path = tmp_path / "prompt.yaml"
+
+    _generated_case(
+        case_path,
+        "Read input/signals.json and generate the schematic.",
+        [],
+        [],
+        repo_fixture="evals/fixtures/uploaded-inputs",
+    )
+
+    import yaml
+    payload = yaml.safe_load(case_path.read_text(encoding="utf-8"))
+    assert payload["context"]["repo_fixture"] == "evals/fixtures/uploaded-inputs"
+    assert "input/signals.json" in payload["input"]["prompt"]
 
 
 def test_results_root_from_environment_is_shared_with_default(tmp_path, monkeypatch):

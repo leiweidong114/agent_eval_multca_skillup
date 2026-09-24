@@ -34,6 +34,11 @@ export const fetchSkill = (name) => data(http.get(`/skills/${encodeURIComponent(
 export const fetchSkillFile = (name, path) => data(http.get(`/skills/${encodeURIComponent(name)}/files/${path.split('/').map(encodeURIComponent).join('/')}`))
 export const fetchSkillCases = (name) => data(http.get(`/skills/${encodeURIComponent(name)}/cases`))
 export const triggerRun = (payload) => data(http.post('/run', payload))
+export const uploadEvaluationInput = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return data(http.post('/evaluation-inputs', form, { timeout: 300000 }))
+}
 export const triggerValidate = (payload) => data(http.post('/validate', payload))
 export const fetchJobs = () => data(http.get('/jobs'))
 export const fetchJob = (id) => data(http.get(`/jobs/${id}`))

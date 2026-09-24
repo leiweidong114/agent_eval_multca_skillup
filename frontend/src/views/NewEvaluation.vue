@@ -91,6 +91,13 @@
             <el-input v-model="form.prompt" type="textarea" :rows="6" placeholder="例如：设计一套 24V 转 5V/3A 的降压电源，包含输入保护、状态指示和测试点……" />
             <div v-if="form.schematicTaskType==='block_to_schematic'" class="prompt-example"><span>可直接使用内置 STM32 示例，验证完整原理图链路。</span><el-button link type="primary" @click="form.prompt=schematicExamplePrompt">填入示例 Prompt</el-button></div>
           </el-form-item>
+          <el-form-item label="任务输入文件（可选）">
+            <input class="input-file-picker" type="file" multiple @change="onEvaluationInputFiles" />
+            <div class="field-help">最多 20 个文件、单文件不超过 25 MB。文件会独立复制到每个评测任务工作区的 input/ 目录，例如可上传 JSON、YAML、CSV 或 Excel 格式的信号接口列表。</div>
+            <div v-if="form.inputFiles.length" class="input-file-list">
+              <el-tag v-for="(file,index) in form.inputFiles" :key="`${file.name}-${file.size}-${index}`" closable @close="removeEvaluationInput(index)">{{file.name}} · {{fileSize(file.size)}}</el-tag>
+            </div>
+          </el-form-item>
           <el-alert type="info" :closable="false" show-icon :title="`本次使用评测插件：${schematicEvaluator||'未配置'}`" />
           <div class="pipeline-skills"><span>本次 Skill 顺序</span><el-tag v-for="(skill,index) in schematicSkills" :key="skill" effect="plain">{{index+1}}. {{skill}}</el-tag><el-button link type="primary" @click="router.push('/settings')">修改设置</el-button></div>
         </template>
@@ -152,7 +159,7 @@ import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } f
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Cpu, DataAnalysis, MagicStick } from '@element-plus/icons-vue'
-import { cancelBatch, cancelExperiment, cancelJob, fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModelConfig, fetchModels, fetchSettings, fetchSkillCases, fetchSkills, fetchSchematicTaskTypes, triggerRun, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun, prioritizeBatch, prioritizeJob } from '../api'
+import { cancelBatch, cancelExperiment, cancelJob, fetchAgents, fetchBatch, fetchBenchmarks, fetchJob, fetchModelConfig, fetchModels, fetchSettings, fetchSkillCases, fetchSkills, fetchSchematicTaskTypes, triggerRun, uploadEvaluationInput, ensureAutoProvider, createExperiment, fetchExperiment, createBatchRun, prioritizeBatch, prioritizeJob } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -162,7 +169,7 @@ const types = [
   { id: 'skill', name: 'Skill 评测', description: '单 Skill 或多 Skill 联合任务评测', icon: markRaw(MagicStick) },
 ]
 const normalizeType = (value) => ['schematic', 'question', 'skill'].includes(value) ? value : ''
-const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, justdoTransport: 'cli' })
+const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', inputFiles: [], cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, justdoTransport: 'cli' })
 const agents = ref([])
 const models = ref([])
 const skills = ref([])
@@ -220,6 +227,16 @@ function agentDisabled(agent) { return (form.type === 'question' && selectedBenc
 function modelLabel(model) { return `${model.id} · ${model.source === 'litellm' ? 'LiteLLM' : model.source}` }
 function modelAvailable(model) { return model.source === 'litellm' || model.source === 'native' }
 function onModelChange() {}
+function onEvaluationInputFiles(event){
+  const picked=[...(event.target.files||[])]
+  if(picked.length>20){ElMessage.warning('最多上传 20 个任务输入文件');event.target.value='';return}
+  const oversized=picked.find(file=>file.size>25*1024*1024)
+  if(oversized){ElMessage.warning(`${oversized.name} 超过 25 MB`);event.target.value='';return}
+  form.inputFiles=picked
+  event.target.value=''
+}
+function removeEvaluationInput(index){form.inputFiles.splice(index,1)}
+const fileSize=size=>Number(size)>=1024*1024?`${(Number(size)/1024/1024).toFixed(1)} MB`:`${Math.max(1,Math.round(Number(size)/1024))} KB`
 const contractLabel=value=>({block_diagram:'框图',signal_interface_v1:'信号接口列表',schematic_project:'原理图工程'}[value]||value)
 function onSchematicTaskChange(){form.name=currentSchematicTask.value?.name?`${currentSchematicTask.value.name}评测`:'原理图生成评测';form.prompt=''}
 function onBenchmarkChange() {
@@ -274,7 +291,9 @@ async function submit() {
 }
 async function submitAgentRun() {
   const selectedSkills = form.type === 'schematic' ? schematicSkills.value : form.skills
-  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
+  const inputFiles=[]
+  for(const file of form.inputFiles){inputFiles.push(await uploadEvaluationInput(file))}
+  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, input_files: inputFiles.map(item=>({upload_id:item.upload_id,filename:item.filename})), must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
   if (form.batchMode) {
     const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })
     resultId.value = response.batch_id; resultRouteType.value = 'batch'; job.value = response; pollBatch(response.batch_id)
@@ -339,6 +358,6 @@ onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <style scoped>
-.prompt-example{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;margin-top:7px;color:var(--muted);font-size:11px}.pipeline-skills{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}.pipeline-skills>span{font-size:12px;color:var(--muted);margin-right:4px}
+.prompt-example{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;margin-top:7px;color:var(--muted);font-size:11px}.pipeline-skills{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}.pipeline-skills>span{font-size:12px;color:var(--muted);margin-right:4px}.input-file-picker{width:100%;padding:10px;border:1px dashed var(--line);border-radius:8px;background:var(--surface-2)}.input-file-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .steps{width:440px;background:transparent}.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.type-card{position:relative;display:grid;grid-template-columns:42px 1fr;grid-template-rows:auto auto;text-align:left;gap:3px 12px;padding:16px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);cursor:pointer}.type-card strong{font-size:15px}.type-card small{color:var(--muted);line-height:1.5}.type-icon{grid-row:1/3;width:40px;height:40px;display:grid;place-items:center;border-radius:8px;background:var(--brand-soft);color:var(--brand);font-size:19px}.check{position:absolute;right:10px;top:10px;color:var(--accent);opacity:0}.active .check{opacity:1}.panel-title,.progress-head,.submit-row{display:flex;justify-content:space-between;align-items:center}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 13px}.common-fields>:first-child{grid-column:1/-1}.prism-form :deep(.el-form-item){margin-bottom:17px}.prism-form :deep(.el-form-item__label){padding-bottom:6px;color:var(--muted);font-size:11px}.field-help{font-size:11px;color:var(--muted);margin-top:6px}.option-meta{float:right;color:var(--muted);margin-left:20px;font-size:11px}.status-option{display:flex;align-items:center;gap:8px;width:100%}.status-option small{margin-left:auto;color:var(--muted)}.availability-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.availability-dot.available{background:#22a06b;box-shadow:0 0 0 3px rgba(34,160,107,.13)}.availability-dot.unavailable{background:#dc4c4c;box-shadow:0 0 0 3px rgba(220,76,76,.12)}.combination-note{grid-column:1/-1;margin-bottom:16px}.runtime-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.submit-row{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}.selection-summary{display:flex;gap:10px;align-items:center}.selection-summary span{font-size:12px;color:var(--muted);padding-left:10px;border-left:1px solid var(--line)}.progress-head h3{margin:4px 0}.progress-head p{margin:0 0 18px;color:var(--muted)}.result-actions{margin-top:18px}@media(max-width:900px){.steps{display:none}.type-grid,.form-grid,.runtime-grid{grid-template-columns:1fr}.common-fields>:first-child{grid-column:auto}.submit-row{align-items:flex-end}.selection-summary{flex-direction:column;align-items:flex-start}.type-grid{gap:8px}}
 </style>
