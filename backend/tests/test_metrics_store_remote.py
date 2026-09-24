@@ -7,9 +7,11 @@ from app.metrics_store import MetricsStore, SESSION_METRICS_CHECK_TYPE, SESSION_
 class FakeClient:
     def __init__(self):
         self.records = []
+        self._next_id = 1
 
     def insert_record(self, record, *, collection_name):
-        saved = {**record, "_id": f"mongo-{len(self.records) + 1}"}
+        saved = {**record, "_id": f"mongo-{self._next_id}"}
+        self._next_id += 1
         self.records.append(saved)
         return {"status": "inserted", "record": saved, "collection": collection_name}
 

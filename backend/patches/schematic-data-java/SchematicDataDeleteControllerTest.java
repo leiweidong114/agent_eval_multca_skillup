@@ -28,10 +28,11 @@ class SchematicDataDeleteControllerTest {
                 .thenReturn(DeleteResult.acknowledged(1));
         var controller = new SchematicDataDeleteController(mongo);
 
-        Map<String, Object> response = controller.delete(COLLECTION, "68cec0000000000000000001", null);
+        Map<String, Object> response = controller.delete(Map.of(
+                "collectionName", COLLECTION, "_id", "68cec0000000000000000001"));
 
         assertThat(response.get("deletedCount")).isEqualTo(1L);
-        assertThat(response.get("selector")).isEqualTo("id");
+        assertThat(response.get("selector")).isEqualTo("_id");
         ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
         verify(mongo).remove(query.capture(), eq(Document.class), eq(COLLECTION));
         assertThat(query.getValue().getQueryObject().get("_id").toString())
@@ -45,7 +46,8 @@ class SchematicDataDeleteControllerTest {
                 .thenReturn(DeleteResult.acknowledged(4));
         var controller = new SchematicDataDeleteController(mongo);
 
-        Map<String, Object> response = controller.delete(COLLECTION, null, "session-1");
+        Map<String, Object> response = controller.delete(Map.of(
+                "collectionName", COLLECTION, "sessionId", "session-1"));
 
         assertThat(response.get("deletedCount")).isEqualTo(4L);
         ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
@@ -54,15 +56,30 @@ class SchematicDataDeleteControllerTest {
     }
 
     @Test
+    void uuidDeletesAllMatchingRecords() {
+        MongoTemplate mongo = mock(MongoTemplate.class);
+        when(mongo.remove(any(Query.class), eq(Document.class), eq(COLLECTION)))
+                .thenReturn(DeleteResult.acknowledged(1));
+        var controller = new SchematicDataDeleteController(mongo);
+        Map<String, Object> response = controller.delete(Map.of(
+                "collectionName", COLLECTION, "uuid", "uuid-1"));
+        assertThat(response.get("selector")).isEqualTo("uuid");
+        ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+        verify(mongo).remove(query.capture(), eq(Document.class), eq(COLLECTION));
+        assertThat(query.getValue().getQueryObject().getString("uuid")).isEqualTo("uuid-1");
+    }
+
+    @Test
     void rejectsMissingAmbiguousOrInvalidSelectors() {
         var controller = new SchematicDataDeleteController(mock(MongoTemplate.class));
-        assertThatThrownBy(() -> controller.delete(COLLECTION, null, null))
+        assertThatThrownBy(() -> controller.delete(Map.of("collectionName", COLLECTION)))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> controller.delete(COLLECTION, "68cec0000000000000000001", "session-1"))
+        assertThatThrownBy(() -> controller.delete(Map.of(
+                "collectionName", COLLECTION, "_id", "68cec0000000000000000001", "sessionId", "session-1")))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> controller.delete(COLLECTION, "not-an-object-id", null))
+        assertThatThrownBy(() -> controller.delete(Map.of("collectionName", COLLECTION, "_id", "not-an-object-id")))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> controller.delete("other", null, "session-1"))
+        assertThatThrownBy(() -> controller.delete(Map.of("collectionName", "other", "sessionId", "session-1")))
                 .isInstanceOf(ResponseStatusException.class);
     }
 
@@ -72,7 +89,8 @@ class SchematicDataDeleteControllerTest {
         when(mongo.remove(any(Query.class), eq(Document.class), eq(COLLECTION)))
                 .thenReturn(DeleteResult.acknowledged(0));
         var controller = new SchematicDataDeleteController(mongo);
-        assertThatThrownBy(() -> controller.delete(COLLECTION, null, "missing-session"))
+        assertThatThrownBy(() -> controller.delete(Map.of(
+                "collectionName", COLLECTION, "sessionId", "missing-session")))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
     }

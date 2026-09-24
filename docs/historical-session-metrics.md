@@ -91,16 +91,20 @@ curl.exe -G "http://127.0.0.1:8000/api/schematic-data/query" `
 # 插入（无需登录 Cookie；Python 到 Java 固定 verify=False）
 curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/insert" `
   -H "Content-Type: application/json" `
-  -d '{"uuid":"唯一UUID","status":"completed","createUser":"100001","createTime":"2026-09-21T08:00:00Z","checkType":"hscope_diagram_lint","checkMessage":"原理图质量分析","userName":"测试用户","hscopeProjectId":"project-demo","boardNum":"BOARD-001","sessionId":"实际会话ID","resultText":"{}"}'
+  -d '{"collectionName":"HDschematicRationalityCollection","uuid":"唯一UUID","status":"completed","createUser":"100001","createTime":"2026-09-21T08:00:00Z","checkType":"hscope_diagram_lint","checkMessage":"原理图质量分析","userName":"测试用户","hscopeProjectId":"project-demo","boardNum":"BOARD-001","sessionId":"实际会话ID","resultText":"{}"}'
+
+# 删除（Python 代理只接受 MongoDB _id）
+curl.exe -X DELETE "http://127.0.0.1:8000/api/schematic-data/delete" `
+  -H "Content-Type: application/json" `
+  -d '{"collectionName":"HDschematicRationalityCollection","_id":"MongoDB的24位_id"}'
 ```
 
 该接口校验11个业务字段并转发到 Java `/schematic/schematicData/insert`；成功写入后会
 清除进程内查询缓存，使下一次历史会话指标计算立即读取新记录。
 
 客户端兼容单条对象、JSON 数组和常见分页结构（`records/items/list/rows/content`，
-可包在 `data` 或 `result` 内）。查询接口尚未提供 `sessionId` 服务端筛选，因此当前会
-逐页读取后在本地匹配；可用 TTL/LRU 避免短时间重复请求。数据量增大后，建议接口
-增加 `sessionId` 和按 `createTime` 倒序能力。
+可包在 `data` 或 `result` 内）。查询接口会把 `sessionId` 直接交给 Java/MongoDB
+进行精确筛选，并按 `createTime` 倒序返回；TTL/LRU 用于避免短时间重复请求。
 
 ## 3. TTL/LRU 缓存
 

@@ -137,9 +137,9 @@ def test_schematic_data_client_inserts_record_with_cookie(monkeypatch):
 
     assert result["record"]["_id"] == "mongo-1"
     assert captured["url"].endswith("/schematic/schematicData/insert")
-    assert captured["params"]["collectionName"] == "HDschematicRationalityCollection"
     assert captured["headers"] == {"Cookie": "JSESSIONID=session-secret"}
     assert captured["verify"] is False
+    assert captured["json"]["collectionName"] == "HDschematicRationalityCollection"
     assert captured["json"]["sessionId"] == "session-1"
     assert captured["cache_cleared"] is True
     assert client.write_diagnostics()[0]["status"] == "success"
@@ -158,6 +158,7 @@ def test_schematic_data_insert_route_needs_no_login_and_forwards_payload(monkeyp
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     client = TestClient(app)
     payload = {
+        "collectionName": "HDschematicRationalityCollection",
         "uuid": "uuid-1", "status": "completed", "createUser": "100001",
         "createTime": "2026-09-20T08:00:00Z", "checkType": "hscope_diagram_lint",
         "checkMessage": "测试", "userName": "测试用户", "hscopeProjectId": "project-1",
@@ -168,7 +169,7 @@ def test_schematic_data_insert_route_needs_no_login_and_forwards_payload(monkeyp
 
     assert response.status_code == 201
     assert response.json()["record"]["_id"] == "mongo-1"
-    assert captured["record"] == payload
+    assert captured["record"] == {key: value for key, value in payload.items() if key != "collectionName"}
     assert captured["collection_name"] == "HDschematicRationalityCollection"
 
 
@@ -182,6 +183,7 @@ def test_schematic_data_insert_route_accepts_empty_metric_result_text(monkeypatc
 
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     payload = {
+        "collectionName": "HDschematicRationalityCollection",
         "uuid": "metric-uuid", "status": "completed", "createUser": "agent-eval",
         "createTime": "2026-09-24T08:00:00Z", "checkType": "agent_eval_metric",
         "checkMessage": "指标计算结果", "userName": "Agent Eval", "hscopeProjectId": "session-metrics",
@@ -249,7 +251,7 @@ def test_aggregate_uses_dedicated_atomic_java_put(monkeypatch):
     assert captured["json"]["rates"]["语料覆盖率"] == "75%"
 
 
-def test_delete_records_treats_missing_previous_aggregate_as_idempotent(monkeypatch):
+def test_delete_records_sends_id_in_json_body_and_treats_missing_as_idempotent(monkeypatch):
     captured = {}
 
     class Response:
@@ -258,16 +260,53 @@ def test_delete_records_treats_missing_previous_aggregate_as_idempotent(monkeypa
         def raise_for_status(self):
             raise AssertionError("404 replacement delete must not raise")
 
-    def fake_delete(url, **kwargs):
-        captured.update(url=url, **kwargs)
+    def fake_request(method, url, **kwargs):
+        captured.update(method=method, url=url, **kwargs)
         return Response()
 
-    monkeypatch.setattr("app.schematic_data_client.httpx.delete", fake_delete)
+    monkeypatch.setattr("app.schematic_data_client.httpx.request", fake_request)
     monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
-    result = SchematicDataClient().delete_records(session_id="汇总结果")
+    result = SchematicDataClient().delete_records(record_id="68cec0000000000000000001")
     assert result == {"status": "not_found", "deletedCount": 0}
-    assert captured["params"]["sessionId"] == "汇总结果"
+    assert captured["method"] == "DELETE"
+    assert captured["json"] == {
+        "collectionName": "HDschematicRationalityCollection",
+        "_id": "68cec0000000000000000001",
+    }
     assert captured["url"].endswith("/schematic/schematicData/delete")
+
+
+def test_schematic_data_delete_route_only_accepts_mongo_id(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def delete_records(self, *, record_id, collection_name):
+            captured.update(record_id=record_id, collection_name=collection_name)
+            return {"status": "deleted", "deletedCount": 1}
+
+    monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
+    response = TestClient(app).request(
+        "DELETE",
+        "/api/schematic-data/delete",
+        json={
+            "collectionName": "HDschematicRationalityCollection",
+            "_id": "68cec0000000000000000001",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["deletedCount"] == 1
+    assert captured == {
+        "record_id": "68cec0000000000000000001",
+        "collection_name": "HDschematicRationalityCollection",
+    }
+
+    invalid = TestClient(app).request(
+        "DELETE",
+        "/api/schematic-data/delete",
+        json={"collectionName": "HDschematicRationalityCollection", "sessionId": "session-1"},
+    )
+    assert invalid.status_code == 422
 
 
 def test_schematic_data_insert_with_trailing_slash_needs_no_login(monkeypatch):
@@ -277,6 +316,7 @@ def test_schematic_data_insert_with_trailing_slash_needs_no_login(monkeypatch):
 
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     payload = {
+        "collectionName": "HDschematicRationalityCollection",
         "uuid": "uuid-2", "status": "completed", "createUser": "100001",
         "createTime": "2026-09-21T08:00:00Z", "checkType": "hscope_diagram_lint",
         "checkMessage": "测试", "userName": "测试用户", "hscopeProjectId": "project-2",

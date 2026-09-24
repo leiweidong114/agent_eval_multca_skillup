@@ -472,9 +472,20 @@ class MetricsStore:
             }
             if hasattr(client, "clear_diagnostics"):
                 client.clear_diagnostics()
-            # The requested replacement semantics are explicit: remove every
-            # former 汇总结果 document, then insert exactly one fresh document.
-            client.delete_records(session_id=AGGREGATE_SESSION_ID, collection_name=RATIONALITY_COLLECTION)
+            # Remove former aggregate documents one by one by immutable MongoDB
+            # _id. The Python delete contract intentionally never performs a
+            # broad sessionId deletion.
+            aggregate_records = client.find_records(
+                RATIONALITY_COLLECTION, [AGGREGATE_SESSION_ID], use_cache=False,
+            )
+            for aggregate_record in aggregate_records:
+                aggregate_record_id = str(aggregate_record.get("_id") or "").strip()
+                if not aggregate_record_id:
+                    raise RuntimeError("旧汇总结果缺少 _id，无法安全精确删除")
+                client.delete_records(
+                    record_id=aggregate_record_id,
+                    collection_name=RATIONALITY_COLLECTION,
+                )
             aggregate_uuid = str(uuid.uuid4())
             record = {
                 "uuid": aggregate_uuid,

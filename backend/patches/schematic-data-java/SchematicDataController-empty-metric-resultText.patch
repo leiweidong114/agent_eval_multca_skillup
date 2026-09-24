@@ -1,6 +1,12 @@
 --- a/src/main/java/com/agent/eval/schematic/SchematicDataController.java
 +++ b/src/main/java/com/agent/eval/schematic/SchematicDataController.java
-@@ -93,4 +93,7 @@
+@@ -89,12 +89,13 @@
+     @PostMapping("/insert")
+-    public Map<String, Object> insert(
+-            @RequestParam(defaultValue = CANONICAL_COLLECTION) String collectionName,
+-            @RequestBody Map<String, Object> payload) {
++    public Map<String, Object> insert(@RequestBody Map<String, Object> payload) {
++        String collectionName = String.valueOf(payload.getOrDefault("collectionName", "")).trim();
          validateCollection(collectionName);
 +        boolean emptyMetricResultText = "agent_eval_metric".equals(String.valueOf(payload.get("checkType")));
          List<String> missing = REQUIRED_INSERT_FIELDS.stream()
@@ -9,3 +15,9 @@
 +                        || (!emptyMetricResultText || !"resultText".equals(field))
 +                        && String.valueOf(payload.get(field)).isBlank())
                  .toList();
+@@ -105,5 +106,5 @@
+         Document document = new Document();
+         payload.forEach((key, value) -> {
+-            if (!"_id".equals(key)) {
++            if (!"_id".equals(key) && !"collectionName".equals(key)) {
+                 document.put(key, value);

@@ -80,22 +80,16 @@ class SchematicDataClient:
         path = getattr(self.settings, "schematic_data_delete_path", None) or "/schematic/schematicData/delete"
         return self.settings.schematic_data_api_base_url + path
 
-    def delete_records(self, *, session_id: str | None = None, record_id: str | None = None,
+    def delete_records(self, *, record_id: str,
                        collection_name: str = RATIONALITY_COLLECTION) -> Any:
-        """Delete records by one exact selector through the Java facade."""
-        if bool(session_id) == bool(record_id):
-            raise ValueError("删除时必须且只能指定 session_id 或 record_id")
-        params: dict[str, str] = {"collectionName": collection_name}
-        if session_id:
-            params["sessionId"] = session_id
-        else:
-            params["id"] = str(record_id)
+        """Delete one exact record by MongoDB _id through the Java facade."""
+        body = {"collectionName": collection_name, "_id": str(record_id)}
         started = time.perf_counter()
-        diagnostic = {"method": "DELETE", "endpoint": self.delete_url, "params": params,
-                      "session_id": session_id, "record_id": record_id}
+        diagnostic = {"method": "DELETE", "endpoint": self.delete_url, "body": body,
+                      "record_id": record_id}
         try:
-            response = httpx.delete(
-                self.delete_url, params=params, headers=self._headers(),
+            response = httpx.request(
+                "DELETE", self.delete_url, json=body, headers=self._headers(),
                 timeout=self.settings.schematic_data_timeout_seconds, trust_env=False, verify=False,
             )
             if response.status_code == 404:
@@ -300,7 +294,7 @@ class SchematicDataClient:
         diagnostic: dict[str, Any] = {
             "method": "POST",
             "endpoint": self.write_url,
-            "params": {"collectionName": collection_name},
+            "body_collection": collection_name,
             "verify_tls": False,
             "record_fields": sorted(str(key) for key in record),
             "session_id": record.get("sessionId"),
@@ -309,8 +303,7 @@ class SchematicDataClient:
         try:
             response = httpx.post(
                 self.write_url,
-                params={"collectionName": collection_name},
-                json=dict(record),
+                json={**dict(record), "collectionName": collection_name},
                 headers=self._headers(),
                 timeout=self.settings.schematic_data_timeout_seconds,
                 trust_env=False,

@@ -10,8 +10,8 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -25,26 +25,29 @@ public class SchematicDataDeleteController {
         this.mongoTemplate = mongoTemplate;
     }
 
-    /** Supply exactly one selector. An _id matches one record; a sessionId matches all its records. */
+    /** Supply collectionName and exactly one of _id, sessionId or uuid in the JSON body. */
     @DeleteMapping("/delete")
-    public Map<String, Object> delete(
-            @RequestParam(defaultValue = COLLECTION) String collectionName,
-            @RequestParam(required = false) String id,
-            @RequestParam(required = false) String sessionId) {
+    public Map<String, Object> delete(@RequestBody Map<String, Object> payload) {
+        String collectionName = value(payload, "collectionName");
         if (!COLLECTION.equals(collectionName)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported collectionName");
         }
-        boolean byId = id != null && !id.isBlank();
-        boolean bySession = sessionId != null && !sessionId.isBlank();
-        if (byId == bySession) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "supply exactly one of id or sessionId");
+        String id = value(payload, "_id");
+        String sessionId = value(payload, "sessionId");
+        String uuid = value(payload, "uuid");
+        int selectors = (id == null ? 0 : 1) + (sessionId == null ? 0 : 1) + (uuid == null ? 0 : 1);
+        if (selectors != 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "supply exactly one of _id, sessionId or uuid");
         }
-        if (byId && !ObjectId.isValid(id)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "id must be a MongoDB ObjectId");
+        if (id != null && !ObjectId.isValid(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "_id must be a MongoDB ObjectId");
         }
-        Query query = new Query(byId
+        String selector = id != null ? "_id" : sessionId != null ? "sessionId" : "uuid";
+        String selectorValue = id != null ? id : sessionId != null ? sessionId : uuid;
+        Query query = new Query(id != null
                 ? Criteria.where("_id").is(new ObjectId(id))
-                : Criteria.where("sessionId").is(sessionId));
+                : Criteria.where(selector).is(selectorValue));
         DeleteResult result = mongoTemplate.remove(query, Document.class, collectionName);
         if (result.getDeletedCount() == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found");
@@ -52,8 +55,16 @@ public class SchematicDataDeleteController {
         return Map.of(
                 "status", "deleted",
                 "collectionName", collectionName,
-                "selector", byId ? "id" : "sessionId",
-                "value", byId ? id : sessionId,
+                "selector", selector,
+                "value", selectorValue,
                 "deletedCount", result.getDeletedCount());
+    }
+
+    private String value(Map<String, Object> payload, String key) {
+        Object raw = payload.get(key);
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return null;
+        }
+        return String.valueOf(raw).trim();
     }
 }
