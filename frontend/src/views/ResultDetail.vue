@@ -147,7 +147,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { cancelBatch, cancelExperiment, cancelJob, fetchBatch, fetchExperiment, fetchExperimentComparison, fetchExperimentResults, fetchJob, fetchJobStatus, fetchRun, fetchRunInteractions, openRunFolder, prioritizeBatch, prioritizeJob } from '../api'
@@ -183,6 +183,13 @@ const isLive=computed(()=>['queued','running','cancelling'].includes(detail.valu
 const isCancelable=computed(()=>['queued','running'].includes(detail.value?.status))
 const canPrioritize=computed(()=>route.params.type!=='question'&&(detail.value?.status==='queued'||(route.params.type==='batch'&&detail.value?.status==='running'&&batchRows.value.some(row=>row.status==='queued'))))
 const liveInteractions=computed(()=>Array.isArray(detail.value?.live_interactions)?detail.value.live_interactions:[])
+watch(liveInteractions,rows=>{
+  if(!interactionDialogVisible.value||!selectedInteraction.value)return
+  const requestId=selectedInteraction.value.request_id
+  if(!requestId)return
+  const fresh=rows.find(item=>item.request_id===requestId)
+  if(fresh)selectedInteraction.value=fresh
+})
 const interactionScopeOptions=computed(()=>[
   {label:`全部 ${interactionScopeCounts.value.all||0}`,value:'all'},
   {label:`主 Agent ${interactionScopeCounts.value.main_agent||0}`,value:'main_agent'},

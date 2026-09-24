@@ -130,6 +130,33 @@ def test_live_interaction_updates_one_turn_in_place():
     assert rows[0]["total_tokens"] == 12
 
 
+def test_sparse_live_snapshot_does_not_erase_saved_model_output():
+    manager = _manager_with_jobs({"job": {"job_id": "job", "live_interactions": []}})
+    manager._save = lambda _job: None
+    complete = {
+        "request_id": "request-1",
+        "status": "success",
+        "total_tokens": 12,
+        "messages": [{"role": "user", "content": "hi"}],
+        "response": {
+            "choices": [{"message": {"role": "assistant", "content": "hello"}}]
+        },
+    }
+    sparse = {
+        "request_id": "request-1",
+        "status": "success",
+        "total_tokens": 12,
+        "response": None,
+    }
+
+    manager._upsert_live_interaction("job", complete)
+    manager._upsert_live_interaction("job", sparse)
+
+    row = manager.get("job")["live_interactions"][0]
+    assert row["response"] == complete["response"]
+    assert row["messages"] == complete["messages"]
+
+
 def test_batch_runs_in_parallel_and_one_failure_does_not_cancel_others(
     monkeypatch, tmp_path
 ):

@@ -182,7 +182,22 @@ class EvaluationJobManager:
                     )
                 )
                 if item_identity == identity:
-                    rows[index] = dict(interaction)
+                    # LiteLLM writes a SpendLogs row in stages.  A later poll can
+                    # temporarily return the same request without one of the
+                    # heavy JSON columns even after an earlier snapshot already
+                    # contained it.  Never let such a sparse snapshot erase the
+                    # request/response that the live dialog can already display.
+                    merged = {**item, **interaction}
+                    for content_key in (
+                        "messages", "response", "proxy_server_request", "metadata"
+                    ):
+                        incoming = interaction.get(content_key)
+                        existing = item.get(content_key)
+                        if incoming in (None, "", [], {}) and existing not in (
+                            None, "", [], {}
+                        ):
+                            merged[content_key] = existing
+                    rows[index] = merged
                     replaced = True
                     break
             if not replaced:

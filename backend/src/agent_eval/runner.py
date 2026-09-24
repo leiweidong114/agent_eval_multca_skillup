@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import shutil
@@ -773,7 +774,11 @@ def run_evaluation(
     interaction_thread: Thread | None = None
     if event_callback is not None and collect_database_trace and trace_key is not None:
         def monitor_model_interactions() -> None:
-            seen: set[tuple[str, str, int]] = set()
+            # SpendLogs is eventually consistent: tokens/status can be visible
+            # before the response JSON column is populated.  Track the complete
+            # snapshot instead of only request_id/status/token count so the UI
+            # receives the later, content-bearing version of the same turn.
+            delivered: dict[str, str] = {}
             while True:
                 stopping = interaction_stop.wait(1.0)
                 try:
@@ -786,14 +791,28 @@ def run_evaluation(
                     )
                     enrich_interaction_rows(live_rows)
                     for row in live_rows:
-                        identity = (
-                            str(row.get("request_id") or ""),
-                            str(row.get("status") or ""),
-                            int(row.get("total_tokens") or 0),
+                        identity = str(row.get("request_id") or "") or "|".join(
+                            str(row.get(name) or "")
+                            for name in ("session_id", "start_time", "model_group", "model")
                         )
-                        if identity in seen:
+                        snapshot = hashlib.sha256(json.dumps(
+                                {
+                                    "status": row.get("status"),
+                                    "prompt_tokens": row.get("prompt_tokens"),
+                                    "completion_tokens": row.get("completion_tokens"),
+                                    "total_tokens": row.get("total_tokens"),
+                                    "messages": row.get("messages"),
+                                    "response": row.get("response"),
+                                    "proxy_server_request": row.get("proxy_server_request"),
+                                },
+                                ensure_ascii=False,
+                                sort_keys=True,
+                                default=str,
+                            ).encode("utf-8")
+                        ).hexdigest()
+                        if delivered.get(identity) == snapshot:
                             continue
-                        seen.add(identity)
+                        delivered[identity] = snapshot
                         event_callback(
                             "model_interaction",
                             json.dumps(row, ensure_ascii=False, default=str),
