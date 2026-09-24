@@ -102,7 +102,12 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
     parser.add_argument("--output-dir")
     parser.add_argument("--user", "--user-id", dest="user_id", default="local")
     parser.add_argument("--task-name")
-    parser.add_argument("--benchmark", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--benchmark",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--database-trace", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--require-model-verification", action=argparse.BooleanOptionalAction, default=True
@@ -139,7 +144,12 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--timeout", type=int, default=1800)
     run.add_argument("--max-turns", type=int, default=12)
     run.add_argument("--output-dir")
-    run.add_argument("--benchmark", action=argparse.BooleanOptionalAction, default=True)
+    run.add_argument(
+        "--benchmark",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=argparse.SUPPRESS,
+    )
     run.add_argument("--validate-only", action="store_true")
     run.add_argument(
         "--database-trace",
@@ -916,25 +926,10 @@ def _evaluation_batch(
     rows: list[dict[str, object]] = []
 
     def evaluation_passed(result: dict[str, object]) -> bool:
-        if result.get("status", "completed") != "completed":
-            return False
-        scoring = result.get("scoring") or {}
-        # Ranking eligibility and task acceptance are separate concepts.  A
-        # transient Judge outage makes an otherwise valid deterministic result
-        # diagnostic-only, but it must not rewrite a strict schematic PASS into
-        # a failed Agent execution in the batch summary.
-        extensions = scoring.get("extensions") or {}
-        schematic = extensions.get("schematic") or {}
-        acceptance = schematic.get("acceptance") or schematic.get("result") or {}
-        if isinstance(acceptance.get("accepted"), bool):
-            return acceptance["accepted"]
-        cases = [
-            case
-            for iteration in (result.get("results") or [])
-            for case in (iteration.get("case_results") or [])
-            if case.get("configuration", "with_skill") == "with_skill"
-        ]
-        return all(case.get("status") == "PASS" for case in cases) if cases else True
+        # PASS/FAIL assertions describe output quality. run_evaluation marks a
+        # run completed only when the Agent did not abort and required exact-
+        # model verification succeeded.
+        return result.get("status") == "completed"
 
     def run_one(agent: str) -> dict[str, object]:
         task_id = uuid.uuid4().hex
@@ -953,7 +948,7 @@ def _evaluation_batch(
                 iterations=args.iterations,
                 timeout_seconds=args.timeout,
                 max_turns=args.max_turns,
-                benchmark=args.benchmark,
+                benchmark=False,
                 output_dir=args.output_dir,
                 collect_database_trace=args.database_trace,
                 require_model_verification=args.require_model_verification,
@@ -1187,7 +1182,7 @@ def main() -> None:
         iterations=args.iterations,
         timeout_seconds=args.timeout,
         max_turns=args.max_turns,
-        benchmark=args.benchmark,
+        benchmark=False,
         output_dir=args.output_dir,
         extra_args=args.agent_arg,
         validate_only=args.validate_only,

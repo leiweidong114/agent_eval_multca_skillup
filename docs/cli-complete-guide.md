@@ -620,7 +620,8 @@ agent-eval doctor
 | `--database-trace` | 评测时收集 LiteLLM 数据库轨迹 |
 | `--require-model-verification` | 将指定模型数据库核验作为通过条件 |
 | `--llm-judge` | 使用配置的 LiteLLM Judge 评分 |
-| `--benchmark` | 同时运行无 Skill 基线，用于计算 Skill 增益 |
+
+Skill/原理图评测只运行 `with_skill`，不再提供 `without_skill` 基线开关。
 
 ## 15. 推荐工作顺序
 

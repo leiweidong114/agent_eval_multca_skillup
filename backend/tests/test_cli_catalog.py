@@ -169,7 +169,7 @@ def test_evaluation_batch_runs_each_agent_with_same_prompt(tmp_path, monkeypatch
     ]
 
 
-def test_evaluation_batch_does_not_count_failed_cases_as_passed(tmp_path, monkeypatch):
+def test_evaluation_batch_counts_completed_assertion_failure_as_success(tmp_path, monkeypatch):
     skill = _skill(tmp_path, "example-marker")
 
     def fake_run_evaluation(**kwargs):
@@ -196,12 +196,43 @@ def test_evaluation_batch_does_not_count_failed_cases_as_passed(tmp_path, monkey
         args, skill_dir=skill, selected_skills=["example-marker"], evaluation_type="skill"
     )
 
+    assert result["status"] == "completed"
+    assert result["passed"] == 1
+    assert result["results"][0]["evaluation_passed"] is True
+
+
+def test_evaluation_batch_rejects_interrupted_or_unverified_execution(tmp_path, monkeypatch):
+    skill = _skill(tmp_path, "example-marker")
+
+    def fake_run_evaluation(**kwargs):
+        return {
+            "status": "failed",
+            "task_id": kwargs["task_id"],
+            "provider_model": kwargs["model"],
+            "failure": {"category": "model_verification_failed"},
+            "results": [{"case_results": [{"status": "ERROR"}]}],
+        }
+
+    monkeypatch.setattr(cli, "run_evaluation", fake_run_evaluation)
+    args = argparse.Namespace(
+        agent=["openclaw"], workers=1, model="glm-4.5-air", profile=None,
+        case=[], prompt="same task", must_contain=[], must_not_contain=[],
+        parallelism=1, iterations=1, timeout=30, max_turns=2,
+        benchmark=False, output_dir=None, database_trace=True,
+        require_model_verification=True, user_id="local", task_name=None,
+        llm_judge=True,
+    )
+
+    result = cli._evaluation_batch(
+        args, skill_dir=skill, selected_skills=["example-marker"], evaluation_type="skill"
+    )
+
     assert result["status"] == "failed"
     assert result["passed"] == 0
     assert result["results"][0]["evaluation_passed"] is False
 
 
-def test_evaluation_batch_counts_strict_acceptance_when_judge_is_unavailable(
+def test_evaluation_batch_keeps_quality_failure_separate_from_execution_success(
     tmp_path, monkeypatch
 ):
     skill = _skill(tmp_path, "schematic-pipeline")
@@ -217,7 +248,7 @@ def test_evaluation_batch_counts_strict_acceptance_when_judge_is_unavailable(
                 "valid_for_ranking": False,
                 "diagnostic_only": True,
                 "extensions": {
-                    "schematic": {"acceptance": {"accepted": True}}
+                    "schematic": {"acceptance": {"accepted": False, "score": 20}}
                 },
             },
             "results": [{"case_results": [{"status": "PASS"}]}],

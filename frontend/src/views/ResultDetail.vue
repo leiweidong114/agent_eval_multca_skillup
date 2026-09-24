@@ -70,6 +70,7 @@
 
       <template v-else>
         <div class="metric-grid"><div><span>{{isDiagnostic?'诊断总分':'总体得分'}}</span><b>{{score(detail.scores?.overall_score??detail.scoring?.overall_score)}}</b></div><div><span>结果质量</span><b>{{score(detail.scores?.result_dimension_score??dimensions.result?.score)}}</b></div><div><span>过程质量</span><b>{{score(detail.scores?.process_dimension_score??dimensions.process?.score)}}</b></div><div><span>Skill 质量</span><b>{{score(detail.scores?.skill_quality_dimension_score??detail.skill_quality?.score)}}</b></div></div>
+        <el-alert v-if="detail.status==='completed'&&schematicResult.accepted===false" class="failure-alert" type="warning" show-icon :closable="false" title="Agent 执行成功，原理图质量检查存在扣分" description="任务成功仅表示 Agent 未中断且指定模型核验通过；产物与中间过程问题已经计入结果、过程和 Skill 分数。"/>
 
         <el-card shadow="never" class="panel overview-card">
           <div class="run-overview"><div><span>Agent</span><b>{{detail.agent||'-'}}</b></div><div><span>模型</span><b>{{detail.provider_model||detail.model||'-'}}</b></div><div><span>评测 Skill</span><b>{{skillNames.join('、')||'-'}}</b></div><div><span>总耗时</span><b>{{durationText(detail.scores?.total_duration_ms)}}</b></div><div><span>总 Token</span><b>{{number(detail.scores?.total_tokens)}}</b></div><div><span>迭代次数</span><b>{{detail.iterations||1}}</b></div></div>
@@ -80,6 +81,11 @@
           <div v-if="evaluatorExtensions.length" class="extension-grid"><article v-for="item in evaluatorExtensions" :key="item.name"><b>{{item.name}}</b><pre>{{pretty(item.value)}}</pre></article></div>
         </el-card>
         <el-alert v-if="detail.evaluation_type==='schematic'&&skillUsage.status" :type="skillUsage.all_selected_skills_read?'success':'warning'" show-icon :closable="false" :title="skillUsage.all_selected_skills_read?'已验证所有选定 Skill 的显式读取':'未验证全部选定 Skill 的显式读取'" :description="`已读取：${skillUsage.observed_skills?.join('、')||'无'}；缺少证据：${skillUsage.missing_skills?.join('、')||'无'}。判定依据为数据库轨迹中的 SKILL.md 读取工具调用。`"/>
+
+        <el-card v-if="detail.evaluation_type==='schematic'&&schematicResult.checks?.length" shadow="never" class="panel">
+          <template #header><div class="section-head"><div><b>原理图产物质量评分</b><span>检查结果只参与评分，不改变 Agent 执行成功状态</span></div><el-tag :type="schematicResult.accepted?'success':'warning'">规则分 {{score(schematicResult.score)}}</el-tag></div></template>
+          <div class="assertion-rows"><article v-for="item in schematicResult.checks" :key="item.name" :class="{passed:item.passed}"><el-icon><CircleCheckFilled v-if="item.passed"/><CircleCloseFilled v-else/></el-icon><div><b>{{schematicCheckLabel(item.name)}}</b><small>{{item.required?'计入质量规则':'参考项'}} · 权重 {{item.weight??0}}</small></div><el-tag size="small" :type="item.passed?'success':'warning'">{{item.passed?'通过':'扣分'}}</el-tag></article></div>
+        </el-card>
 
         <el-card shadow="never" class="panel"><template #header><div class="section-head"><div><b>评测过程与轨迹分析</b><span>从任务执行、工具调用和模型轨迹中提取</span></div><el-tag :type="traceStatus.type" effect="plain">{{traceStatus.label}}</el-tag></div></template>
           <div class="trajectory-grid">
@@ -159,6 +165,7 @@ const dimensions=computed(()=>detail.value?.scoring?.dimensions||{})
 const evaluatorExtensions=computed(()=>Object.entries(detail.value?.scoring?.extensions||{}).filter(([name])=>name!=='schematic').map(([name,value])=>({name,value})))
 const process=computed(()=>detail.value?.process_metrics||{})
 const schematicTrace=computed(()=>detail.value?.scoring?.extensions?.schematic?.trace||{})
+const schematicResult=computed(()=>detail.value?.scoring?.extensions?.schematic?.acceptance||detail.value?.scoring?.extensions?.schematic?.result||{})
 const displayToolCalls=computed(()=>schematicTrace.value.tool_calls??process.value.tool_calls??0)
 const displayToolCompletionRate=computed(()=>schematicTrace.value.tool_completion_rate??process.value.tool_completion_rate)
 const displayToolFailures=computed(()=>schematicTrace.value.tool_failures??process.value.tool_failures??0)
@@ -243,6 +250,7 @@ const failureDescription=(value,fallback='')=>{if(!value)return fallback;const p
 const evidenceLabel=s=>({insufficient:'样本不足',exploratory:'探索性',adequate:'充分'}[s]||s||'—')
 const qualityLabel=k=>({skill_md:'SKILL.md 完整性',name:'名称定义',description:'能力描述',workflow:'工作流程',constraints:'约束条件',output_contract:'输出契约',error_handling:'异常处理',verification:'验证方法'}[k]||k)
 const qualityDescription=item=>({skill_md:'Skill 主说明文件存在且非空',name:'元数据中定义了明确名称',description:'元数据中描述了适用场景',workflow:'包含清晰的执行步骤',constraints:'明确说明边界与约束',output_contract:'定义输出或产物格式',error_handling:'说明失败与异常处理方式',verification:'说明如何验证执行结果'}[item.check]||item.description)
+const schematicCheckLabel=name=>({cases_passed:'用例断言',selected_skills_executed:'指定 Skill 执行证据',sheets_json_valid:'信号接口列表产物',subagent_execution_verified:'Subagent 执行证据',pipeline_stage_assertions:'流水线阶段与脚本',layout_artifacts_valid:'布局产物与未布线检查',apply_result_valid:'网页应用结果',schematic_url_verified:'最终原理图 URL 验证'}[name]||name)
 const schematicTaskLabel=value=>({block_to_schematic:'框图生成原理图',block_to_signal_list:'框图生成信号接口列表',signal_list_to_schematic:'信号接口列表生成原理图'}[value]||value||'通用评测')
 const assertionEvidence=value=>{if(value==null||value==='')return'无额外证据';if(typeof value==='string')return value;if(Array.isArray(value))return value.join('、')||'无额外证据';if(typeof value==='object')return Object.entries(value).map(([key,item])=>`${key}: ${Array.isArray(item)?item.join(', '):item??'—'}`).join(' · ');return String(value)}
 const formatTime=value=>value?new Date(value).toLocaleString():'时间未记录'

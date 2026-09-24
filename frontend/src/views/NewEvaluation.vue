@@ -123,7 +123,6 @@
           <el-form-item label="并行度"><el-input-number v-model="form.concurrency" :min="1" :max="16" /></el-form-item>
           <el-form-item v-if="form.type !== 'question'" label="迭代次数"><el-input-number v-model="form.iterations" :min="1" :max="20" /></el-form-item>
           <el-form-item label="单任务超时（秒）"><el-input-number v-model="form.timeout" :min="30" :max="7200" :step="30" /></el-form-item>
-          <el-form-item v-if="form.type !== 'question'" label="运行无 Skill 基线"><el-switch v-model="form.baseline" /></el-form-item>
         </div>
 
         <div class="submit-row">
@@ -163,7 +162,7 @@ const types = [
   { id: 'skill', name: 'Skill 评测', description: '单 Skill 或多 Skill 联合任务评测', icon: markRaw(MagicStick) },
 ]
 const normalizeType = (value) => ['schematic', 'question', 'skill'].includes(value) ? value : ''
-const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, baseline: true, justdoTransport: 'cli' })
+const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, justdoTransport: 'cli' })
 const agents = ref([])
 const models = ref([])
 const skills = ref([])
@@ -275,7 +274,7 @@ async function submit() {
 }
 async function submitAgentRun() {
   const selectedSkills = form.type === 'schematic' ? schematicSkills.value : form.skills
-  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, benchmark: form.baseline, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
+  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
   if (form.batchMode) {
     const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })
     resultId.value = response.batch_id; resultRouteType.value = 'batch'; job.value = response; pollBatch(response.batch_id)

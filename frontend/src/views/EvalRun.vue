@@ -131,9 +131,6 @@
         <el-form-item label="最大轮数">
           <el-input-number v-model="form.max_turns" :min="1" />
         </el-form-item>
-        <el-form-item label="基准对照">
-          <el-switch v-model="form.benchmark" active-text="同时运行无 Skill 基线" />
-        </el-form-item>
         <el-form-item label="数据库轨迹">
           <el-switch v-model="form.collect_database_trace" active-text="读取 LiteLLM 模型交互记录" />
         </el-form-item>
@@ -202,7 +199,6 @@ const form = reactive({
   iterations: 1,
   timeout_seconds: 1800,
   max_turns: 12,
-  benchmark: true,
   collect_database_trace: true,
   require_model_verification: true,
   llm_judge: true,
@@ -307,7 +303,6 @@ function buildPayload() {
     iterations: form.iterations,
     timeout_seconds: form.timeout_seconds,
     max_turns: form.max_turns,
-    benchmark: form.benchmark,
     collect_database_trace: form.collect_database_trace,
     require_model_verification: form.require_model_verification,
     llm_judge: form.llm_judge,
@@ -386,7 +381,6 @@ function reset() {
   form.iterations = 1
   form.timeout_seconds = 1800
   form.max_turns = 12
-  form.benchmark = true
   form.collect_database_trace = true
   form.require_model_verification = true
   form.llm_judge = true

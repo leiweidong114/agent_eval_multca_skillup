@@ -281,7 +281,7 @@ class EvaluationJobManager:
                 must_contain=request.get("must_contain"), must_not_contain=request.get("must_not_contain"),
                 parallelism=request.get("parallelism", 1), iterations=request.get("iterations", 1),
                 timeout_seconds=request.get("timeout_seconds", 1800), max_turns=request.get("max_turns", 60),
-                benchmark=request.get("benchmark", True), output_dir=str(self._jobs[job_id].get("results_root") or runs_root()),
+                benchmark=False, output_dir=str(self._jobs[job_id].get("results_root") or runs_root()),
                 extra_args=request.get("extra_args"), validate_only=False,
                 collect_database_trace=request.get("collect_database_trace", True),
                 require_model_verification=request.get("require_model_verification", True),

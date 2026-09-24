@@ -435,7 +435,10 @@ def build_eval_config(
             },
             "parallelism": parallelism,
         },
-        "benchmark": {"enabled": benchmark},
+        # Agent Eval intentionally runs only the installed-Skill variant.  Keep
+        # Skill-Up's benchmark block explicit so it never schedules the
+        # without_skill control run.
+        "benchmark": {"enabled": False},
         "report": {
             "formats": ["json", "html", "junit"],
             "artifacts": ["transcript", "logs"],
@@ -459,7 +462,7 @@ def run_evaluation(
     iterations: int = 1,
     timeout_seconds: int = 1800,
     max_turns: int = 12,
-    benchmark: bool = True,
+    benchmark: bool = False,
     output_dir: str | None = None,
     extra_args: list[str] | None = None,
     validate_only: bool = False,
@@ -590,6 +593,9 @@ def run_evaluation(
         relative = Path("skills") / f"{index:02d}-{_slug(selected_name)}"
         if (staged_skill / relative / "SKILL.md").is_file():
             additional_skills.append((relative.as_posix(), selected_name))
+    # ``benchmark`` remains in the public Python signature for compatibility
+    # with older callers, but without_skill execution is no longer supported.
+    _ = benchmark
     eval_config = build_eval_config(
         agent=agent,
         model=model,
@@ -600,7 +606,7 @@ def run_evaluation(
         parallelism=parallelism,
         timeout_seconds=timeout_seconds,
         max_turns=max_turns,
-        benchmark=benchmark,
+        benchmark=False,
         extra_args=[*resolved_profile.agent_args, *(extra_args or [])],
         additional_skills=additional_skills,
     )
@@ -1049,28 +1055,10 @@ def run_evaluation(
         raise TypeError(
             f"Evaluator {evaluator.id} must return PluginEvaluation from evaluator API v1"
         )
-    if evaluation_type == "schematic" and evaluation_status == "completed":
-        schematic_extension = plugin_evaluation.extensions.get("schematic") or {}
-        acceptance = schematic_extension.get("acceptance") or {}
-        if acceptance.get("accepted") is False:
-            evaluation_status = "failed"
-            failed_checks = [
-                str(item.get("name"))
-                for item in acceptance.get("checks") or []
-                if item.get("required") and not item.get("passed")
-            ]
-            failure = {
-                "category": "agent_output_invalid",
-                "retryable": False,
-                "summary": "Agent 未按原理图 Skill 完成有效交付",
-                "title": "原理图交付验收失败",
-                "detail": "模型调用链正常，但 Agent 没有完成原理图任务的必要步骤或产物。",
-                "suggested_action": "检查 Agent 轨迹和失败的验收项；这属于本次 Agent/Skill 执行结果，不应归类为 LiteLLM 故障。",
-                "component": "agent",
-                "status_code": None,
-                "reset_after": None,
-                "technical_detail": ", ".join(failed_checks) or "schematic acceptance failed",
-            }
+    # Domain checks are quality evidence, not execution gates. A completed
+    # Agent run with an exactly verified model remains successful even when
+    # schematic artifacts, Skill usage, subagents, layout, or URL checks lose
+    # points. Those findings remain in the evaluator extension and scores.
     if not run_llm_judge_enabled:
         llm_judge = {"status": "disabled_by_request"}
     elif evaluation_status != "completed":

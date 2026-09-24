@@ -455,8 +455,7 @@ sh ./stop-all.sh
   --case .\backend\skills\example-marker\evals\cases\marker.yaml `
   --agent-executable C:\path\to\codex.exe `
   --parallelism 2 `
-  --iterations 1 `
-  --benchmark
+  --iterations 1
 ```
 
 直接用 Prompt 和确定性字符串约束生成临时用例：
@@ -508,8 +507,7 @@ Set-Location D:\AI_FOR_WORLD\14_AI_workspace\common_tools\agent_eval_multca_skil
   --agent-executable "$env:APPDATA\JustDo\multica\development\JustDo-agent.exe" `
   --case .\backend\skills\example-marker\evals\cases\marker.yaml `
   --parallelism 1 `
-  --iterations 1 `
-  --benchmark
+  --iterations 1
 ```
 
 Linux：
@@ -522,8 +520,7 @@ Linux：
   --agent-executable "$HOME/.local/bin/JustDo-agent" \
   --case ./backend/skills/example-marker/evals/cases/marker.yaml \
   --parallelism 1 \
-  --iterations 1 \
-  --benchmark
+  --iterations 1
 ```
 
 ## 用例和输出
@@ -555,15 +552,17 @@ backend/evaluation_results/<用户>/<任务>/<时间>__<run_id>/
 `evaluation-report.json` 的 `scores` 字段均为透明的确定性统计：
 
 - `task_score`：有 Skill 时断言通过率，0–100。
-- `baseline_score`：无 Skill 基准的断言通过率；未启用 benchmark 时为 `null`。
-- `skill_gain`：`task_score - baseline_score`，衡量 Skill 带来的净提升。
+- `baseline_score`：兼容旧评测结果；新评测不再运行无 Skill 基线，因此为 `null`。
+- `skill_gain`：兼容旧评测结果；新评测不再计算该指标。
 - `execution_stability`：有 Skill 用例中成功完成评测流程的比例；PASS 和普通断言 FAIL 都算完成，运行错误/超时不算。
 - `skill_quality_score`：对 Skill 名称、描述、流程、约束、产物、异常处理和验证说明的透明结构评分。
 - `model_trace_score`：数据库匹配模型调用的成功率；未走 LiteLLM 或没有匹配记录时为 `null`。
 - `model_verification_score`：数据库精确确认指定模型时为 100，否则为 0；详情见 `model_verification`。
 - `total_tokens`、`total_duration_ms`：所有本次执行的资源统计。
 
-默认 `--benchmark` 会同时运行有 Skill 和无 Skill 两组。只验证任务结果、不做基线时使用 `--no-benchmark`。增加 `--iterations N` 可用于稳定性评测。
+当前评测只运行 `with_skill`，不再创建 `without_skill` 对照会话。增加 `--iterations N` 仍会按指定次数重复评测。
+
+任务状态与质量评分相互独立：只要 Agent 没有以 `ERROR`、超时或无结果中断，且启用的指定模型数据库核验通过，运行状态就是 `completed`。用例断言、Skill 使用、Subagent、原理图产物、布局和最终 URL 检查只影响结果、过程与 Skill 质量分数，不再把已完成的 Agent 运行改成失败。
 
 ## 无登录与无默认提示词保证
 

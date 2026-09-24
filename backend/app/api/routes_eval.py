@@ -52,7 +52,10 @@ class RunRequest(BaseModel):
     iterations: int = Field(default=1, ge=1, le=20)
     timeout_seconds: int = Field(default=1800, ge=1)
     max_turns: int = Field(default=60, ge=1)
-    benchmark: bool = Field(default=True)
+    benchmark: bool = Field(
+        default=False,
+        description="Deprecated compatibility field; without-Skill baseline runs are disabled",
+    )
     extra_args: list[str] = Field(default_factory=list)
     collect_database_trace: bool = Field(default=True)
     require_model_verification: bool = Field(
@@ -63,6 +66,9 @@ class RunRequest(BaseModel):
 
     @model_validator(mode="after")
     def normalize_skills(self) -> "RunRequest":
+        # Accept old clients that still send benchmark=true, but never schedule
+        # a second without_skill Agent session.
+        self.benchmark = False
         if self.evaluation_type == "schematic":
             self.schematic_task_type = self.schematic_task_type or DEFAULT_SCHEMATIC_TASK_TYPE
         elif self.schematic_task_type is not None:
@@ -142,7 +148,7 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         iterations=request.iterations,
         timeout_seconds=request.timeout_seconds,
         max_turns=request.max_turns,
-        benchmark=request.benchmark,
+        benchmark=False,
         output_dir=str(runs_root()),
         extra_args=request.extra_args,
         validate_only=validate_only,

@@ -437,22 +437,14 @@ Windows 和 Linux 迁移分别测试：只复制仓库代码和非敏感配置�
 
 对 Judge 做 mutation testing：从一个 100 分金标产物中分别删除连线、交换引脚、改网络名、重复组件、破坏 manifest，确认对应维度稳定扣分。
 
-### 7.4 有 Skill/无 Skill 对照
+### 7.4 单配置评测
 
-每个 Agent、每个用例都运行：
+每个 Agent、每个用例只运行 `with_skill`：安装并明确允许使用目标 Skill，
+不再创建 `without_skill` 对照会话，也不再计算 Skill lift。输入中继续使用
+随机化且可验证的组件/网络标识，避免模型凭固定示例猜中。
 
-```text
-with_skill    = 安装并明确允许使用新 Skill
-without_skill = 相同模型、Prompt、预算和工具，但不安装该 Skill
-```
-
-输入中使用随机化且可验证的组件/网络标识，避免模型凭固定示例猜中。报告同时给出绝对质量和 Skill lift：
-
-```text
-skill_lift = with_skill_score - without_skill_score
-```
-
-验收建议：with-skill 平均专项分 ≥ 85，关键拓扑错误率为 0，且相对 without-skill 的平均提升 ≥ 15 分。最终阈值应根据首轮人工标注校准。
+验收建议：with-skill 平均专项分 ≥ 85，关键拓扑错误率为 0。最终阈值应根据
+首轮人工标注校准。
 
 ### 7.5 六 Agent 原理图全流程
 

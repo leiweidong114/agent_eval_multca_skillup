@@ -136,6 +136,7 @@ def test_eval_config_uses_local_multica_without_auth_or_database(tmp_path):
     assert "database" not in encoded
     assert "litellm" not in encoded
     assert "system_prompt" not in encoded
+    assert config["benchmark"] == {"enabled": False}
     artifacts = config["cases"]["defaults"]["collect_artifacts"]
     assert "out/**" in artifacts
     assert "figures/**" in artifacts

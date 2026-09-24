@@ -245,6 +245,17 @@ def test_run_request_supports_single_and_joint_skill_payloads():
     assert joint.skills == ["example-marker", "schematic-generation"]
 
 
+def test_run_request_disables_legacy_without_skill_benchmark():
+    request = RunRequest(
+        agent="codex",
+        skill="example-marker",
+        prompt="test",
+        benchmark=True,
+    )
+
+    assert request.benchmark is False
+
+
 def test_run_request_accepts_a_stable_evaluator_id():
     request = RunRequest(
         agent="codex",

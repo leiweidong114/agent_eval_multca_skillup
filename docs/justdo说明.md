@@ -12,7 +12,7 @@ JustDo 进程退出码：0
 最小 Skill 评测：
 状态：completed
 with_skill：PASS
-without_skill：FAIL（这是基线预期结果）
+without_skill：FAIL（历史结果；当前版本已取消该对照运行）
 任务得分：100
 总分：87.4
 实际模型调用：22 次
@@ -107,7 +107,6 @@ Set-Location "$EvalRoot\backend"
   --iterations 1 `
   --timeout 300 `
   --max-turns 4 `
-  --benchmark `
   --database-trace `
   --require-model-verification `
   --no-llm-judge
@@ -122,7 +121,6 @@ Set-Location "$EvalRoot\backend"
   --iterations 1 `
   --timeout 300 `
   --max-turns 4 `
-  --benchmark `
   --database-trace `
   --require-model-verification `
   --no-llm-judge
@@ -138,7 +136,6 @@ Set-Location $EvalRoot
   --iterations 1 `
   --timeout 1800 `
   --max-turns 12 `
-  --benchmark `
   --database-trace `
   --require-model-verification `
   --llm-judge
@@ -152,7 +149,6 @@ Set-Location $EvalRoot
   --iterations 1 `
   --timeout 1200 `
   --max-turns 8 `
-  --benchmark `
   --database-trace `
   --require-model-verification `
   --no-llm-judge

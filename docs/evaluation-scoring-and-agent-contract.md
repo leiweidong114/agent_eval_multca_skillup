@@ -7,7 +7,7 @@
 1. FastAPI 任务池：`AGENT_EVAL_WORKERS`，默认 6，可同时执行当前六个不同 Agent 的任务。
 2. 单任务 Skill-Up 用例池：请求字段 `parallelism`，范围 1–16。
 
-因此默认最多有 6 个顶层任务同时运行，而每个任务又可并发执行多条 case。总 Agent 进程数近似为 `AGENT_EVAL_WORKERS × parallelism`，还要乘 benchmark 的 with/without Skill 变体；生产配置必须按 CPU、内存、Agent CLI 限流和模型网关限流设定。`GET /api/capacity` 返回当前两层容量。批次中的单个任务失败只影响该组合，不会取消或阻塞其他组合；全部结束后批次会根据结果标记为 `completed`、`partial_failed` 或 `failed`。
+因此默认最多有 6 个顶层任务同时运行，而每个任务又可并发执行多条 case。总 Agent 进程数近似为 `AGENT_EVAL_WORKERS × parallelism`；当前只运行 `with_skill`，不再创建 `without_skill` 变体。生产配置必须按 CPU、内存、Agent CLI 限流和模型网关限流设定。`GET /api/capacity` 返回当前两层容量。批次中的单个任务失败只影响该组合，不会取消或阻塞其他组合；全部结束后批次会根据结果标记为 `completed`、`partial_failed` 或 `failed`。
 
 ## Skill 安装与 eval.yaml 所有权
 
@@ -27,11 +27,13 @@ Skill 不需要预先安装到用户机器的全局 Agent 目录。评测器把 
 
 | 维度 | 默认总权重 | 规则证据 | LLM Judge 重点 |
 |---|---:|---|---|
-| 结果 | 50% | Skill-Up 断言通过率、相对无 Skill 的增益 | 正确性、完整性、是否真正满足任务 |
+| 结果 | 50% | Skill-Up 断言、领域产物和结果规则 | 正确性、完整性、是否真正满足任务 |
 | 过程 | 30% | 执行稳定性、模型调用成功率、工具完成率、错误事件 | 工具选择、推理/执行效率、异常恢复 |
 | Skill 质量 | 20% | SKILL.md 结构、元数据、引用文件和可执行性规则 | 指令清晰度、可复用性、边界与鲁棒性 |
 
 默认维度内规则/LLM 比例写在 `config/scoring.yaml`。Judge 不可用时默认降级为纯规则分；设置 `required: true` 才会让 Judge 失败阻断整个任务。
+
+运行状态与质量评分分离。`completed` 只表示 Agent 没有以 `ERROR`、超时或无结果中断，并且启用的指定模型硬校验通过；用例断言、Skill 使用、Subagent、产物、布局和 URL 检查只负责形成结果、过程和 Skill 质量分数，不会把已经完成的 Agent 运行改成 `failed`。
 
 默认 Judge 使用项目当前声明的最强 LiteLLM profile `litellm_deepseek_pro` 和 `deepseek-v4-pro`。可在不提交密钥的 `config/local.yaml` 覆盖：
 
