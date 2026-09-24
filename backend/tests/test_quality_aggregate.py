@@ -19,7 +19,7 @@ def test_cumulative_rates_weight_denominators_and_average_rate_only_drc():
     assert AGGREGATE_SESSION_ID == "汇总结果"
     result = aggregate_quality_metrics([_metric("a", 1, 2, 50), _metric("b", 9, 10, 100)])
     assert result["rates"]["框图规范检查总通过率"] == "83.33%"
-    assert result["rates"]["天枢DRC审查通过率"] == "75.00%"
+    assert result["rates"]["天枢 DRC 审查通过率"] == "75.00%"
     assert result["rates"]["语料覆盖率"] is None
     assert result["source_session_count"] == 2
 
@@ -36,10 +36,16 @@ def test_rollup_persists_and_reads_back_latest_session_metrics_only():
     first = store.refresh_quality_aggregate()
     assert client.records[-1]["sessionId"] == "汇总结果"
     assert first["rates"]["框图规范检查总通过率"] == "83.33%"
-    assert first["rates"]["天枢DRC审查通过率"] == "75.00%"
+    assert first["rates"]["天枢 DRC 审查通过率"] == "75.00%"
+    assert set(client.records[-1]["agentEvalMetrics"]) == {
+        "框图规范检查总通过率", "语料覆盖率", "信号接口列表检查通过率", "天枢 DRC 审查通过率",
+    }
+    assert first["aggregate_record_count"] == 1
+    assert [item["method"] for item in first["write_diagnostics"]] == ["DELETE", "POST"]
     assert store.get_quality_aggregate()["rates"] == first["rates"]
     record_count = len(client.records)
-    assert store.refresh_quality_aggregate()["mongo_record_id"] == first["mongo_record_id"]
+    refreshed = store.refresh_quality_aggregate()
+    assert refreshed["mongo_uuid"] != first["mongo_uuid"]
     assert len(client.records) == record_count
     # Recalculation inserts a newer metric for the same Session ID; old value
     # must not be counted twice.
@@ -48,5 +54,5 @@ def test_rollup_persists_and_reads_back_latest_session_metrics_only():
     second = store.refresh_quality_aggregate()
     assert second["rates"]["框图规范检查总通过率"] == "91.67%"
     assert second["source_session_count"] == 2
-    assert second["mongo_record_id"] == first["mongo_record_id"]
+    assert second["mongo_uuid"] != refreshed["mongo_uuid"]
     assert len(client.records) == before_refresh_count

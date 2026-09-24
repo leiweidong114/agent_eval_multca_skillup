@@ -13,7 +13,7 @@ CATEGORIES = (
     ("hscope_diagram_lint", "总检查通过率", "框图规范检查总通过率", "overall_pass_rate"),
     ("hscope_block_corpus_check", "语料覆盖率", "语料覆盖率", "coverage_rate"),
     ("signal-interface-checker", "信号接口列表检查通过率", "信号接口列表检查通过率", "pass_rate"),
-    ("tianshu-drc-review", "天枢DRC审查通过率", "天枢DRC审查通过率", "drc_pass_rate"),
+    ("tianshu-drc-review", "天枢DRC审查通过率", "天枢 DRC 审查通过率", "drc_pass_rate"),
 )
 
 

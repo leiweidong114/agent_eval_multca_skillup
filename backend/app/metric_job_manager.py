@@ -752,7 +752,10 @@ class MetricJobManager:
                                            session_id=session_id, outcome="success",
                                            output={"rates": aggregate.get("rates"),
                                                    "source_session_count": aggregate.get("source_session_count"),
-                                                   "updated_at": aggregate.get("updated_at")})
+                                                   "updated_at": aggregate.get("updated_at"),
+                                                   "mongo_record_id": aggregate.get("mongo_record_id"),
+                                                   "aggregate_record_count": aggregate.get("aggregate_record_count"),
+                                                   "java_interface_calls": aggregate.get("write_diagnostics")})
                         self._save(job, store)
                 except Exception as exc:
                     with self._lock:

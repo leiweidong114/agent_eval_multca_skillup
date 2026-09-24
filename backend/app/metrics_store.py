@@ -355,9 +355,20 @@ class MetricsStore:
                 continue
             if isinstance(value, dict):
                 current = row.get("agentEvalMetrics")
-                if isinstance(current, Mapping) and isinstance(current.get("rates"), Mapping):
-                    value.update(current)
-                return {**value, "mongo_record_id": str(row.get("_id") or "") or None,
+                if isinstance(current, Mapping):
+                    # New aggregate documents deliberately persist only the four
+                    # display values. Read the former {rates, counts, ...} shape
+                    # as a compatibility fallback for existing deployments.
+                    rates = current.get("rates") if isinstance(current.get("rates"), Mapping) else current
+                else:
+                    rates = value.get("rates") if isinstance(value.get("rates"), Mapping) else value
+                return {"rates": dict(rates), "updated_at": row.get("createTime"),
+                        "status": row.get("status"),
+                        "source_session_count": row.get("sourceSessionCount", 0),
+                        "quality_session_count": row.get("qualitySessionCount", 0),
+                        "metric_session_counts": row.get("metricSessionCounts") or {},
+                        "methods": row.get("aggregationMethods") or {},
+                        "mongo_record_id": str(row.get("_id") or "") or None,
                         "mongo_uuid": str(row.get("uuid") or "") or None,
                         "aggregate_record_count": len(candidates)}
         return None
@@ -403,24 +414,53 @@ class MetricsStore:
                 if session_id not in latest or stamp > latest[session_id][0]:
                     latest[session_id] = (stamp, metric)
             rollup = aggregate_quality_metrics([value[1] for value in latest.values()])
-            previous = self.get_quality_aggregate()
-            if previous is not None and previous.get("aggregate_record_count") != 1:
-                raise RuntimeError("汇总结果存在重复记录；需先清理到唯一一条再刷新")
-            if (previous is not None and previous.get("rates") == rollup["rates"]
-                    and previous.get("counts") == rollup["counts"]
-                    and previous.get("metric_session_counts") == rollup["metric_session_counts"]
-                    and previous.get("rate_only_session_counts") == rollup["rate_only_session_counts"]):
-                return previous
             now = datetime.now(timezone.utc).isoformat()
-            aggregate = {**rollup, "session_id": AGGREGATE_SESSION_ID,
-                         "updated_at": now, "status": "completed"}
-            client.upsert_aggregate_metrics(value=aggregate, collection_name=RATIONALITY_COLLECTION)
+            rates = {
+                "框图规范检查总通过率": rollup["rates"].get("框图规范检查总通过率"),
+                "语料覆盖率": rollup["rates"].get("语料覆盖率"),
+                "信号接口列表检查通过率": rollup["rates"].get("信号接口列表检查通过率"),
+                "天枢 DRC 审查通过率": rollup["rates"].get("天枢 DRC 审查通过率"),
+            }
+            if hasattr(client, "clear_diagnostics"):
+                client.clear_diagnostics()
+            # The requested replacement semantics are explicit: remove every
+            # former 汇总结果 document, then insert exactly one fresh document.
+            client.delete_records(session_id=AGGREGATE_SESSION_ID, collection_name=RATIONALITY_COLLECTION)
+            aggregate_uuid = str(uuid.uuid4())
+            record = {
+                "uuid": aggregate_uuid,
+                "status": "completed",
+                "createUser": "agent-eval",
+                "createTime": now,
+                "checkType": AGGREGATE_CHECK_TYPE,
+                "checkMessage": "Agent Eval 全部已计算会话累计质量指标",
+                "userName": "Agent Eval",
+                "hscopeProjectId": "quality-aggregate",
+                "boardNum": "aggregate",
+                "sessionId": AGGREGATE_SESSION_ID,
+                "resultText": json.dumps(rates, ensure_ascii=False),
+                "agentEvalMetrics": rates,
+                "sourceSessionCount": rollup["source_session_count"],
+                "qualitySessionCount": rollup["quality_session_count"],
+                "metricSessionCounts": rollup["metric_session_counts"],
+                "aggregationMethods": rollup["methods"],
+            }
+            client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
             saved = self.get_quality_aggregate()
             if (saved is None or saved.get("aggregate_record_count") != 1
-                    or saved.get("updated_at") != now or saved.get("rates") != rollup["rates"]
-                    or (previous is not None and saved.get("mongo_record_id") != previous.get("mongo_record_id"))):
+                    or saved.get("rates") != rates
+                    or saved.get("mongo_uuid") != aggregate_uuid):
                 raise RuntimeError("累计质量指标写入后回读不一致")
-            return saved
+            return {
+                **saved,
+                "source_session_count": rollup["source_session_count"],
+                "quality_session_count": rollup["quality_session_count"],
+                "metric_session_counts": rollup["metric_session_counts"],
+                "counts": rollup["counts"],
+                "rate_only_session_counts": rollup["rate_only_session_counts"],
+                "methods": rollup["methods"],
+                "write_diagnostics": client.write_diagnostics() if hasattr(client, "write_diagnostics") else [],
+            }
 
     def save_process_trace(self, job: Mapping[str, Any], session_id: str) -> dict[str, Any]:
         """Persist one session's completed pipeline alongside its metric record."""

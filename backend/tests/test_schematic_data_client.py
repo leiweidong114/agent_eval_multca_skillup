@@ -227,6 +227,27 @@ def test_aggregate_uses_dedicated_atomic_java_put(monkeypatch):
     assert captured["json"]["rates"]["语料覆盖率"] == "75%"
 
 
+def test_delete_records_treats_missing_previous_aggregate_as_idempotent(monkeypatch):
+    captured = {}
+
+    class Response:
+        status_code = 404
+
+        def raise_for_status(self):
+            raise AssertionError("404 replacement delete must not raise")
+
+    def fake_delete(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return Response()
+
+    monkeypatch.setattr("app.schematic_data_client.httpx.delete", fake_delete)
+    monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
+    result = SchematicDataClient().delete_records(session_id="汇总结果")
+    assert result == {"status": "not_found", "deletedCount": 0}
+    assert captured["params"]["sessionId"] == "汇总结果"
+    assert captured["url"].endswith("/schematic/schematicData/delete")
+
+
 def test_schematic_data_insert_with_trailing_slash_needs_no_login(monkeypatch):
     class FakeClient:
         def insert_record(self, record, *, collection_name):

@@ -75,6 +75,50 @@ class SchematicDataClient:
         path = getattr(self.settings, "schematic_data_update_path", None) or "/schematic/schematicData/update"
         return self.settings.schematic_data_api_base_url + path
 
+    @property
+    def delete_url(self) -> str:
+        path = getattr(self.settings, "schematic_data_delete_path", None) or "/schematic/schematicData/delete"
+        return self.settings.schematic_data_api_base_url + path
+
+    def delete_records(self, *, session_id: str | None = None, record_id: str | None = None,
+                       collection_name: str = RATIONALITY_COLLECTION) -> Any:
+        """Delete records by one exact selector through the Java facade."""
+        if bool(session_id) == bool(record_id):
+            raise ValueError("删除时必须且只能指定 session_id 或 record_id")
+        params: dict[str, str] = {"collectionName": collection_name}
+        if session_id:
+            params["sessionId"] = session_id
+        else:
+            params["id"] = str(record_id)
+        started = time.perf_counter()
+        diagnostic = {"method": "DELETE", "endpoint": self.delete_url, "params": params,
+                      "session_id": session_id, "record_id": record_id}
+        try:
+            response = httpx.delete(
+                self.delete_url, params=params, headers=self._headers(),
+                timeout=self.settings.schematic_data_timeout_seconds, trust_env=False, verify=False,
+            )
+            if response.status_code == 404:
+                # Replacement is idempotent: a previous attempt may already
+                # have removed the old aggregate before its response was lost.
+                payload = {"status": "not_found", "deletedCount": 0}
+            else:
+                response.raise_for_status()
+                payload = response.json()
+            deleted = payload.get("deletedCount") if isinstance(payload, Mapping) else None
+            if not isinstance(deleted, int):
+                raise InfrastructureConfigurationError("删除接口未返回 deletedCount")
+        except (httpx.HTTPError, ValueError, InfrastructureConfigurationError) as exc:
+            diagnostic.update({"status": "failed", "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                               "http_status": getattr(getattr(exc, "response", None), "status_code", None), "error": str(exc)})
+            self._write_diagnostics.append(diagnostic)
+            raise InfrastructureConfigurationError(f"原理图数据删除接口调用失败: {exc}") from exc
+        diagnostic.update({"status": "success", "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                           "http_status": response.status_code, "deleted_count": deleted})
+        self._write_diagnostics.append(diagnostic)
+        clear_response_cache()
+        return payload
+
     def update_record(self, *, session_id: str, check_type: str, field: str, value: Mapping[str, Any],
                       collection_name: str = RATIONALITY_COLLECTION) -> Any:
         """Update one existing source document; the Java endpoint never upserts."""
