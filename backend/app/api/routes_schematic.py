@@ -101,6 +101,7 @@ def conversation_list(
     offset: int = Query(0, ge=0),
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    refresh: bool = False,
 ) -> dict[str, Any]:
     if task_classification and task_classification not in TASK_CLASSIFICATION_FILTERS:
         raise HTTPException(status_code=400, detail="不支持的会话任务分类")
@@ -111,7 +112,7 @@ def conversation_list(
         "source": source, "limit": limit, "offset": offset,
         "start_time": start_time, "end_time": end_time,
     })
-    cached = get_cached_json(key)
+    cached = None if refresh else get_cached_json(key)
     if cached is not None:
         cached["cache"] = "hit"
         return cached
@@ -145,6 +146,9 @@ def conversation_list(
             item["task_type"] = metric.get("task_type")
             item["task_category"] = metric.get("task_category")
             item["task_subtype"] = metric.get("task_subtype")
+            item["classification_status"] = metric.get("classification_status") or "not_calculated"
+            item["conversation_judge_status"] = metric.get("conversation_judge_status") or "not_calculated"
+            item["quality_rates"] = metric.get("quality_rates") or {}
         result["cache"] = "miss"
         set_cached_json(key, result, ttl_seconds=30)
         return result
