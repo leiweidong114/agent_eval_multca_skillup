@@ -82,10 +82,16 @@ class SchematicDataClient:
 
     def delete_records(self, *, record_id: str,
                        collection_name: str = RATIONALITY_COLLECTION) -> Any:
-        """Delete one exact record by MongoDB _id through the Java facade."""
+        """Delete one exact record by MongoDB _id through the Java facade.
+
+        The intranet Java service does not promise a deletion-count field.  A
+        successful HTTP status is therefore the contract; any response body is
+        returned to the caller for diagnostics instead of being used as an
+        additional success gate.
+        """
         body = {"collectionName": collection_name, "_id": str(record_id)}
         started = time.perf_counter()
-        diagnostic = {"method": "DELETE", "endpoint": self.delete_url, "body": body,
+        diagnostic = {"method": "POST", "endpoint": self.delete_url, "body": body,
                       "record_id": record_id}
         try:
             response = httpx.post(
@@ -95,20 +101,25 @@ class SchematicDataClient:
             if response.status_code == 404:
                 # Replacement is idempotent: a previous attempt may already
                 # have removed the old aggregate before its response was lost.
-                payload = {"status": "not_found", "deletedCount": 0}
+                payload = {"status": "not_found"}
             else:
                 response.raise_for_status()
-                payload = response.json()
-            deleted = payload.get("deletedCount") if isinstance(payload, Mapping) else None
-            if not isinstance(deleted, int):
-                raise InfrastructureConfigurationError("删除接口未返回 deletedCount")
+                try:
+                    payload = response.json()
+                except ValueError:
+                    response_text = str(getattr(response, "text", "") or "").strip()
+                    payload = {"status": "success"}
+                    if response_text:
+                        payload["upstreamResponse"] = response_text
+                if payload is None:
+                    payload = {"status": "success"}
         except (httpx.HTTPError, ValueError, InfrastructureConfigurationError) as exc:
             diagnostic.update({"status": "failed", "duration_ms": round((time.perf_counter() - started) * 1000, 2),
                                "http_status": getattr(getattr(exc, "response", None), "status_code", None), "error": str(exc)})
             self._write_diagnostics.append(diagnostic)
             raise InfrastructureConfigurationError(f"原理图数据删除接口调用失败: {exc}") from exc
         diagnostic.update({"status": "success", "duration_ms": round((time.perf_counter() - started) * 1000, 2),
-                           "http_status": response.status_code, "deleted_count": deleted})
+                           "http_status": response.status_code, "response": payload})
         self._write_diagnostics.append(diagnostic)
         clear_response_cache()
         return payload

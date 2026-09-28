@@ -271,7 +271,7 @@ def test_delete_records_sends_id_in_json_body_and_treats_missing_as_idempotent(m
     monkeypatch.setattr("app.schematic_data_client.httpx.post", fake_post)
     monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
     result = SchematicDataClient().delete_records(record_id="68cec0000000000000000001")
-    assert result == {"status": "not_found", "deletedCount": 0}
+    assert result == {"status": "not_found"}
     assert captured["method"] == "POST"
     assert captured["json"] == {
         "collectionName": "HDschematicRationalityCollection",
@@ -280,13 +280,50 @@ def test_delete_records_sends_id_in_json_body_and_treats_missing_as_idempotent(m
     assert captured["url"].endswith("/schematic/schematicData/delete")
 
 
+def test_delete_records_accepts_success_without_deleted_count(monkeypatch):
+    class Response:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"code": 200, "message": "删除成功", "data": True}
+
+    monkeypatch.setattr("app.schematic_data_client.httpx.post", lambda *args, **kwargs: Response())
+    monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
+
+    result = SchematicDataClient().delete_records(record_id="68cec0000000000000000001")
+
+    assert result == {"code": 200, "message": "删除成功", "data": True}
+
+
+def test_delete_records_accepts_empty_success_response(monkeypatch):
+    class Response:
+        status_code = 204
+        text = ""
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            raise ValueError("empty body")
+
+    monkeypatch.setattr("app.schematic_data_client.httpx.post", lambda *args, **kwargs: Response())
+    monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
+
+    result = SchematicDataClient().delete_records(record_id="68cec0000000000000000001")
+
+    assert result == {"status": "success"}
+
+
 def test_schematic_data_delete_route_only_accepts_mongo_id(monkeypatch):
     captured = {}
 
     class FakeClient:
         def delete_records(self, *, record_id, collection_name):
             captured.update(record_id=record_id, collection_name=collection_name)
-            return {"status": "deleted", "deletedCount": 1}
+            return {"code": 200, "message": "删除成功", "data": True}
 
     monkeypatch.setattr("app.api.routes_schematic_data.SchematicDataClient", FakeClient)
     response = TestClient(app).post(
@@ -298,7 +335,7 @@ def test_schematic_data_delete_route_only_accepts_mongo_id(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json()["deletedCount"] == 1
+    assert response.json() == {"code": 200, "message": "删除成功", "data": True}
     assert captured == {
         "record_id": "68cec0000000000000000001",
         "collection_name": "HDschematicRationalityCollection",
