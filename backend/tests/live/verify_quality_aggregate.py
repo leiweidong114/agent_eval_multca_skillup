@@ -33,8 +33,8 @@ LINT = """# 框图规范检查报告
 FIXTURES = (
     ("hscope_diagram_lint", LINT),
     ("hscope_block_corpus_check", "block 条目总数: 2\n语料库有数据: 1\n语料库无数据: 1\n语料库覆盖率: 50%"),
-    ("signal-interface-checker", "[INFO] BLOCK_INFO: 通过\n[INFO] 测试接口A: 通过\n[INFO] 测试接口B: 不通过\n统计: ERROR=1 WARN=0"),
-    ("tianshu-drc-review", json.dumps({"status": "success", "result": {"drc_rate": "50%"}}, ensure_ascii=False)),
+    ("signal_interface_check", "[INFO] BLOCK_INFO: 通过\n[INFO] 测试接口A: 通过\n[INFO] 测试接口B: 不通过\n统计: ERROR=1 WARN=0"),
+    ("tianshu_drc_review", json.dumps({"status": "success", "result": {"drc_rate": "50%"}}, ensure_ascii=False)),
 )
 
 

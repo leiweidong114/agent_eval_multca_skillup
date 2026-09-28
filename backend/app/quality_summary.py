@@ -14,23 +14,23 @@ from app.config import BACKEND_ROOT
 QUALITY_TYPES = (
     "hscope_diagram_lint",
     "hscope_block_corpus_check",
-    "signal-interface-checker",
-    "tianshu-drc-review",
+    "signal_interface_check",
+    "tianshu_drc_review",
 )
 QUALITY_LABELS = {
     "hscope_diagram_lint": "框图规范检查",
     "hscope_block_corpus_check": "语料库覆盖",
-    "signal-interface-checker": "信号接口列表检查",
-    "tianshu-drc-review": "天枢DRC审查",
+    "signal_interface_check": "信号接口列表检查",
+    "tianshu_drc_review": "天枢DRC审查",
 }
 DISPLAY_RATE_LABELS = {
     "hscope_diagram_lint": {"overall_pass_rate": "总检查通过率"},
     "hscope_block_corpus_check": {"coverage_rate": "语料覆盖率"},
-    "signal-interface-checker": {"pass_rate": "信号接口列表检查通过率"},
-    "tianshu-drc-review": {"drc_pass_rate": "天枢DRC审查通过率"},
+    "signal_interface_check": {"pass_rate": "信号接口列表检查通过率"},
+    "tianshu_drc_review": {"drc_pass_rate": "天枢DRC审查通过率"},
 }
 RATE_KEYS = {
-    "signal-interface-checker": ("检查通过率", "总通过率", "pass_rate", "passRate", "success_rate", "successRate"),
+    "signal_interface_check": ("检查通过率", "总通过率", "pass_rate", "passRate", "success_rate", "successRate"),
 }
 
 
@@ -83,7 +83,7 @@ def _text_rate(text: str, keys: tuple[str, ...]) -> float | None:
 
 
 def _fraction(text: str, check_type: str) -> tuple[int, int] | None:
-    prefix = r"(?:检查|检验|审查|通过|合格|成功)" if check_type == "signal-interface-checker" else r"(?:DRC|审查|检查|通过|合格)"
+    prefix = r"(?:检查|检验|审查|通过|合格|成功)" if check_type == "signal_interface_check" else r"(?:DRC|审查|检查|通过|合格)"
     patterns = (
         rf"{prefix}[^\n]{{0,35}}?(?:通过|合格|成功)[^\n]{{0,10}}?(\d+)\s*/\s*(\d+)",
         rf"{prefix}[^\n]{{0,35}}?(\d+)\s*/\s*(\d+)",
@@ -159,7 +159,7 @@ def extract_quality_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
             value = json.loads(text)
         except ValueError:
             value = text
-        if check_type == "tianshu-drc-review":
+        if check_type == "tianshu_drc_review":
             # DRC has one authoritative field; status/code/other rates are not substitutes.
             drc_result = value.get("result") if isinstance(value, Mapping) else None
             rate = _rate(drc_result.get("drc_rate")) if isinstance(drc_result, Mapping) else None
@@ -168,12 +168,12 @@ def extract_quality_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
             keys = RATE_KEYS[check_type]
             rate = _nested_rate(value, keys) if not isinstance(value, str) else _text_rate(text, keys)
             fraction = _signal_checks(text) or _fraction(text, check_type)
-        metric_key = "pass_rate" if check_type == "signal-interface-checker" else "drc_pass_rate"
+        metric_key = "pass_rate" if check_type == "signal_interface_check" else "drc_pass_rate"
         if fraction:
             passed, total = fraction
             rate = round(passed / total * 100, 2)
             item["counts"][metric_key] = {"passed": passed, "total": total}
-        if rate is None and check_type == "signal-interface-checker":
+        if rate is None and check_type == "signal_interface_check":
             # Some checkers emit only a binary verdict. Test the negative first:
             # "不通过" contains "通过" and must never become 100%.
             if re.search(r"(?:检查|校验|检验)\s*不通过|(?:failed|failure|不合格)", text, re.I):
@@ -294,9 +294,9 @@ def judge_quality_summary(
             '{"rates":{"中文指标名":"xx.xx%"},"evidence":{"中文指标名":"原文依据"},"warnings":[]}。'
             "hscope_diagram_lint：从有数字的六项检查通过数/总数计算六个检查通过率及总检查通过率；"
             "‘—’表示无数据，不计入分母。hscope_block_corpus_check：语料覆盖率=有数据数/总数。"
-            "signal-interface-checker：逐项统计‘名称: 通过/不通过’，BLOCK_INFO 为上下文不计入检查项；"
+            "signal_interface_check：逐项统计‘名称: 通过/不通过’，BLOCK_INFO 为上下文不计入检查项；"
             "通过率=通过项/检查项，若只有二元结果，不通过=0%，通过=100%。"
-            "tianshu-drc-review：优先读取 JSON 的 result.drc_rate。"
+            "tianshu_drc_review：优先读取 JSON 的 result.drc_rate。"
             "同类多条记录不要无分母平均；只报告证据充足的值。"
             f"\n规则提取值（请核对，不能盲从）：{json.dumps(expected, ensure_ascii=False)}"
             f"\n原始记录：{json.dumps(evidence, ensure_ascii=False, default=str)}"

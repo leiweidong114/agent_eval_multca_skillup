@@ -16,9 +16,9 @@ def test_all_four_types_and_repeated_records_are_summarized():
 """},
         {"_id": "corpus", "checkType": "hscope_block_corpus_check  ",
          "resultText": "block 条目总数: 12\n语料库有数据: 9\n语料库无数据: 3\n语料库覆盖率: 75.0%"},
-        {"_id": "signal", "checkType": "signal-interface-checker",
+        {"_id": "signal", "checkType": "signal_interface_check",
          "resultText": json.dumps({"检查通过率": 88})},
-        {"_id": "drc", "checkType": "tianshu-drc-review", "resultText": json.dumps({"result": {"drc_rate": "91.5%"}})},
+        {"_id": "drc", "checkType": "tianshu_drc_review", "resultText": json.dumps({"result": {"drc_rate": "91.5%"}})},
         {"_id": "summary", "checkType": "agent_eval_session_metrics", "resultText": "{}"},
     ]
     summary = summarize_quality_records("session-1", rows)
@@ -32,16 +32,16 @@ def test_all_four_types_and_repeated_records_are_summarized():
 
 
 def test_rate_only_reports_without_denominators_are_not_averaged():
-    rows = [{"checkType": "signal-interface-checker", "resultText": '{"passRate": 80}'},
-            {"checkType": "signal-interface-checker", "resultText": '{"passRate": 90}'}]
+    rows = [{"checkType": "signal_interface_check", "resultText": '{"passRate": 80}'},
+            {"checkType": "signal_interface_check", "resultText": '{"passRate": 90}'}]
     summary = summarize_quality_records("session-2", rows)
-    assert summary["by_check_type"]["signal-interface-checker"]["rates"]["信号接口列表检查通过率"] is None
+    assert summary["by_check_type"]["signal_interface_check"]["rates"]["信号接口列表检查通过率"] is None
 
 
 def test_actual_binary_signal_and_nested_drc_formats():
     rows = [
-        {"checkType": "signal-interface-checker", "resultText": "信号接口列表检查不通过"},
-        {"checkType": "tianshu-drc-review", "resultText": json.dumps({"result": {"drc_rate": "100%"}})},
+        {"checkType": "signal_interface_check", "resultText": "信号接口列表检查不通过"},
+        {"checkType": "tianshu_drc_review", "resultText": json.dumps({"result": {"drc_rate": "100%"}})},
     ]
     summary = summarize_quality_records("session-3", rows)
     assert summary["rates"]["信号接口列表检查通过率"] == "0.00%"
@@ -57,14 +57,14 @@ def test_signal_info_lines_count_five_items_not_block_info():
 [INFO]  4860_403_比较器: 通过
 
 统计: ERROR=0  WARN=0"""
-    summary = summarize_quality_records("session-5", [{"checkType": "signal-interface-checker", "resultText": text}])
-    group = summary["by_check_type"]["signal-interface-checker"]
+    summary = summarize_quality_records("session-5", [{"checkType": "signal_interface_check", "resultText": text}])
+    group = summary["by_check_type"]["signal_interface_check"]
     assert group["rates"]["信号接口列表检查通过率"] == "100.00%"
     assert group["counts"]["pass_rate"] == {"passed": 5, "total": 5}
 
 
 def test_drc_ignores_other_rate_fields():
-    summary = summarize_quality_records("s", [{"checkType": "tianshu-drc-review",
+    summary = summarize_quality_records("s", [{"checkType": "tianshu_drc_review",
                                              "resultText": json.dumps({"result": {"pass_rate": "90%", "drc_rate": "75%"}})}])
     assert summary["rates"]["天枢DRC审查通过率"] == "75.00%"
 

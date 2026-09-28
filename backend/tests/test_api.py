@@ -627,7 +627,7 @@ def test_quality_records_endpoint_returns_each_full_result_text(monkeypatch):
             assert session_id == "session-4"
             return [{"_id": str(index), "checkType": kind, "resultText": long_report}
                     for index, kind in enumerate(("hscope_diagram_lint", "hscope_block_corpus_check",
-                                                  "signal-interface-checker", "tianshu-drc-review"))]
+                                                  "signal_interface_check", "tianshu_drc_review"))]
 
     monkeypatch.setattr("app.api.routes_metrics.MetricsStore", FakeMetricsStore)
     response = client.get("/api/session-metrics/session-4/quality-records")

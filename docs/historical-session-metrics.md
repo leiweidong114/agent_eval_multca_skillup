@@ -127,7 +127,7 @@ curl.exe -X POST "http://127.0.0.1:8000/api/schematic-data/delete" `
   通过数、总数及加权通过率。若原文在上游被截取，则按实际读到的 `resultText` 计算，并在逐条结果保留截取标志。
 - `hscope_block_corpus_check`（容忍末尾空格）：提取图页、Block、编码数量、语料库覆盖率及缺失编码。
   覆盖率优先由已覆盖数 / 总数计算。
-- `signal-interface-checker`：提取检查通过率；`tianshu-drc-review`：提取 DRC 审查通过率。
+- `signal_interface_check`：提取检查通过率；`tianshu_drc_review`：提取 DRC 审查通过率。
   支持显式 JSON 百分比和文本百分比；有通过数/总数时以计数为准。
 
 同一类型出现多条报告时，只有具备分子的报告参与加权汇总；缺失分母的多个百分比不会被简单平均。

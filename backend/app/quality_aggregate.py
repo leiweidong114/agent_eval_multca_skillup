@@ -12,8 +12,8 @@ AGGREGATE_CHECK_TYPE = "agent_eval_quality_aggregate"
 CATEGORIES = (
     ("hscope_diagram_lint", "总检查通过率", "框图规范检查总通过率", "overall_pass_rate"),
     ("hscope_block_corpus_check", "语料覆盖率", "语料覆盖率", "coverage_rate"),
-    ("signal-interface-checker", "信号接口列表检查通过率", "信号接口列表检查通过率", "pass_rate"),
-    ("tianshu-drc-review", "天枢DRC审查通过率", "天枢 DRC 审查通过率", "drc_pass_rate"),
+    ("signal_interface_check", "信号接口列表检查通过率", "信号接口列表检查通过率", "pass_rate"),
+    ("tianshu_drc_review", "天枢DRC审查通过率", "天枢 DRC 审查通过率", "drc_pass_rate"),
 )
 
 
@@ -43,8 +43,8 @@ def aggregate_quality_metrics(metrics: list[Mapping[str, Any]]) -> dict[str, Any
                 source_group = {
                     "hscope_diagram_lint": "框图规范检查",
                     "hscope_block_corpus_check": "语料库覆盖",
-                    "signal-interface-checker": "信号接口列表检查",
-                    "tianshu-drc-review": "天枢DRC审查",
+                    "signal_interface_check": "信号接口列表检查",
+                    "tianshu_drc_review": "天枢DRC审查",
                 }[check_type]
                 value = _rate((compact.get(source_group) or {}).get(source_label))
             if value is not None:

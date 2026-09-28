@@ -17,6 +17,27 @@ def test_records_accepts_nested_page():
     assert total == 7
 
 
+def test_records_accepts_current_intranet_java_data_array():
+    payload = {
+        "code": "200",
+        "data": [{
+            "_id": {"timestamp": 1790044029, "date": "2026-09-22T02:27:09.000+00:00"},
+            "checkType": "signal_interface_check",
+            "status": 1,
+            "sessionId": "session-1",
+            "resultText": "[INFO] 接口A: 通过",
+        }],
+        "msg": "",
+        "success": True,
+    }
+
+    rows, total = _records(payload)
+
+    assert total == 1
+    assert rows == payload["data"]
+    assert rows[0]["checkType"] == "signal_interface_check"
+
+
 def test_schematic_data_query_returns_java_payload_unchanged(monkeypatch):
     payload = {
         "data": {
