@@ -99,6 +99,34 @@ def test_hscope_diagram_lint_rates_are_extracted_by_code(monkeypatch):
     assert "脚本已提取的权威数值" in observed["user_prompt"]
 
 
+def test_current_diagram_lint_array_uses_counts_and_canonical_labels():
+    rows = [
+        {"checkTypeCode": "blockMissComponent", "checkTypeContent": "block缺少器件标识", "totalCount": 93, "passCount": 82, "failCount": 11, "passRate": "88.2%"},
+        {"checkTypeCode": "wireSourceMissing", "checkTypeContent": "wire源末端缺失", "totalCount": 190, "passCount": 190, "failCount": 0, "passRate": "100.0%"},
+        {"checkTypeCode": "portNotInBlock", "checkTypeContent": "port未属于block", "totalCount": 386, "passCount": 386, "failCount": 0, "passRate": "100.0%"},
+        {"checkTypeCode": "portNameMissing", "checkTypeContent": "port缺少name", "totalCount": 386, "passCount": 376, "failCount": 10, "passRate": "97.4%"},
+        {"checkTypeCode": "blockPartGroupInconsistent", "checkTypeContent": "同名block partGroup不一致", "totalCount": 93, "passCount": 81, "failCount": 12, "passRate": "87.1%"},
+        {"checkTypeCode": "blockNoConnection", "checkTypeContent": "无连接block", "totalCount": 93, "passCount": 82, "failCount": 11, "passRate": "88.2%"},
+    ]
+
+    metrics = subject.extract_rationality_metrics({
+        "checkType": "hscope_diagram_lint",
+        "resultText": json.dumps(rows, ensure_ascii=False),
+    })["metrics"]
+
+    assert metrics["extraction_method"] == "deterministic_lint_array_counts"
+    assert metrics["extraction_complete"] is True
+    assert metrics["overall_success_rate"] == 96.45
+    assert [(item["label"], item["success_rate"]) for item in metrics["dimension_success_rates"]] == [
+        ("block缺少器件标识", 88.17),
+        ("wire源末端缺失", 100.0),
+        ("port未属于block", 100.0),
+        ("port缺少name", 97.41),
+        ("同名block的partGroup不一致", 87.1),
+        ("无连接的block", 88.17),
+    ]
+
+
 class FakeDataClient:
     def find_rationality_records(self, identifiers):
         assert identifiers == ["root-session", "run-42"]

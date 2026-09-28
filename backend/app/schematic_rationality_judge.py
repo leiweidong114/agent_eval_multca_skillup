@@ -30,6 +30,24 @@ _TEXT_RATE_PATTERN = re.compile(
     r"\s*[:：=]?\s*(?P<value>\d+(?:\.\d+)?)\s*%?",
     re.I,
 )
+_DIAGRAM_LINT_LABELS = {
+    "blockMissComponent": "block缺少器件标识",
+    "wireSourceMissing": "wire源末端缺失",
+    "portNotInBlock": "port未属于block",
+    "portNameMissing": "port缺少name",
+    "blockPartGroupInconsistent": "同名block的partGroup不一致",
+    "blockNoConnection": "无连接的block",
+}
+_DIAGRAM_LINT_CONTENT_LABELS = {
+    "block缺少器件标识": "block缺少器件标识",
+    "wire源末端缺失": "wire源末端缺失",
+    "port未属于block": "port未属于block",
+    "port缺少name": "port缺少name",
+    "同名block partGroup不一致": "同名block的partGroup不一致",
+    "同名block的partGroup不一致": "同名block的partGroup不一致",
+    "无连接block": "无连接的block",
+    "无连接的block": "无连接的block",
+}
 
 
 def _source_value(result_text: str) -> Any:
@@ -65,8 +83,53 @@ def _percentage(value: Any) -> float | None:
     return round(max(0.0, min(100.0, number)), 2)
 
 
+def _diagram_lint_count_array(source: Any) -> dict[str, Any] | None:
+    """Parse the current intranet lint array, using counts as the authority."""
+    if not isinstance(source, list) or not source:
+        return None
+    dimensions: list[dict[str, Any]] = []
+    for value in source:
+        if not isinstance(value, Mapping):
+            continue
+        code = str(value.get("checkTypeCode") or "").strip()
+        content = str(value.get("checkTypeContent") or "").strip()
+        if not code and not content:
+            continue
+        passed, total = value.get("passCount"), value.get("totalCount")
+        if (not isinstance(passed, int) or isinstance(passed, bool)
+                or not isinstance(total, int) or isinstance(total, bool)
+                or total <= 0 or passed < 0 or passed > total):
+            continue
+        label = _DIAGRAM_LINT_LABELS.get(code) or _DIAGRAM_LINT_CONTENT_LABELS.get(content) or content or code
+        dimensions.append({
+            "key": code or label,
+            "label": label,
+            "passed": passed,
+            "total": total,
+            "failed": total - passed,
+            "success_rate": round(passed / total * 100, 2),
+        })
+    if not dimensions:
+        return None
+    total_passed = sum(item["passed"] for item in dimensions)
+    total_count = sum(item["total"] for item in dimensions)
+    expected_codes = set(_DIAGRAM_LINT_LABELS)
+    extracted_codes = {item["key"] for item in dimensions}
+    return {
+        "overall_success_rate": round(total_passed / total_count * 100, 2) if total_count else None,
+        "dimension_success_rates": dimensions,
+        "expected_dimension_count": len(expected_codes),
+        "extracted_dimension_count": len(dimensions),
+        "extraction_complete": extracted_codes == expected_codes,
+        "extraction_method": "deterministic_lint_array_counts",
+    }
+
+
 def _diagram_lint_rates(source: Any) -> dict[str, Any]:
     """Deterministically extract the overall and six lint success rates."""
+    count_report = _diagram_lint_count_array(source)
+    if count_report is not None:
+        return count_report
     candidates: list[dict[str, Any]] = []
 
     def visit(value: Any, path: list[str], label_hint: str | None = None) -> None:
