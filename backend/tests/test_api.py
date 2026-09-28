@@ -306,7 +306,7 @@ def test_evaluation_input_upload_is_owned_and_resolvable(tmp_path, monkeypatch):
 def test_schematic_task_resolves_its_own_skills_and_evaluator(monkeypatch):
     monkeypatch.setattr(
         "app.api.routes_eval.load_runtime_settings",
-        lambda root: {"schematic_task_profiles": {
+        lambda root: {"task_timeout_seconds": 3_600, "full_schematic_timeout_seconds": 48 * 3_600, "schematic_task_profiles": {
             "block_to_signal_list": {
                 "skills": ["signal-interface-generation"],
                 "evaluator_id": "signal-list-evaluator",
@@ -324,6 +324,34 @@ def test_schematic_task_resolves_its_own_skills_and_evaluator(monkeypatch):
 
     assert resolved.skills == ["signal-interface-generation"]
     assert resolved.evaluator_id == "signal-list-evaluator"
+    assert resolved.timeout_seconds == 3_600
+
+
+def test_full_schematic_uses_configured_long_timeout_unless_explicit(monkeypatch):
+    monkeypatch.setattr(
+        "app.api.routes_eval.load_runtime_settings",
+        lambda root: {
+            "task_timeout_seconds": 3_600,
+            "full_schematic_timeout_seconds": 48 * 3_600,
+            "schematic_task_profiles": {},
+        },
+    )
+    defaulted = _apply_schematic_skill_settings(RunRequest(
+        agent="codex",
+        evaluation_type="schematic",
+        schematic_task_type="signal_list_to_schematic",
+        prompt="test",
+    ))
+    explicit = _apply_schematic_skill_settings(RunRequest(
+        agent="codex",
+        evaluation_type="schematic",
+        schematic_task_type="block_to_schematic",
+        prompt="test",
+        timeout_seconds=900,
+    ))
+
+    assert defaulted.timeout_seconds == 48 * 3_600
+    assert explicit.timeout_seconds == 900
 
 
 def test_run_rejects_an_uninstalled_evaluator_before_queueing():

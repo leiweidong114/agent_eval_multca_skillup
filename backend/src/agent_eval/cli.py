@@ -92,7 +92,12 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
     parser.add_argument("--workers", type=int, default=2, help="Concurrent Agent evaluations")
     parser.add_argument("--parallelism", type=int, default=1, help="Case concurrency per Agent")
     parser.add_argument("--iterations", type=int, default=1)
-    parser.add_argument("--timeout", type=int, default=1800)
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        help="Task timeout in seconds; omitted uses Settings (1h, or 48h for the full schematic pipeline)",
+    )
     parser.add_argument(
         "--max-turns",
         type=int,
@@ -141,7 +146,12 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--agent-arg", action="append", default=[])
     run.add_argument("--parallelism", type=int, default=1)
     run.add_argument("--iterations", type=int, default=1)
-    run.add_argument("--timeout", type=int, default=1800)
+    run.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        help="Task timeout in seconds; omitted uses the configured ordinary-task timeout",
+    )
     run.add_argument("--max-turns", type=int, default=12)
     run.add_argument("--output-dir")
     run.add_argument(
@@ -1139,6 +1149,10 @@ def main() -> None:
     if args.command in {"run-multi", "pipeline-eval"}:
         if args.command == "pipeline-eval":
             runtime_settings = load_runtime_settings(PROJECT_ROOT)
+            if args.timeout is None:
+                args.timeout = int(
+                    runtime_settings.get("full_schematic_timeout_seconds") or 48 * 3_600
+                )
             task_profile = (runtime_settings.get("schematic_task_profiles") or {}).get(
                 DEFAULT_SCHEMATIC_TASK_TYPE, {}
             )
@@ -1154,6 +1168,10 @@ def main() -> None:
             if not args.evaluator_id:
                 args.evaluator_id = task_profile.get("evaluator_id")
         else:
+            if args.timeout is None:
+                args.timeout = int(
+                    load_runtime_settings(PROJECT_ROOT).get("task_timeout_seconds") or 3_600
+                )
             skill_dir = _resolve_cli_skill(args.skill)
             selected_skills = [skill_dir.name]
             evaluation_type = "skill"
@@ -1167,6 +1185,10 @@ def main() -> None:
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         raise SystemExit(0 if result["status"] == "completed" else 1)
+    if args.timeout is None:
+        args.timeout = int(
+            load_runtime_settings(PROJECT_ROOT).get("task_timeout_seconds") or 3_600
+        )
     result = run_evaluation(
         project_root=PROJECT_ROOT,
         skill_dir=args.skill,

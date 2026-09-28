@@ -129,7 +129,7 @@
         <div class="form-grid runtime-grid">
           <el-form-item label="并行度"><el-input-number v-model="form.concurrency" :min="1" :max="16" /></el-form-item>
           <el-form-item v-if="form.type !== 'question'" label="迭代次数"><el-input-number v-model="form.iterations" :min="1" :max="20" /></el-form-item>
-          <el-form-item label="单任务超时（秒）"><el-input-number v-model="form.timeout" :min="30" :max="7200" :step="30" /></el-form-item>
+          <el-form-item label="本次任务超时（秒）"><el-input-number v-model="form.timeout" :min="30" :max="2592000" :step="300" /><div class="field-help">当前默认：{{timeoutLabel(form.timeout)}}；可只覆盖本次评测。</div></el-form-item>
         </div>
 
         <div class="submit-row">
@@ -169,7 +169,7 @@ const types = [
   { id: 'skill', name: 'Skill 评测', description: '单 Skill 或多 Skill 联合任务评测', icon: markRaw(MagicStick) },
 ]
 const normalizeType = (value) => ['schematic', 'question', 'skill'].includes(value) ? value : ''
-const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', inputFiles: [], cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 600, justdoTransport: 'cli' })
+const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', inputFiles: [], cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 3600, justdoTransport: 'cli' })
 const agents = ref([])
 const models = ref([])
 const skills = ref([])
@@ -220,7 +220,9 @@ const batchTargets = computed(() => {
 })
 const includesJustDo=computed(()=>form.batchMode?form.agents.includes('justdo'):form.agent==='justdo')
 
-function selectType(type) { form.type = type; job.value = null; router.replace({ query: { type } }); setDefaults() }
+function configuredTimeout(type=form.type,taskType=form.schematicTaskType){const metadata=schematicTaskTypes.value.find(item=>item.id===taskType);const full=type==='schematic'&&metadata?.output_contract==='schematic_project';return Number(full?runtimeSettings.value.full_schematic_timeout_seconds:runtimeSettings.value.task_timeout_seconds)||(full?48*3600:3600)}
+function timeoutLabel(seconds){const hours=Number(seconds||0)/3600;return Number.isInteger(hours)?`${hours} 小时`:`${Number(seconds||0)} 秒`}
+function selectType(type) { form.type = type; form.timeout=configuredTimeout(type); job.value = null; router.replace({ query: { type } }); setDefaults() }
 function agentLabel(agent) { return `${agent.agent}${agent.detected_executable ? ' · 可用' : ' · 未检测到'}` }
 function agentAvailable(agent) { return (agent.agent === 'direct' || !!agent.detected_executable) && !agentDisabled(agent) }
 function agentDisabled(agent) { return (form.type === 'question' && selectedBenchmark.value?.task_type === 'repository_agent' && agent.agent !== 'codex') || (agent.agent !== 'direct' && (!agent.detected_executable || (form.type !== 'question' && (agent.capabilities?.skill_injection === false || agent.capabilities?.specified_model_and_skill_evaluation === false)))) }
@@ -239,7 +241,7 @@ function onEvaluationInputFiles(event){
 function removeEvaluationInput(index){form.inputFiles.splice(index,1)}
 const fileSize=size=>Number(size)>=1024*1024?`${(Number(size)/1024/1024).toFixed(1)} MB`:`${Math.max(1,Math.round(Number(size)/1024))} KB`
 const contractLabel=value=>({block_diagram:'框图',signal_interface_v1:'信号接口列表',schematic_project:'原理图工程'}[value]||value)
-function onSchematicTaskChange(){form.name=currentSchematicTask.value?.name?`${currentSchematicTask.value.name}评测`:'原理图生成评测';form.prompt=schematicPresetPrompt.value}
+function onSchematicTaskChange(){form.name=currentSchematicTask.value?.name?`${currentSchematicTask.value.name}评测`:'原理图生成评测';form.prompt=schematicPresetPrompt.value;form.timeout=configuredTimeout('schematic',form.schematicTaskType)}
 function onBenchmarkChange() {
   if (selectedBenchmark.value) form.sampleLimit = Math.min(20, selectedBenchmark.value.item_count)
   if (selectedBenchmark.value?.task_type === 'repository_agent') form.agent = 'codex'
@@ -353,6 +355,7 @@ onMounted(async () => {
   modelConfig.value = results[4].status === 'fulfilled' ? results[4].value : {}
   runtimeSettings.value = results[5].status === 'fulfilled' ? results[5].value : {}
   schematicTaskTypes.value = results[6].status === 'fulfilled' ? results[6].value : defaultSchematicTaskTypes
+  form.timeout = configuredTimeout()
   form.benchmarkId = installedBenchmarks.value[0]?.id || ''
   setDefaults()
 })

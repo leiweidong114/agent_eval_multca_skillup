@@ -17,6 +17,7 @@ from agent_eval.evaluators import list_evaluators as installed_evaluators
 from agent_eval.evaluators import resolve_evaluator
 from agent_eval.schematic_tasks import (
     DEFAULT_SCHEMATIC_TASK_TYPE,
+    SCHEMATIC_TASK_TYPES,
     list_schematic_task_types,
 )
 from app.config import BACKEND_ROOT, readable_runs_roots, runs_root
@@ -134,7 +135,7 @@ class RunRequest(BaseModel):
     justdo_transport: str = Field(default="auto", pattern=r"^(auto|cli|http)$")
     parallelism: int = Field(default=1, ge=1, le=16)
     iterations: int = Field(default=1, ge=1, le=20)
-    timeout_seconds: int = Field(default=1800, ge=1)
+    timeout_seconds: int = Field(default=3_600, ge=1)
     max_turns: int = Field(default=60, ge=1)
     benchmark: bool = Field(
         default=False,
@@ -168,11 +169,25 @@ class RunRequest(BaseModel):
 
 
 def _apply_schematic_skill_settings(request: RunRequest) -> RunRequest:
-    """Resolve a schematic task's Skill pipeline and evaluator from local settings."""
+    """Resolve persisted timeout, Skill pipeline, and evaluator defaults."""
+    configured = load_runtime_settings(BACKEND_ROOT)
+    if "timeout_seconds" not in request.model_fields_set:
+        task_type = request.schematic_task_type or DEFAULT_SCHEMATIC_TASK_TYPE
+        task_metadata = SCHEMATIC_TASK_TYPES.get(task_type, {})
+        full_schematic = (
+            request.evaluation_type == "schematic"
+            and task_metadata.get("output_contract") == "schematic_project"
+        )
+        setting_name = (
+            "full_schematic_timeout_seconds"
+            if full_schematic
+            else "task_timeout_seconds"
+        )
+        fallback = 48 * 3_600 if full_schematic else 3_600
+        request.timeout_seconds = int(configured.get(setting_name) or fallback)
     if request.evaluation_type != "schematic":
         return request
     task_type = request.schematic_task_type or DEFAULT_SCHEMATIC_TASK_TYPE
-    configured = load_runtime_settings(BACKEND_ROOT)
     profiles = configured.get("schematic_task_profiles") or {}
     profile = profiles.get(task_type) if isinstance(profiles, dict) else None
     profile = profile if isinstance(profile, dict) else {}

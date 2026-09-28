@@ -1278,8 +1278,8 @@ def create_app(
             "max_context_chars": int(body.budget.get("max_context_chars", 60000)),
             "max_files_changed": int(body.budget.get("max_files_changed", 8)),
         }
-        if not 10 <= budget["timeout_seconds_per_task"] <= 3600:
-            raise HTTPException(400, "timeout budget must be between 10 and 3600 seconds")
+        if not 10 <= budget["timeout_seconds_per_task"] <= 7 * 24 * 3600:
+            raise HTTPException(400, "timeout budget must be between 10 and 604800 seconds")
         if not 32 <= budget["max_output_tokens"] <= 131072:
             raise HTTPException(400, "output token budget must be between 32 and 131072")
         if not 1000 <= budget["max_context_chars"] <= 1_000_000:

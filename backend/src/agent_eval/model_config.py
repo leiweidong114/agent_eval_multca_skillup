@@ -125,6 +125,16 @@ def load_runtime_settings(project_root: Path) -> dict[str, Any]:
         value = str(environment.get(variable) or "").strip()
         if value:
             settings[setting] = value
+    settings["task_timeout_seconds"] = _positive_int(
+        environment.get("AGENT_EVAL_DEFAULT_TIMEOUT_SECONDS"),
+        field_name="task_timeout_seconds",
+        default=3_600,
+    )
+    settings["full_schematic_timeout_seconds"] = _positive_int(
+        environment.get("AGENT_EVAL_FULL_SCHEMATIC_TIMEOUT_SECONDS"),
+        field_name="full_schematic_timeout_seconds",
+        default=48 * 3_600,
+    )
     raw_skills = str(environment.get("SCHEMATIC_SKILLS_JSON") or "").strip()
     legacy_skills: list[str] | None = None
     if raw_skills:
@@ -160,6 +170,16 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
         if len(value) > 300 or any(char in value for char in "\r\n\0"):
             raise ValueError(f"Invalid {name}")
         settings[name] = value
+    settings["task_timeout_seconds"] = _positive_int(
+        values.get("task_timeout_seconds"),
+        field_name="task_timeout_seconds",
+        default=3_600,
+    )
+    settings["full_schematic_timeout_seconds"] = _positive_int(
+        values.get("full_schematic_timeout_seconds"),
+        field_name="full_schematic_timeout_seconds",
+        default=48 * 3_600,
+    )
     profiles = normalize_schematic_task_profiles(
         values.get("schematic_task_profiles"),
         legacy_skills=(
@@ -196,6 +216,10 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
     update_root_env(project_root, {
         "LITELLM_JUDGE_MODEL": settings["judge_model"],
         "AGENT_TEST_MODEL": settings["agent_test_model"],
+        "AGENT_EVAL_DEFAULT_TIMEOUT_SECONDS": str(settings["task_timeout_seconds"]),
+        "AGENT_EVAL_FULL_SCHEMATIC_TIMEOUT_SECONDS": str(
+            settings["full_schematic_timeout_seconds"]
+        ),
         "SCHEMATIC_SKILLS_JSON": json.dumps(schematic_skills, ensure_ascii=False),
         "DEFAULT_SCHEMATIC_EVALUATOR": profiles["block_to_schematic"]["evaluator_id"],
         "SCHEMATIC_TASK_PROFILES_JSON": json.dumps(

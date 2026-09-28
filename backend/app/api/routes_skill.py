@@ -113,6 +113,10 @@ class SchematicTaskProfileRequest(BaseModel):
 class RuntimeSettingsRequest(BaseModel):
     judge_model: str = Field(min_length=1, max_length=300)
     agent_test_model: str = Field(min_length=1, max_length=300)
+    task_timeout_seconds: int = Field(default=3_600, ge=30, le=7 * 24 * 3_600)
+    full_schematic_timeout_seconds: int = Field(
+        default=48 * 3_600, ge=30, le=30 * 24 * 3_600
+    )
     schematic_skills: list[str] = Field(
         default_factory=lambda: list(SCHEMATIC_PIPELINE_SKILLS),
         min_length=1,
@@ -425,6 +429,10 @@ def get_runtime_settings() -> dict[str, object]:
             or str(scoring.get("model") or default_model)
         ),
         "agent_test_model": configured.get("agent_test_model") or default_model,
+        "task_timeout_seconds": configured.get("task_timeout_seconds") or 3_600,
+        "full_schematic_timeout_seconds": (
+            configured.get("full_schematic_timeout_seconds") or 48 * 3_600
+        ),
         "schematic_skills": configured.get("schematic_skills") or list(SCHEMATIC_PIPELINE_SKILLS),
         "schematic_task_profiles": configured.get("schematic_task_profiles") or {},
     }
