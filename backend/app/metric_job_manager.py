@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import threading
 import uuid
+from contextlib import nullcontext
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
@@ -106,6 +107,7 @@ class MetricJobManager:
         end_time: datetime,
         use_llm_judge: bool,
         judge_model: str | None = None,
+        externally_limited: bool = False,
     ) -> dict[str, Any]:
         store = MetricsStore()
         now = datetime.now(timezone.utc)
@@ -119,6 +121,7 @@ class MetricJobManager:
             "session_ids": session_ids,
             "use_llm_judge": use_llm_judge,
             "judge_model": judge_model,
+            "externally_limited": externally_limited,
             "classification_judge_enabled": use_llm_judge and _judge_feature_enabled(
                 "SESSION_METRICS_CLASSIFICATION_JUDGE_ENABLED"
             ),
@@ -266,7 +269,7 @@ class MetricJobManager:
 
                     def run_session_judge(conversation_snapshot=conversation, callback=judge_progress,
                                           employee_no=str(job.get("user_id") or "") or None):
-                        with self._judge_slots:
+                        with (nullcontext() if job.get("externally_limited") else self._judge_slots):
                             return judge_session_metrics(
                                 conversation_snapshot, employee_no=employee_no,
                                 progress_callback=callback,
@@ -277,7 +280,7 @@ class MetricJobManager:
                 classification_status = "disabled"
                 if job.get("classification_judge_enabled", False):
                     classification_prompt = first_user_prompt(conversation)
-                    with self._judge_slots:
+                    with (nullcontext() if job.get("externally_limited") else self._judge_slots):
                         with self._lock:
                             job["phase"] = "task_classification"
                             self._append_event(
@@ -449,7 +452,7 @@ class MetricJobManager:
                         )
                 elif job["use_llm_judge"] and str(rationality_record.get("checkType") or "").strip() not in QUALITY_TYPES:
                     try:
-                        with self._judge_slots:
+                        with (nullcontext() if job.get("externally_limited") else self._judge_slots):
                             with self._lock:
                                 self._append_event(
                                     job,
@@ -555,7 +558,7 @@ class MetricJobManager:
                                                       "check_types": sorted({str(row.get("checkType") or "").strip() for row in quality_records})})
                             self._save(job, store)
                         try:
-                            with self._judge_slots:
+                            with (nullcontext() if job.get("externally_limited") else self._judge_slots):
                                 result["quality_summary"]["judge"] = judge_quality_summary(
                                     quality_records, result["quality_summary"],
                                     employee_no=str(job.get("user_id") or "") or None,

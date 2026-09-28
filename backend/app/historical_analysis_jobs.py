@@ -212,6 +212,7 @@ class HistoricalAnalysisJobManager:
             session_ids=[session_id], user_id=job["user_id"],
             start_time=job["start_time"], end_time=job["end_time"],
             use_llm_judge=job["use_llm_judge"], judge_model=assigned_model,
+            externally_limited=True,
         )
         child_job_id = child["job_id"]
         seen = 0
