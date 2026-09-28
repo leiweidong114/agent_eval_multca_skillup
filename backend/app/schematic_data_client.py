@@ -92,12 +92,24 @@ class SchematicDataClient:
         body = {"collectionName": collection_name, "_id": str(record_id)}
         started = time.perf_counter()
         diagnostic = {"method": "POST", "endpoint": self.delete_url, "body": body,
-                      "record_id": record_id}
+                      "record_id": record_id, "attempts": []}
         try:
             response = httpx.post(
                 self.delete_url, json=body, headers=self._headers(),
                 timeout=self.settings.schematic_data_timeout_seconds, trust_env=False, verify=False,
             )
+            diagnostic["attempts"].append({"method": "POST", "http_status": response.status_code})
+            allow = str(getattr(response, "headers", {}).get("Allow") or "")
+            if response.status_code == 405 and "DELETE" in allow.upper():
+                response = httpx.request(
+                    "DELETE", self.delete_url,
+                    params={"collectionName": collection_name, "id": str(record_id)},
+                    headers=self._headers(),
+                    timeout=self.settings.schematic_data_timeout_seconds, trust_env=False, verify=False,
+                )
+                diagnostic["attempts"].append({"method": "DELETE", "http_status": response.status_code})
+                diagnostic["method"] = "DELETE"
+                diagnostic["fallback_from"] = "POST"
             if response.status_code == 404:
                 # Replacement is idempotent: a previous attempt may already
                 # have removed the old aggregate before its response was lost.
@@ -326,8 +338,34 @@ class SchematicDataClient:
                 trust_env=False,
                 verify=False,
             )
-            response.raise_for_status()
-            payload = response.json()
+            response_status = int(getattr(response, "status_code", 200))
+            diagnostic["attempts"] = [{"format": "intranet_envelope", "http_status": response_status}]
+            if response_status == 400:
+                legacy_payloads = []
+                for record in records:
+                    legacy_response = httpx.post(
+                        self.write_url,
+                        params={"collectionName": collection_name},
+                        json=record,
+                        headers=self._headers(),
+                        timeout=self.settings.schematic_data_timeout_seconds,
+                        trust_env=False,
+                        verify=False,
+                    )
+                    diagnostic["attempts"].append({
+                        "format": "legacy_flat_document",
+                        "http_status": legacy_response.status_code,
+                    })
+                    legacy_response.raise_for_status()
+                    legacy_payloads.append(legacy_response.json())
+                    response = legacy_response
+                payload = legacy_payloads[0] if len(legacy_payloads) == 1 else {
+                    "status": "inserted", "results": legacy_payloads,
+                }
+                diagnostic["request_format"] = "legacy_flat_document"
+            else:
+                response.raise_for_status()
+                payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             diagnostic.update({
                 "status": "failed",

@@ -95,3 +95,22 @@ def test_judge_audits_all_four_types_without_overwriting_rule_rates(monkeypatch)
     assert audited["disagreements"]["信号接口列表检查通过率"] == {"rule": "0.00%", "judge": "100.00%"}
     assert summary["rates"]["信号接口列表检查通过率"] == "0.00%"
     assert all(check_type in calls[0]["user_prompt"] for check_type in quality_summary.QUALITY_TYPES)
+
+
+def test_judge_accepts_source_display_rounding(monkeypatch):
+    monkeypatch.setattr(quality_summary, "run_json_judge", lambda **kwargs: {
+        "result": {"rates": {
+            "block缺少器件标识检查通过率": "83.30%",
+            "port缺少name检查通过率": "85.20%",
+        }, "evidence": {}},
+        "model": "test-model", "judge_interaction_id": "judge-rounding",
+    })
+    summary = {"session_id": "session-rounding", "rates": {
+        "block缺少器件标识检查通过率": "83.33%",
+        "port缺少name检查通过率": "85.19%",
+    }}
+
+    audited = quality_summary.judge_quality_summary([], summary)
+
+    assert audited["status"] == "verified"
+    assert audited["disagreements"] == {}

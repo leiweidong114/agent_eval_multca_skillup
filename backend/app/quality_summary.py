@@ -309,10 +309,18 @@ def judge_quality_summary(
     if not isinstance(report, Mapping) or not isinstance(report.get("rates"), Mapping):
         raise ValueError("四类质量指标 Judge 未返回 rates 对象")
     llm_rates = {str(key): _display_rate(_rate(value)) for key, value in report["rates"].items()}
+    # Source reports commonly round ratios to one decimal place while the
+    # deterministic extractor keeps two decimals (for example 5/6 is shown as
+    # 83.3% but calculated as 83.33%).  Treat those display-rounding deltas as
+    # agreement; material differences still remain visible as disagreements.
     disagreements = {
         key: {"rule": value, "judge": llm_rates.get(key)}
         for key, value in expected.items()
-        if value is not None and llm_rates.get(key) != value
+        if value is not None and (
+            _rate(value) is None
+            or _rate(llm_rates.get(key)) is None
+            or abs(_rate(value) - _rate(llm_rates.get(key))) > 0.05
+        )
     }
     return {
         "status": "verified" if not disagreements else "disagreed",

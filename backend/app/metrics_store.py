@@ -564,7 +564,19 @@ class MetricsStore:
             and isinstance(item.get("agentEvalProcess"), Mapping)
         ]
         if embedded:
-            return dict(embedded[0]["agentEvalProcess"])
+            # The first metric insert necessarily happens before its own
+            # write/read-back events exist.  Refresh the sole metric document
+            # here so the persisted process reaches the real terminal state
+            # instead of forever showing "保存最终指标：待执行" in the UI.
+            existing = dict(embedded[0])
+            previous_process = dict(existing.get("agentEvalProcess") or {})
+            document["result_summary"] = previous_process.get("result_summary") or {}
+            record_id = str(existing.pop("_id", "") or "").strip()
+            if not record_id:
+                raise RuntimeError("Agent Eval 指标记录缺少 _id，无法刷新计算过程")
+            client.delete_records(record_id=record_id, collection_name=RATIONALITY_COLLECTION)
+            client.insert_record(existing | {"agentEvalProcess": document}, collection_name=RATIONALITY_COLLECTION)
+            return document
 
         # A failed calculation has no final agent_eval_metric document. Preserve
         # exactly one standalone failure trace so the UI can still explain it.

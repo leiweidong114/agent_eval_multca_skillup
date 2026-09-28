@@ -1,3 +1,4 @@
+import httpx
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -175,6 +176,43 @@ def test_schematic_data_insert_route_needs_no_login_and_forwards_payload(monkeyp
     assert captured["collection_name"] == "HDschematicRationalityCollection"
 
 
+def test_insert_documents_retries_legacy_flat_document_after_envelope_400(monkeypatch):
+    calls = []
+
+    class Response:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                request = httpx.Request("POST", "http://example.test/insert")
+                response = httpx.Response(self.status_code, request=request)
+                raise httpx.HTTPStatusError("failed", request=request, response=response)
+
+        def json(self):
+            return self._payload
+
+    def fake_post(url, **kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return Response(400, {"error": "legacy format required"})
+        return Response(200, {"status": "inserted", "record": {"_id": "mongo-1", **kwargs["json"]}})
+
+    monkeypatch.setattr("app.schematic_data_client.httpx.post", fake_post)
+    monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
+    record = {"sessionId": "session-1", "checkType": "agent_eval_metric", "resultText": ""}
+
+    result = SchematicDataClient().insert_documents([record])
+
+    assert result["status"] == "inserted"
+    assert calls[0]["json"] == {
+        "collectionName": "HDschematicRationalityCollection", "documents": [record],
+    }
+    assert calls[1]["params"] == {"collectionName": "HDschematicRationalityCollection"}
+    assert calls[1]["json"] == record
+
+
 def test_schematic_data_insert_route_accepts_empty_metric_result_text(monkeypatch):
     captured = {}
 
@@ -315,6 +353,46 @@ def test_delete_records_accepts_empty_success_response(monkeypatch):
     result = SchematicDataClient().delete_records(record_id="68cec0000000000000000001")
 
     assert result == {"status": "success"}
+
+
+def test_delete_records_retries_with_delete_when_upstream_rejects_post(monkeypatch):
+    captured = []
+
+    class PostResponse:
+        status_code = 405
+        headers = {"Allow": "DELETE,OPTIONS"}
+
+    class DeleteResponse:
+        status_code = 200
+        headers = {}
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"code": 200, "message": "删除成功"}
+
+    def fake_post(url, **kwargs):
+        captured.append(("POST", url, kwargs))
+        return PostResponse()
+
+    def fake_request(method, url, **kwargs):
+        captured.append((method, url, kwargs))
+        return DeleteResponse()
+
+    monkeypatch.setattr("app.schematic_data_client.httpx.post", fake_post)
+    monkeypatch.setattr("app.schematic_data_client.httpx.request", fake_request)
+    monkeypatch.setattr("app.schematic_data_client.clear_response_cache", lambda: None)
+
+    result = SchematicDataClient().delete_records(record_id="68cec0000000000000000001")
+
+    assert result == {"code": 200, "message": "删除成功"}
+    assert [item[0] for item in captured] == ["POST", "DELETE"]
+    assert captured[1][2]["params"] == {
+        "collectionName": "HDschematicRationalityCollection",
+        "id": "68cec0000000000000000001",
+    }
+    assert "json" not in captured[1][2]
 
 
 def test_schematic_data_delete_route_only_accepts_mongo_id(monkeypatch):

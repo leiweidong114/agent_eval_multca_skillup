@@ -155,9 +155,14 @@ def test_quality_metrics_and_process_are_new_documents_without_mutating_source()
     assert store.verify_metric_persisted("session-1", record["uuid"])["verified"] is True
     assert store.get_metrics("session-1")["schematic_rationality"]["check_type"] == "hscope_block_corpus_check"
     store.save_process_trace({"job_id": "job-1", "events": [
+        {"session_id": "session-1", "stage": "schematic_data_insert_succeeded"},
         {"session_id": "session-1", "stage": "session_completed"}]}, "session-1")
     assert len(client.records) == 2
-    assert store.get_process_trace("session-1")["result_summary"]["session_id"] == "session-1"
+    refreshed = store.get_process_trace("session-1")
+    assert refreshed["result_summary"]["session_id"] == "session-1"
+    assert [event["stage"] for event in refreshed["events"]] == [
+        "schematic_data_insert_succeeded", "session_completed",
+    ]
 
 
 def test_recalculation_replaces_only_old_platform_records():
