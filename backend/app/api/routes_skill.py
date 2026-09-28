@@ -107,6 +107,7 @@ class JustDoHttpRequest(BaseModel):
 class SchematicTaskProfileRequest(BaseModel):
     skills: list[str] = Field(min_length=1)
     evaluator_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
+    preset_prompt: str = Field(default="", max_length=100_000)
 
 
 class RuntimeSettingsRequest(BaseModel):

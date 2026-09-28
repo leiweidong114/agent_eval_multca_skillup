@@ -17,6 +17,7 @@ def test_legacy_schematic_settings_migrate_to_block_to_schematic(tmp_path):
     profile = settings["schematic_task_profiles"]["block_to_schematic"]
     assert profile["skills"] == ["legacy-a", "legacy-b"]
     assert profile["evaluator_id"] == "legacy-evaluator"
+    assert "STM32F103C8T6" in profile["preset_prompt"]
     assert set(settings["schematic_task_profiles"]) == set(SCHEMATIC_TASK_TYPES)
 
 
@@ -24,9 +25,9 @@ def test_web_settings_persist_all_three_schematic_task_profiles(tmp_path):
     backend = tmp_path / "backend"
     backend.mkdir()
     profiles = {
-        "block_to_schematic": {"skills": ["a"], "evaluator_id": "eval-a"},
-        "block_to_signal_list": {"skills": ["b"], "evaluator_id": "eval-b"},
-        "signal_list_to_schematic": {"skills": ["c"], "evaluator_id": "eval-c"},
+        "block_to_schematic": {"skills": ["a"], "evaluator_id": "eval-a", "preset_prompt": "生成控制板原理图"},
+        "block_to_signal_list": {"skills": ["b"], "evaluator_id": "eval-b", "preset_prompt": "生成信号接口列表"},
+        "signal_list_to_schematic": {"skills": ["c"], "evaluator_id": "eval-c", "preset_prompt": "根据接口列表生成原理图"},
     }
 
     saved = save_runtime_settings(backend, {
@@ -46,7 +47,7 @@ def test_schematic_profile_skill_count_has_no_artificial_upper_limit(tmp_path):
     backend.mkdir()
     many_skills = [f"skill-{index}" for index in range(1, 33)]
     profiles = {
-        task_type: {"skills": list(many_skills), "evaluator_id": "schematic-default"}
+        task_type: {"skills": list(many_skills), "evaluator_id": "schematic-default", "preset_prompt": ""}
         for task_type in SCHEMATIC_TASK_TYPES
     }
 

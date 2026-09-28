@@ -89,7 +89,7 @@
           </el-form-item>
           <el-form-item :label="`${currentSchematicTask?.name||'原理图任务'}需求 Prompt`">
             <el-input v-model="form.prompt" type="textarea" :rows="6" placeholder="例如：设计一套 24V 转 5V/3A 的降压电源，包含输入保护、状态指示和测试点……" />
-            <div v-if="form.schematicTaskType==='block_to_schematic'" class="prompt-example"><span>可直接使用内置 STM32 示例，验证完整原理图链路。</span><el-button link type="primary" @click="form.prompt=schematicExamplePrompt">填入示例 Prompt</el-button></div>
+            <div v-if="schematicPresetPrompt" class="prompt-example"><span>已自动填入设置中的预设 Prompt，仍可在此修改。</span><el-button link type="primary" @click="form.prompt=schematicPresetPrompt">恢复预设 Prompt</el-button></div>
           </el-form-item>
           <el-form-item label="任务输入文件夹（可选）">
             <input class="input-file-picker" type="file" webkitdirectory directory multiple @change="onEvaluationInputFiles" />
@@ -187,7 +187,7 @@ const currentSchematicTask = computed(() => schematicTaskTypes.value.find(item =
 const currentSchematicProfile = computed(() => runtimeSettings.value.schematic_task_profiles?.[form.schematicTaskType] || {})
 const schematicSkills = computed(() => currentSchematicProfile.value.skills || runtimeSettings.value.schematic_skills || ['schematic-pipeline','signal-interface-generation','schematic-layout-codegen','schematic-web-apply'])
 const schematicEvaluator = computed(() => currentSchematicProfile.value.evaluator_id || 'schematic-default')
-const schematicExamplePrompt = `设计一块基于 STM32F103C8T6 的最小控制板原理图。要求包含：5V 输入与 3.3V 稳压、电源指示灯、SWD 下载接口、8MHz 晶振与负载电容、复位按键，以及由 GPIO 驱动的红色 LED（串联 470Ω 电阻）。请严格执行已安装的四阶段原理图 pipeline，使用器件目录中的器件；生成并校验 out/sheets.json，按每批 2 个 subagent 完成切片代码和自动布局，确保 overlap=0、unrouted=0，最后生成多图页网页并在结论中列出 URL、全部中间产物路径和每页指标。`
+const schematicPresetPrompt = computed(() => String(currentSchematicProfile.value.preset_prompt || '').trim())
 const running = ref(false)
 const job = ref(null)
 const resultId = ref(null)
@@ -239,7 +239,7 @@ function onEvaluationInputFiles(event){
 function removeEvaluationInput(index){form.inputFiles.splice(index,1)}
 const fileSize=size=>Number(size)>=1024*1024?`${(Number(size)/1024/1024).toFixed(1)} MB`:`${Math.max(1,Math.round(Number(size)/1024))} KB`
 const contractLabel=value=>({block_diagram:'框图',signal_interface_v1:'信号接口列表',schematic_project:'原理图工程'}[value]||value)
-function onSchematicTaskChange(){form.name=currentSchematicTask.value?.name?`${currentSchematicTask.value.name}评测`:'原理图生成评测';form.prompt=''}
+function onSchematicTaskChange(){form.name=currentSchematicTask.value?.name?`${currentSchematicTask.value.name}评测`:'原理图生成评测';form.prompt=schematicPresetPrompt.value}
 function onBenchmarkChange() {
   if (selectedBenchmark.value) form.sampleLimit = Math.min(20, selectedBenchmark.value.item_count)
   if (selectedBenchmark.value?.task_type === 'repository_agent') form.agent = 'codex'
@@ -262,7 +262,10 @@ function setDefaults() {
   form.modelKeys = form.modelKeys.filter(key => availableModels.value.some(item => modelKey(item) === key))
   if (form.batchMode && !form.agents.length) form.agents = possibleAgents.slice(0, 2).map(item => item.agent)
   if (form.batchMode && !form.modelKeys.length) form.modelKeys = preferredModel ? [modelKey(preferredModel)] : availableModels.value.slice(0, 2).map(modelKey)
-  if (form.type === 'schematic') form.name ||= currentSchematicTask.value?.name ? `${currentSchematicTask.value.name}评测` : '原理图生成评测'
+  if (form.type === 'schematic') {
+    form.name ||= currentSchematicTask.value?.name ? `${currentSchematicTask.value.name}评测` : '原理图生成评测'
+    if (!form.prompt.trim()) form.prompt = schematicPresetPrompt.value
+  }
   if (form.type === 'skill') form.name ||= 'Skill 能力评测'
   if (form.type === 'question') form.name ||= '题库能力评测'
 }

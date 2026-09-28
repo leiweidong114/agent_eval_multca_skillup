@@ -180,6 +180,9 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
         evaluator_id = str(task_profile["evaluator_id"])
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", evaluator_id):
             raise ValueError(f"Invalid evaluator_id in {task_type}")
+        preset_prompt = str(task_profile.get("preset_prompt") or "")
+        if len(preset_prompt) > 100_000 or "\0" in preset_prompt:
+            raise ValueError(f"Invalid preset_prompt in {task_type}")
     raw_skills = profiles["block_to_schematic"]["skills"]
     if not isinstance(raw_skills, list) or not raw_skills:
         raise ValueError("schematic_skills is required")

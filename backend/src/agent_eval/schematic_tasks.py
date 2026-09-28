@@ -27,18 +27,28 @@ DEFAULT_PIPELINE_SKILLS = [
     "schematic-layout-codegen",
     "schematic-web-apply",
 ]
+DEFAULT_BLOCK_TO_SCHEMATIC_PROMPT = (
+    "设计一块基于 STM32F103C8T6 的最小控制板原理图。要求包含：5V 输入与 3.3V 稳压、"
+    "电源指示灯、SWD 下载接口、8MHz 晶振与负载电容、复位按键，以及由 GPIO 驱动的红色 "
+    "LED（串联 470Ω 电阻）。请严格执行已安装的四阶段原理图 pipeline，使用器件目录中的器件；"
+    "生成并校验 out/sheets.json，按每批 2 个 subagent 完成切片代码和自动布局，确保 "
+    "overlap=0、unrouted=0，最后生成多图页网页并在结论中列出 URL、全部中间产物路径和每页指标。"
+)
 DEFAULT_SCHEMATIC_TASK_PROFILES: dict[str, dict[str, Any]] = {
     "block_to_schematic": {
         "skills": list(DEFAULT_PIPELINE_SKILLS),
         "evaluator_id": "schematic-default",
+        "preset_prompt": DEFAULT_BLOCK_TO_SCHEMATIC_PROMPT,
     },
     "block_to_signal_list": {
         "skills": ["signal-interface-generation"],
         "evaluator_id": "schematic-default",
+        "preset_prompt": "",
     },
     "signal_list_to_schematic": {
         "skills": ["schematic-layout-codegen", "schematic-web-apply"],
         "evaluator_id": "schematic-default",
+        "preset_prompt": "",
     },
 }
 
@@ -65,9 +75,16 @@ def normalize_schematic_task_profiles(
         evaluator_id = str(raw.get("evaluator_id") or "").strip()
         if task_type == DEFAULT_SCHEMATIC_TASK_TYPE and not evaluator_id and legacy_evaluator:
             evaluator_id = legacy_evaluator
+        raw_prompt = (
+            raw.get("preset_prompt")
+            if "preset_prompt" in raw
+            else defaults.get("preset_prompt", "")
+        )
+        preset_prompt = str(raw_prompt or "").strip()
         profiles[task_type] = {
             "skills": normalized_skills or list(defaults["skills"]),
             "evaluator_id": evaluator_id or str(defaults["evaluator_id"]),
+            "preset_prompt": preset_prompt,
         }
     return profiles
 
