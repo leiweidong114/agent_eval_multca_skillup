@@ -112,6 +112,7 @@ def _prompt(user_prompt: str) -> str:
 def classify_session_task(
     conversation: Mapping[str, Any], *, employee_no: str | None = None,
     progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
+    model_override: str | None = None,
 ) -> dict[str, Any]:
     prompt = first_user_prompt(conversation)
     if not prompt:
@@ -130,6 +131,7 @@ def classify_session_task(
             employee_no=employee_no,
             context_id=str(conversation.get("root_session_id") or "") or None,
             purpose="session_task_classification",
+            model_override=model_override,
             **judge_kwargs,
         )
         result = response.get("result")

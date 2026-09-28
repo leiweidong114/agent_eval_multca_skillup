@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
@@ -10,7 +10,7 @@ from agent_eval.database import conversation_time_window, search_conversations
 from app.auth import employee_from_request
 from app.config import BACKEND_ROOT
 from app.infrastructure_config import infrastructure_health
-from app.metric_job_manager import metric_job_manager
+from app.historical_analysis_jobs import historical_analysis_jobs
 from app.metric_scheduler import metric_scheduler
 from app.metrics_store import MetricsStore, metrics_store_health
 from app.response_cache import response_cache_health
@@ -26,6 +26,7 @@ class CalculateMetricsRequest(BaseModel):
     start_time: datetime
     end_time: datetime
     use_llm_judge: bool = True
+    task_kind: Literal["classification", "metrics", "conversation_judge"] = "metrics"
 
     @model_validator(mode="after")
     def validate_window(self) -> "CalculateMetricsRequest":
@@ -56,33 +57,44 @@ def sessions(
     end_user: str | None = None,
     session_id: str | None = None,
     model: str | None = None,
+    task_classification: str | None = Query(
+        None,
+        pattern="^(schematic_generation|block_to_schematic|block_to_signal_list|signal_list_to_schematic|schematic_apply_to_tianshu|schematic_adjustment|other_schematic|other)$",
+    ),
     metric_status: str = Query("all", pattern="^(all|calculated|uncalculated)$"),
+    refresh: bool = False,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
     employee_from_request(request)
-    key = cache_key("metric-sessions-v1", {
+    key = cache_key("metric-sessions-v2", {
         "start_time": start_time, "end_time": end_time, "end_user": end_user,
         "session_id": session_id, "model": model, "metric_status": metric_status,
+        "task_classification": task_classification,
         "limit": limit, "offset": offset,
     })
-    cached = get_cached_json(key)
+    cached = None if refresh else get_cached_json(key)
     if cached is not None:
         cached["cache"] = "hit"
         return cached
     try:
-        store: MetricsStore | None = None
+        store = MetricsStore()
         all_statuses: dict[str, dict[str, Any]] | None = None
         allowed_session_ids: set[str] | None = None
         excluded_session_ids: set[str] | None = None
         if metric_status != "all":
-            store = MetricsStore()
             all_statuses = store.all_statuses()
             calculated_ids = set(all_statuses)
             if metric_status == "calculated":
                 allowed_session_ids = calculated_ids
             else:
                 excluded_session_ids = calculated_ids
+        if task_classification:
+            classified_ids = store.session_ids_for_task_classification(task_classification)
+            allowed_session_ids = classified_ids if allowed_session_ids is None else allowed_session_ids & classified_ids
+            if excluded_session_ids:
+                allowed_session_ids -= excluded_session_ids
+                excluded_session_ids = None
         result = search_conversations(
             BACKEND_ROOT,
             source="non_evaluation",
@@ -96,20 +108,23 @@ def sessions(
             allowed_root_session_ids=allowed_session_ids,
             excluded_root_session_ids=excluded_session_ids,
         )
-        if all_statuses is not None:
-            statuses = all_statuses
-        else:
-            try:
-                statuses = MetricsStore().statuses(item["root_session_id"] for item in result["conversations"])
-            except Exception:
-                statuses = {}
+        try:
+            statuses = store.statuses(item["root_session_id"] for item in result["conversations"])
+        except Exception:
+            statuses = all_statuses or {}
         for item in result["conversations"]:
             metric = statuses.get(item["root_session_id"])
             item["metric_status"] = metric.get("status") if metric else "not_calculated"
             item["metric_calculated_at"] = metric.get("calculated_at") if metric else None
             item["metric_definition_version"] = metric.get("metric_definition_version") if metric else None
             item["quality_rates"] = metric.get("quality_rates") if metric else {}
+            item["task_type"] = metric.get("task_type") if metric else None
+            item["task_category"] = metric.get("task_category") if metric else None
+            item["task_subtype"] = metric.get("task_subtype") if metric else None
+            item["classification_status"] = metric.get("classification_status") if metric else "not_calculated"
+            item["conversation_judge_status"] = metric.get("conversation_judge_status") if metric else "not_calculated"
         result["metric_status_filter"] = metric_status
+        result["task_classification_filter"] = task_classification
         result["cache"] = "miss"
         set_cached_json(key, result, ttl_seconds=60)
         return result
@@ -167,7 +182,8 @@ def metric_summary(
 @router.post("/jobs", status_code=202)
 def calculate(request: Request, payload: CalculateMetricsRequest) -> dict[str, Any]:
     try:
-        return metric_job_manager.submit(
+        return historical_analysis_jobs.submit(
+            task_kind=payload.task_kind,
             session_ids=payload.session_ids,
             user_id=employee_from_request(request),
             start_time=payload.start_time,
@@ -181,7 +197,7 @@ def calculate(request: Request, payload: CalculateMetricsRequest) -> dict[str, A
 @router.get("/jobs/{job_id}")
 def job(request: Request, job_id: str) -> dict[str, Any]:
     employee_from_request(request)
-    result = metric_job_manager.get(job_id)
+    result = historical_analysis_jobs.get(job_id)
     if result is None:
         raise HTTPException(status_code=404, detail="指标计算任务不存在")
     return result
@@ -223,10 +239,19 @@ def metric_detail(request: Request, session_id: str) -> dict[str, Any]:
 
 
 @router.get("/{session_id}/process")
-def metric_process(request: Request, session_id: str) -> dict[str, Any]:
+def metric_process(
+    request: Request,
+    session_id: str,
+    task_kind: Literal["classification", "metrics", "conversation_judge"] = "metrics",
+) -> dict[str, Any]:
     employee_from_request(request)
     try:
-        result = MetricsStore().get_process_trace(session_id)
+        store = MetricsStore()
+        result = (
+            store.get_analysis_process(session_id, task_kind)
+            if hasattr(store, "get_analysis_process")
+            else store.get_process_trace(session_id)
+        )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     if result is None:

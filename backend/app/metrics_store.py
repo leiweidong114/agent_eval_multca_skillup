@@ -15,9 +15,16 @@ SESSION_METRICS_CHECK_TYPE = "agent_eval_metric"
 SESSION_METRICS_MESSAGE = "Agent Eval 历史会话指标计算结果"
 SESSION_PROCESS_CHECK_TYPE = "agent_eval_metric_process"
 SESSION_PROCESS_MESSAGE = "Agent Eval 历史会话指标计算过程"
+TASK_CLASSIFICATION_CHECK_TYPE = "agent_eval_task_classification"
+CONVERSATION_JUDGE_CHECK_TYPE = "agent_eval_conversation_judge"
+ANALYSIS_CHECK_TYPES = {
+    "classification": TASK_CLASSIFICATION_CHECK_TYPE,
+    "conversation_judge": CONVERSATION_JUDGE_CHECK_TYPE,
+}
 LEGACY_SESSION_METRICS_CHECK_TYPES = {"agent_eval_session_metrics"}
 SESSION_METRIC_RECORD_TYPES = {SESSION_METRICS_CHECK_TYPE, *LEGACY_SESSION_METRICS_CHECK_TYPES}
 PLATFORM_RECORD_TYPES = {SESSION_METRICS_CHECK_TYPE, *LEGACY_SESSION_METRICS_CHECK_TYPES, SESSION_PROCESS_CHECK_TYPE}
+ALL_PLATFORM_RECORD_TYPES = {*PLATFORM_RECORD_TYPES, *ANALYSIS_CHECK_TYPES.values(), AGGREGATE_CHECK_TYPE}
 _aggregate_lock = threading.RLock()
 _metric_replace_lock = threading.RLock()
 
@@ -93,6 +100,32 @@ def _latest_metric(records: Iterable[Mapping[str, Any]]) -> dict[str, Any] | Non
         reverse=True,
     )
     return candidates[0][1] if candidates else None
+
+
+def _analysis_result(record: Mapping[str, Any], task_kind: str) -> dict[str, Any] | None:
+    if str(record.get("checkType") or "").strip() != ANALYSIS_CHECK_TYPES.get(task_kind):
+        return None
+    value = record.get("resultText")
+    try:
+        result = dict(value) if isinstance(value, Mapping) else json.loads(str(value or "{}"))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(result, dict):
+        return None
+    return {
+        **result,
+        "session_id": str(result.get("session_id") or record.get("sessionId") or ""),
+        "calculated_at": result.get("calculated_at") or record.get("createTime"),
+        "mongo_record_id": str(record.get("_id") or "") or None,
+        "process": dict(record.get("agentEvalProcess") or {})
+        if isinstance(record.get("agentEvalProcess"), Mapping) else None,
+    }
+
+
+def _latest_analysis(records: Iterable[Mapping[str, Any]], task_kind: str) -> dict[str, Any] | None:
+    values = [value for row in records for value in [_analysis_result(row, task_kind)] if value]
+    values.sort(key=lambda value: str(value.get("calculated_at") or ""), reverse=True)
+    return values[0] if values else None
 
 
 def _bounded_process_value(value: Any, depth: int = 0) -> Any:
@@ -204,6 +237,55 @@ class MetricsStore:
                 client.delete_records(record_id=record_id, collection_name=RATIONALITY_COLLECTION)
             return client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
 
+    def save_analysis_result(
+        self,
+        *,
+        task_kind: str,
+        session_id: str,
+        result: Mapping[str, Any],
+        process_trace: Mapping[str, Any],
+        user_id: str,
+    ) -> dict[str, Any]:
+        """Replace one standalone classification/Judge result for a session."""
+        check_type = ANALYSIS_CHECK_TYPES.get(task_kind)
+        if check_type is None:
+            raise ValueError(f"Unsupported analysis task: {task_kind}")
+        now = datetime.now(timezone.utc).isoformat()
+        document = {
+            **dict(result),
+            "session_id": session_id,
+            "calculated_at": now,
+        }
+        record = {
+            "uuid": uuid.uuid4().hex,
+            "status": str(result.get("status") or "completed"),
+            "createUser": user_id or "agent-eval",
+            "createTime": now,
+            "checkType": check_type,
+            "checkMessage": "Agent Eval 会话任务分类" if task_kind == "classification" else "Agent Eval 会话 Judge",
+            "userName": user_id or "Agent Eval",
+            "hscopeProjectId": task_kind,
+            "boardNum": session_id,
+            "sessionId": session_id,
+            "resultText": json.dumps(document, ensure_ascii=False, default=_json_default),
+            "agentEvalProcess": _bounded_process_value(process_trace),
+        }
+        client = self._data_client()
+        with _metric_replace_lock:
+            try:
+                existing = client.find_records(RATIONALITY_COLLECTION, [session_id], use_cache=False)
+            except TypeError:
+                existing = client.find_records(RATIONALITY_COLLECTION, [session_id])
+            for item in existing:
+                if str(item.get("checkType") or "").strip() != check_type:
+                    continue
+                record_id = str(item.get("_id") or "").strip()
+                if not record_id:
+                    raise RuntimeError(f"旧 {task_kind} 记录缺少 _id，无法安全替换")
+                client.delete_records(record_id=record_id, collection_name=RATIONALITY_COLLECTION)
+            client.insert_record(record, collection_name=RATIONALITY_COLLECTION)
+        return record
+
     def verify_metric_persisted(
         self,
         session_id: str,
@@ -283,17 +365,24 @@ class MetricsStore:
         ids = list(dict.fromkeys(str(value) for value in session_ids if str(value)))
         result: dict[str, dict[str, Any]] = {}
         for session_id in ids:
-            metric = _latest_metric(self._records_for([session_id]))
-            if metric:
+            records = self._records_for([session_id])
+            metric = _latest_metric(records)
+            classification = _latest_analysis(records, "classification")
+            conversation_judge = _latest_analysis(records, "conversation_judge")
+            if metric or classification or conversation_judge:
+                task = classification or metric or {}
                 result[session_id] = {
                     "_id": session_id,
-                    "status": metric.get("status"),
-                    "calculated_at": metric.get("calculated_at"),
-                    "metric_definition_version": metric.get("metric_definition_version"),
-                    "task_type": metric.get("task_type"),
-                    "task_category": metric.get("task_category"),
-                    "task_subtype": metric.get("task_subtype"),
-                    "quality_rates": flatten_agent_eval_metrics(metric.get("agentEvalMetrics") or metric.get("quality_summary") or {}),
+                    "status": (metric or {}).get("status"),
+                    "calculated_at": (metric or {}).get("calculated_at"),
+                    "metric_definition_version": (metric or {}).get("metric_definition_version"),
+                    "task_type": task.get("task_type"),
+                    "task_category": task.get("task_category"),
+                    "task_subtype": task.get("task_subtype"),
+                    "quality_rates": flatten_agent_eval_metrics((metric or {}).get("agentEvalMetrics") or (metric or {}).get("quality_summary") or {}),
+                    "classification_status": (classification or {}).get("status") or "not_calculated",
+                    "metrics_status": (metric or {}).get("status") or "not_calculated",
+                    "conversation_judge_status": (conversation_judge or {}).get("status") or "not_calculated",
                 }
         return result
 
@@ -330,11 +419,22 @@ class MetricsStore:
 
     def session_ids_for_task_classification(self, value: str) -> set[str]:
         field = "task_category" if value == "schematic_generation" else "task_type"
-        return {
+        matches = {
             str(item["session_id"])
             for item in self._all_latest()
             if item.get(field) == value and item.get("session_id")
         }
+        latest: dict[str, tuple[str, dict[str, Any]]] = {}
+        for record in self._data_client().iter_collection(RATIONALITY_COLLECTION):
+            classified = _analysis_result(record, "classification")
+            if not classified or not classified.get("session_id"):
+                continue
+            session_id = str(classified["session_id"])
+            stamp = str(classified.get("calculated_at") or record.get("createTime") or "")
+            if session_id not in latest or stamp > latest[session_id][0]:
+                latest[session_id] = (stamp, classified)
+        matches.update(session_id for session_id, (_, item) in latest.items() if item.get(field) == value)
+        return matches
 
     def save_job(self, job: dict[str, Any]) -> None:
         # Progress is intentionally process-local. Only completed metrics are persisted.
@@ -377,7 +477,31 @@ class MetricsStore:
         }
 
     def get_metrics(self, session_id: str) -> dict[str, Any] | None:
-        return _latest_metric(self._records_for([session_id]))
+        records = self._records_for([session_id])
+        metric = _latest_metric(records)
+        classification = _latest_analysis(records, "classification")
+        conversation_judge = _latest_analysis(records, "conversation_judge")
+        if not any((metric, classification, conversation_judge)):
+            return None
+        return {
+            **(metric or {"session_id": session_id}),
+            "task_classification": classification,
+            "judge": conversation_judge,
+            "component_statuses": {
+                "classification": (classification or {}).get("status") or "not_calculated",
+                "metrics": (metric or {}).get("status") or "not_calculated",
+                "conversation_judge": (conversation_judge or {}).get("status") or "not_calculated",
+            },
+        }
+
+    def get_analysis_process(self, session_id: str, task_kind: str) -> dict[str, Any] | None:
+        if task_kind == "metrics":
+            return self.get_process_trace(session_id)
+        value = _latest_analysis(self._records_for([session_id]), task_kind)
+        process = (value or {}).get("process")
+        if not isinstance(process, Mapping):
+            return None
+        return {**dict(process), "mongo_record_id": (value or {}).get("mongo_record_id")}
 
     def quality_records(self, session_id: str) -> list[dict[str, Any]]:
         """Fetch every original quality report for one exact Session ID."""
@@ -614,7 +738,8 @@ class MetricsStore:
     def get_process_trace(self, session_id: str) -> dict[str, Any] | None:
         all_records = self._records_for([session_id])
         embedded = [(record, record.get("agentEvalProcess")) for record in all_records
-                    if isinstance(record.get("agentEvalProcess"), Mapping)]
+                    if str(record.get("checkType") or "").strip() in SESSION_METRIC_RECORD_TYPES
+                    and isinstance(record.get("agentEvalProcess"), Mapping)]
         embedded.sort(key=lambda pair: str(pair[1].get("finished_at") or ""), reverse=True)
         if embedded:
             record, value = embedded[0]
@@ -652,7 +777,7 @@ class MetricsStore:
         self_metrics = [
             value
             for value in all_values
-            if str(value.get("checkType") or "").strip() in SESSION_METRIC_RECORD_TYPES
+            if str(value.get("checkType") or "").strip() in ALL_PLATFORM_RECORD_TYPES
         ]
         self_processes = [
             value
@@ -662,7 +787,7 @@ class MetricsStore:
         values = [
             value
             for value in all_values
-            if str(value.get("checkType") or "").strip() not in {*SESSION_METRIC_RECORD_TYPES, SESSION_PROCESS_CHECK_TYPE, AGGREGATE_CHECK_TYPE}
+            if str(value.get("checkType") or "").strip() not in ALL_PLATFORM_RECORD_TYPES
         ]
         # status is supplied by the upstream analysis service and is not a
         # prerequisite for reading its resultText. Session ID is the join key.
@@ -694,7 +819,7 @@ class MetricsStore:
             "self_process_record_count": len(self_processes),
             "eligible_record_count": len(values),
             "status_filter": "none",
-            "excluded_check_types": [*sorted(SESSION_METRIC_RECORD_TYPES), SESSION_PROCESS_CHECK_TYPE],
+            "excluded_check_types": sorted(ALL_PLATFORM_RECORD_TYPES),
             "status_counts": status_counts,
             "check_type_counts": check_type_counts,
             "returned_session_ids": sorted({str(value.get("sessionId") or "") for value in all_values}),

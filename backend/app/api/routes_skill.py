@@ -112,6 +112,8 @@ class SchematicTaskProfileRequest(BaseModel):
 
 class RuntimeSettingsRequest(BaseModel):
     judge_model: str = Field(min_length=1, max_length=300)
+    judge_models: list[str] = Field(default_factory=list, max_length=32)
+    judge_parallelism: int = Field(default=2, ge=1, le=32)
     agent_test_model: str = Field(min_length=1, max_length=300)
     task_timeout_seconds: int = Field(default=3_600, ge=30, le=7 * 24 * 3_600)
     full_schematic_timeout_seconds: int = Field(
@@ -433,6 +435,12 @@ def get_runtime_settings() -> dict[str, object]:
         "full_schematic_timeout_seconds": (
             configured.get("full_schematic_timeout_seconds") or 48 * 3_600
         ),
+        "judge_models": configured.get("judge_models") or [
+            configured.get("judge_model")
+            or resolve_config_secret(BACKEND_ROOT, "LITELLM_JUDGE_MODEL")
+            or str(scoring.get("model") or default_model)
+        ],
+        "judge_parallelism": configured.get("judge_parallelism") or 2,
         "schematic_skills": configured.get("schematic_skills") or list(SCHEMATIC_PIPELINE_SKILLS),
         "schematic_task_profiles": configured.get("schematic_task_profiles") or {},
     }

@@ -125,6 +125,22 @@ def load_runtime_settings(project_root: Path) -> dict[str, Any]:
         value = str(environment.get(variable) or "").strip()
         if value:
             settings[setting] = value
+    raw_judge_models = str(environment.get("LITELLM_JUDGE_MODELS_JSON") or "").strip()
+    try:
+        judge_models_value = json.loads(raw_judge_models) if raw_judge_models else []
+    except ValueError:
+        judge_models_value = []
+    judge_models = list(dict.fromkeys(
+        str(item).strip() for item in judge_models_value if str(item).strip()
+    )) if isinstance(judge_models_value, list) else []
+    if not judge_models and settings.get("judge_model"):
+        judge_models = [str(settings["judge_model"])]
+    settings["judge_models"] = judge_models
+    settings["judge_parallelism"] = _positive_int(
+        environment.get("AGENT_EVAL_JUDGE_PARALLELISM"),
+        field_name="judge_parallelism",
+        default=2,
+    )
     settings["task_timeout_seconds"] = _positive_int(
         environment.get("AGENT_EVAL_DEFAULT_TIMEOUT_SECONDS"),
         field_name="task_timeout_seconds",
@@ -170,6 +186,21 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
         if len(value) > 300 or any(char in value for char in "\r\n\0"):
             raise ValueError(f"Invalid {name}")
         settings[name] = value
+    raw_judge_models = values.get("judge_models")
+    judge_models = list(dict.fromkeys(
+        str(item).strip() for item in raw_judge_models if str(item).strip()
+    )) if isinstance(raw_judge_models, list) else []
+    if not judge_models:
+        judge_models = [settings["judge_model"]]
+    if any(len(item) > 300 or any(char in item for char in "\r\n\0") for item in judge_models):
+        raise ValueError("Invalid judge_models")
+    settings["judge_models"] = judge_models
+    settings["judge_model"] = judge_models[0]
+    settings["judge_parallelism"] = _positive_int(
+        values.get("judge_parallelism"), field_name="judge_parallelism", default=2,
+    )
+    if settings["judge_parallelism"] > 32:
+        raise ValueError("judge_parallelism must not exceed 32")
     settings["task_timeout_seconds"] = _positive_int(
         values.get("task_timeout_seconds"),
         field_name="task_timeout_seconds",
@@ -215,6 +246,8 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
     settings["schematic_task_profiles"] = profiles
     update_root_env(project_root, {
         "LITELLM_JUDGE_MODEL": settings["judge_model"],
+        "LITELLM_JUDGE_MODELS_JSON": json.dumps(judge_models, ensure_ascii=False),
+        "AGENT_EVAL_JUDGE_PARALLELISM": str(settings["judge_parallelism"]),
         "AGENT_TEST_MODEL": settings["agent_test_model"],
         "AGENT_EVAL_DEFAULT_TIMEOUT_SECONDS": str(settings["task_timeout_seconds"]),
         "AGENT_EVAL_FULL_SCHEMATIC_TIMEOUT_SECONDS": str(

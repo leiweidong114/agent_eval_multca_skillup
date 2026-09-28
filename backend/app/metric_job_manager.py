@@ -83,15 +83,19 @@ class MetricJobManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
-        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="session-metrics")
+        self._executor = ThreadPoolExecutor(max_workers=32, thread_name_prefix="session-metrics")
         # One background session Judge per manager, with at most two concurrent
         # outbound Judge calls including classification/rationality.
         self._judge_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="session-metric-judge")
         try:
-            judge_parallelism = int(resolve_config_secret(BACKEND_ROOT, "SESSION_METRIC_JUDGE_PARALLELISM") or "2")
+            judge_parallelism = int(
+                resolve_config_secret(BACKEND_ROOT, "AGENT_EVAL_JUDGE_PARALLELISM")
+                or resolve_config_secret(BACKEND_ROOT, "SESSION_METRIC_JUDGE_PARALLELISM")
+                or "2"
+            )
         except ValueError:
             judge_parallelism = 2
-        self._judge_slots = threading.BoundedSemaphore(max(1, min(2, judge_parallelism)))
+        self._judge_slots = threading.BoundedSemaphore(max(1, min(32, judge_parallelism)))
 
     def submit(
         self,
@@ -101,6 +105,7 @@ class MetricJobManager:
         start_time: datetime,
         end_time: datetime,
         use_llm_judge: bool,
+        judge_model: str | None = None,
     ) -> dict[str, Any]:
         store = MetricsStore()
         now = datetime.now(timezone.utc)
@@ -113,6 +118,7 @@ class MetricJobManager:
             "process_trace_failures": 0,
             "session_ids": session_ids,
             "use_llm_judge": use_llm_judge,
+            "judge_model": judge_model,
             "classification_judge_enabled": use_llm_judge and _judge_feature_enabled(
                 "SESSION_METRICS_CLASSIFICATION_JUDGE_ENABLED"
             ),
@@ -264,6 +270,7 @@ class MetricJobManager:
                             return judge_session_metrics(
                                 conversation_snapshot, employee_no=employee_no,
                                 progress_callback=callback,
+                                model_override=job.get("judge_model"),
                             )
 
                     judge_future = self._judge_executor.submit(run_session_judge)
@@ -289,6 +296,7 @@ class MetricJobManager:
                         result["task_classification"] = classify_session_task(
                             conversation,
                             employee_no=str(job.get("user_id") or "") or None,
+                            model_override=job.get("judge_model"),
                         )
                     classification = result["task_classification"]
                     with self._lock:
@@ -550,7 +558,8 @@ class MetricJobManager:
                             with self._judge_slots:
                                 result["quality_summary"]["judge"] = judge_quality_summary(
                                     quality_records, result["quality_summary"],
-                                    employee_no=str(job.get("user_id") or "") or None)
+                                    employee_no=str(job.get("user_id") or "") or None,
+                                    model_override=job.get("judge_model"))
                             if result.get("schematic_rationality", {}).get("judge_status") == "pending_quality_audit":
                                 result["schematic_rationality"]["judge_status"] = result["quality_summary"]["judge"]["status"]
                             with self._lock:

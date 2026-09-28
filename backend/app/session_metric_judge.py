@@ -76,6 +76,7 @@ def judge_session_metrics(
     employee_no: str | None = None,
     progress_callback: Callable[[str, int, int, str], None] | None = None,
     request_progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
+    model_override: str | None = None,
 ) -> dict[str, Any]:
     rows = [row for row in conversation.get("timeline", []) if isinstance(row, Mapping)]
     rows.sort(key=lambda row: (str(row.get("start_time") or ""), str(row.get("request_id") or "")))
@@ -98,6 +99,7 @@ def judge_session_metrics(
                 employee_no=employee_no,
                 context_id=str(conversation.get("root_session_id") or "") or None,
                 purpose="session_metric_judge",
+                model_override=model_override,
                 **judge_kwargs,
             )
             report = response["result"]

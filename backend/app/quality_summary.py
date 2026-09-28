@@ -272,7 +272,8 @@ def flatten_agent_eval_metrics(value: Mapping[str, Any]) -> dict[str, str | None
 
 
 def judge_quality_summary(
-    records: list[Mapping[str, Any]], summary: Mapping[str, Any], *, employee_no: str | None = None
+    records: list[Mapping[str, Any]], summary: Mapping[str, Any], *, employee_no: str | None = None,
+    model_override: str | None = None,
 ) -> dict[str, Any]:
     """Audit all four report types in one LLM call; never replace source-backed rates."""
     evidence = [
@@ -304,6 +305,7 @@ def judge_quality_summary(
         employee_no=employee_no,
         context_id=str(summary.get("session_id") or "") or None,
         purpose="schematic_rationality_judge",
+        model_override=model_override,
     )
     report = response.get("result")
     if not isinstance(report, Mapping) or not isinstance(report.get("rates"), Mapping):
