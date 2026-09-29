@@ -181,12 +181,22 @@ def test_results_list_and_detail_keep_old_root_after_switch(tmp_path, monkeypatc
     run_dir = old_root / "test-worker" / "demo" / "20260921-120000__run-old"
     run_dir.mkdir(parents=True)
     (run_dir / "evaluation-report.json").write_text(
-        json.dumps({"run_id": "run-old", "user_id": "test-worker", "status": "completed"}),
+        json.dumps({
+            "run_id": "run-old",
+            "user_id": "test-worker",
+            "status": "completed",
+            "evaluation_type": "schematic",
+            "evaluation": {"evaluation_mode": "reference"},
+        }),
         encoding="utf-8",
     )
     monkeypatch.setattr("app.api.routes_runs.readable_runs_roots", lambda: (new_root, old_root))
 
-    assert any(item["run_id"] == "run-old" for item in client.get("/api/runs", params={"summary_only": True}).json())
+    summary = next(
+        item for item in client.get("/api/runs", params={"summary_only": True}).json()
+        if item["run_id"] == "run-old"
+    )
+    assert summary["evaluation_mode"] == "reference"
     assert client.get("/api/runs/run-old").json()["run_id"] == "run-old"
 
 

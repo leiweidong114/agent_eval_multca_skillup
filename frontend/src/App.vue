@@ -20,7 +20,10 @@
   <main class="app-main">
     <header class="page-header">
       <div><span class="eyebrow">UNIFIED EVALUATION</span><h1>{{ $route.meta.title }}</h1><p>{{ $route.meta.description }}</p></div>
-      <el-button v-if="$route.path !== '/evaluations/new'" type="primary" @click="$router.push('/evaluations/new')">＋ 发起评测</el-button>
+      <div class="page-actions">
+        <el-button v-if="$route.path !== '/'" @click="goBack"><el-icon><ArrowLeft /></el-icon>返回</el-button>
+        <el-button v-if="$route.path !== '/evaluations/new'" type="primary" @click="$router.push('/evaluations/new')">＋ 发起评测</el-button>
+      </div>
     </header>
     <router-view v-slot="{ Component }">
       <keep-alive include="RuntimeCatalog,SchematicOverview">
@@ -32,10 +35,11 @@
 </template>
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import LoginView from './views/LoginView.vue'
 import { fetchCurrentUser, logout } from './api'
 const route = useRoute()
+const router = useRouter()
 const identity = ref(null)
 const loading = ref(true)
 const activeMenu = computed(() => route.path.startsWith('/results/') ? '/results' : route.path)
@@ -43,7 +47,11 @@ onMounted(async () => {
   try { identity.value = await fetchCurrentUser() } catch { identity.value = null } finally { loading.value = false }
 })
 async function signOut() { try { await logout() } finally { identity.value = null } }
+function goBack() {
+  if (window.history.state?.back) router.back()
+  else router.push('/')
+}
 </script>
 <style scoped>
-.sidebar{position:fixed;z-index:10;inset:0 auto 0 0;width:218px;background:var(--nav);border-right:1px solid var(--line);padding:25px 14px 18px;display:flex;flex-direction:column}.brand{display:flex;gap:11px;align-items:center;padding:0 10px 25px}.brand-mark{display:grid;place-items:center;width:34px;height:34px;background:var(--primary);color:var(--panel);border-radius:9px;font:700 18px Georgia}.brand strong{display:block;font-size:13px;letter-spacing:1.5px}.brand small,.side-foot small{display:block;color:var(--muted);font-size:9px;letter-spacing:1.2px}.navigation{display:grid;gap:3px;border:0;background:transparent}.navigation :deep(.el-menu-item){height:40px;margin:0;padding:0 12px!important;border-radius:8px;background:transparent;color:#61666d;font-size:13px}.navigation :deep(.el-menu-item:hover){background:rgba(255,255,255,.7);color:var(--ink)}.navigation :deep(.el-menu-item.is-active){background:var(--panel);color:var(--ink);font-weight:650;box-shadow:0 1px 4px rgba(20,24,31,.07)}.side-foot{margin-top:auto;border-top:1px solid var(--line);padding:16px 10px 0;display:flex;align-items:center;gap:9px;font-size:12px}.side-foot>div{min-width:0;flex:1}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#abb0b6;flex:0 0 auto}.dot.ok{background:#36a474}.app-main{margin-left:218px;min-height:100vh;padding:27px 34px 46px;max-width:1800px}.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}.page-header h1{font-size:24px;line-height:1.2;margin:3px 0 2px;letter-spacing:-.4px}.page-header p{margin:0;color:var(--muted);font-size:12px}.auth-loading{min-height:100vh;display:grid;place-items:center;color:var(--muted)}@media(max-width:780px){.sidebar{position:static;width:auto;padding:12px}.brand,.side-foot{display:none}.navigation{display:flex;overflow:auto}.navigation :deep(.el-menu-item){min-width:max-content}.app-main{margin:0;padding:20px}.page-header{align-items:flex-start;flex-direction:column;gap:14px}}
+.sidebar{position:fixed;z-index:10;inset:0 auto 0 0;width:218px;background:var(--nav);border-right:1px solid var(--line);padding:25px 14px 18px;display:flex;flex-direction:column}.brand{display:flex;gap:11px;align-items:center;padding:0 10px 25px}.brand-mark{display:grid;place-items:center;width:34px;height:34px;background:var(--primary);color:var(--panel);border-radius:9px;font:700 18px Georgia}.brand strong{display:block;font-size:13px;letter-spacing:1.5px}.brand small,.side-foot small{display:block;color:var(--muted);font-size:9px;letter-spacing:1.2px}.navigation{display:grid;gap:3px;border:0;background:transparent}.navigation :deep(.el-menu-item){height:40px;margin:0;padding:0 12px!important;border-radius:8px;background:transparent;color:#61666d;font-size:13px}.navigation :deep(.el-menu-item:hover){background:rgba(255,255,255,.7);color:var(--ink)}.navigation :deep(.el-menu-item.is-active){background:var(--panel);color:var(--ink);font-weight:650;box-shadow:0 1px 4px rgba(20,24,31,.07)}.side-foot{margin-top:auto;border-top:1px solid var(--line);padding:16px 10px 0;display:flex;align-items:center;gap:9px;font-size:12px}.side-foot>div{min-width:0;flex:1}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#abb0b6;flex:0 0 auto}.dot.ok{background:#36a474}.app-main{margin-left:218px;min-height:100vh;padding:27px 34px 46px;max-width:1800px}.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}.page-actions{display:flex;align-items:center;gap:10px}.page-header h1{font-size:24px;line-height:1.2;margin:3px 0 2px;letter-spacing:-.4px}.page-header p{margin:0;color:var(--muted);font-size:12px}.auth-loading{min-height:100vh;display:grid;place-items:center;color:var(--muted)}@media(max-width:780px){.sidebar{position:static;width:auto;padding:12px}.brand,.side-foot{display:none}.navigation{display:flex;overflow:auto}.navigation :deep(.el-menu-item){min-width:max-content}.app-main{margin:0;padding:20px}.page-header{align-items:flex-start;flex-direction:column;gap:14px}.page-actions{width:100%;flex-wrap:wrap}}
 </style>

@@ -10,6 +10,30 @@ from .adapters import _run_process
 from .models import AdapterResult, ScoreResult, Task
 
 
+def _multiple_choice_answer(text: str) -> str | None:
+    """Extract a deliberate final choice without treating prose initials as answers."""
+    patterns = (
+        r"\\boxed\s*\{\s*([A-Z0-9])\s*\}",
+        r"(?:final\s+answer|answer|choice|option|最终答案|答案|选择|选项)\s*"
+        r"(?:(?:is|为|是)\s*)?(?:[:：=\-]\s*)?[\(\[]?([A-Z0-9])[\)\]]?"
+        r"(?![A-Z0-9])",
+    )
+    explicit: list[str] = []
+    for pattern in patterns:
+        explicit.extend(re.findall(pattern, text, re.IGNORECASE))
+    if explicit:
+        return explicit[-1].upper()
+
+    standalone = re.findall(
+        r"(?im)^\s*(?:[-*]\s*)?(?:\*\*)?[\(\[]?([A-Z0-9])[\)\].,:：]?(?:\*\*)?\s*$",
+        text,
+    )
+    if standalone:
+        return standalone[-1].upper()
+
+    return None
+
+
 def score_result(
     task: Task,
     adapter_result: AdapterResult,
@@ -27,12 +51,7 @@ def score_result(
     actual = _strip_gateway_footer(adapter_result.text).strip()
     if scorer.type == "multiple_choice":
         expected = str(scorer.expected).strip().upper()
-        match = re.match(
-            r"^\s*(?:answer\s*[:\-]\s*)?[\(\[]?([A-Z0-9]+)[\)\].,:]?\b",
-            actual,
-            re.IGNORECASE,
-        )
-        observed = match.group(1).upper() if match else None
+        observed = _multiple_choice_answer(actual)
         passed = observed == expected
         return ScoreResult(
             passed,

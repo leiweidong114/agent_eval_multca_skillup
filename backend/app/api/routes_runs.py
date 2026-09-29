@@ -75,6 +75,7 @@ def _report_summary(run_dir: Path, report: dict[str, object]) -> dict[str, objec
         "evaluation_type": report.get("evaluation_type") or (
             "schematic" if evaluation.get("schematic_task_type") else "skill"
         ),
+        "evaluation_mode": evaluation.get("evaluation_mode") or report.get("evaluation_mode") or "open",
         "score": scores.get("overall_score") if scores.get("overall_score") is not None else report.get("overall_score"),
         "valid_for_ranking": scoring.get("valid_for_ranking", True),
         "diagnostic_only": scoring.get("diagnostic_only", False),
@@ -90,7 +91,7 @@ def _load_run_summary(run_dir: Path) -> dict[str, object] | None:
         report_stat = report_file.stat()
         if sidecar.is_file() and sidecar.stat().st_mtime_ns >= report_stat.st_mtime_ns:
             value = json.loads(sidecar.read_text(encoding="utf-8"))
-            if isinstance(value, dict):
+            if isinstance(value, dict) and "evaluation_mode" in value:
                 return value
     except (OSError, ValueError):
         pass
@@ -169,7 +170,7 @@ def list_runs(
         for path in report_files
     ]
     result_cache_key = cache_key(
-        "run-list-v3",
+        "run-list-v4",
         {
             "user": employee,
             "include_local": include_local,

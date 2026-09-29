@@ -6,6 +6,40 @@ from agent_eval.scoring import (
     combine_dimensions,
     supplement_database_tool_metrics,
 )
+from maeval.models import AdapterResult, ScorerSpec, Task
+from maeval.scoring import score_result
+
+
+def _choice_score(response: str, expected: str = "C"):
+    task = Task(
+        id="choice-1",
+        kind="direct",
+        prompt="Choose one answer",
+        scorer=ScorerSpec(type="multiple_choice", expected=expected),
+    )
+    return score_result(task, AdapterResult(ok=True, text=response), None)
+
+
+def test_multiple_choice_accepts_verbose_response_with_explicit_final_answer():
+    result = _choice_score(
+        "先分析各个选项。A 不符合条件，B 也不满足。综合判断，最终答案是 C。"
+    )
+
+    assert result.passed is True
+    assert "observed_choice='C'" in result.detail
+
+
+def test_multiple_choice_accepts_standalone_answer_after_reasoning():
+    result = _choice_score("Reasoning may mention A and B.\n\n**C**")
+
+    assert result.passed is True
+
+
+def test_multiple_choice_does_not_accept_expected_letter_only_mentioned_in_prose():
+    result = _choice_score("C is discussed, but I cannot determine a final answer.")
+
+    assert result.passed is False
+    assert "observed_choice=None" in result.detail
 
 
 def test_skill_read_evidence_requires_read_tool_and_skill_md_path():

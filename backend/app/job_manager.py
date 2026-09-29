@@ -85,6 +85,7 @@ class EvaluationJobManager:
             "message": "Waiting for a worker", "created_at": now, "updated_at": now,
             "skill": skill_dir.name, "skills": request.get("skills") or [skill_dir.name],
             "evaluation_type": request.get("evaluation_type", "skill"),
+            "evaluation_mode": request.get("evaluation_mode", "open"),
             "schematic_task_type": request.get("schematic_task_type"),
             "evaluator_id": request.get("evaluator_id"), "agent": request.get("agent"),
             "user_id": request.get("user_id", "local"),
@@ -125,6 +126,7 @@ class EvaluationJobManager:
             "updated_at": now,
             "job_ids": [job["job_id"] for job in jobs],
             "evaluation_type": requests[0].get("evaluation_type", "skill"),
+            "evaluation_mode": requests[0].get("evaluation_mode", "open"),
             "schematic_task_type": requests[0].get("schematic_task_type"),
             "evaluator_id": requests[0].get("evaluator_id"),
             "skills": requests[0].get("skills") or [skill_dir.name],
@@ -315,6 +317,8 @@ class EvaluationJobManager:
                 schematic_task_type=request.get("schematic_task_type"),
                 justdo_transport=request.get("justdo_transport", "auto"),
                 zcode_transport=request.get("zcode_transport", "auto"),
+                evaluation_mode=request.get("evaluation_mode", "open"),
+                reference_answer=request.get("reference_answer"),
             )
             status = "completed" if result.get("status", "completed") == "completed" else "failed"
             failure = result.get("failure") if status == "failed" else None

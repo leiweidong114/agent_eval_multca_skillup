@@ -483,7 +483,8 @@ def get_job_status(job_id: str, request: Request) -> dict[str, object]:
         for key in (
             "job_id", "task_id", "status", "phase", "progress", "message",
             "created_at", "started_at", "updated_at", "user_id", "task_name",
-            "evaluation_type", "schematic_task_type", "agent", "model", "failure", "error",
+            "evaluation_type", "evaluation_mode", "schematic_task_type", "agent", "model",
+            "failure", "error",
         )
     }
 

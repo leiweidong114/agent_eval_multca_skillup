@@ -156,8 +156,9 @@ import InteractionDetailDialog from '../components/InteractionDetailDialog.vue'
 
 const route=useRoute(),loading=ref(false),detail=ref(null),results=ref([]),comparison=ref({}),error=ref(''),interactions=ref([]),interactionsLoaded=ref(false),openingFolder=ref(false),cancelling=ref(false),prioritizing=ref(false),interactionPage=ref(1),interactionPageSize=ref(20),interactionSearch=ref(''),interactionTotal=ref(0),interactionFilteredSummary=ref({}),interactionSubagents=ref([]),interactionScope=ref('all'),interactionSubagent=ref(''),interactionScopeCounts=ref({all:0,main_agent:0,subagent:0}),interactionDialogVisible=ref(false),selectedInteraction=ref(null),selectedInteractionIndex=ref(0)
 let refreshTimer
-const typeLabel=computed(()=>({question:'题库评测',schematic:'原理图生成评测',skill:'技能评测',batch:'批量对比评测'}[route.params.type]||'综合评测'))
-const title=computed(()=>{const source=String(detail.value?.name||detail.value?.task_name||'').trim();if(/[\u3400-\u9fff]/.test(source))return source;const actor=detail.value?.agent?`${detail.value.agent} `:'';return{question:`${actor}题库能力评测`,schematic:`${actor}原理图生成评测`,skill:`${actor}技能评测`,batch:'多智能体与模型批量对比评测'}[route.params.type]||`${actor}综合评测`})
+const schematicMode=computed(()=>detail.value?.evaluation?.evaluation_mode||detail.value?.evaluation_mode||'open')
+const typeLabel=computed(()=>route.params.type==='schematic'?(schematicMode.value==='reference'?'原理图标准答案评测':'原理图无标准答案评测'):({question:'题库评测',skill:'Skill 评测',batch:'批量评测'}[route.params.type]||'综合评测'))
+const title=computed(()=>{const source=String(detail.value?.name||detail.value?.task_name||'').trim();if(/[\u3400-\u9fff]/.test(source))return source;const actor=detail.value?.agent?`${detail.value.agent} `:'';if(route.params.type==='schematic')return`${actor}${schematicMode.value==='reference'?'原理图标准答案评测':'原理图无标准答案评测'}`;return{question:`${actor}题库能力评测`,skill:`${actor}Skill 评测`,batch:'多智能体与模型批量评测'}[route.params.type]||`${actor}综合评测`})
 const batchRows=computed(()=>[...(detail.value?.results||[])].sort((a,b)=>(a.rank||999)-(b.rank||999)))
 const summaryRows=computed(()=>Array.isArray(comparison.value?.summary)?comparison.value.summary:[])
 const pairedRows=computed(()=>Array.isArray(comparison.value?.paired)?comparison.value.paired:[])

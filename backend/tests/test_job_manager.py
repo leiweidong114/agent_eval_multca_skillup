@@ -218,6 +218,45 @@ def test_batch_runs_in_parallel_and_one_failure_does_not_cancel_others(
         manager._executor.shutdown(wait=True)
 
 
+def test_reference_evaluation_mode_is_preserved_and_forwarded(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run_evaluation(**kwargs):
+        captured.update(kwargs)
+        return {"status": "completed", "scores": {"overall_score": 1}}
+
+    monkeypatch.setenv("AGENT_EVAL_WORKERS", "1")
+    monkeypatch.setattr(job_manager_module, "runs_root", lambda: tmp_path / "runs")
+    monkeypatch.setattr(job_manager_module, "readable_runs_roots", lambda: (tmp_path / "runs",))
+    monkeypatch.setattr(job_manager_module, "BACKEND_ROOT", tmp_path)
+    monkeypatch.setattr(job_manager_module, "run_evaluation", fake_run_evaluation)
+    skill_dir = tmp_path / "skill"
+    skill_dir.mkdir()
+    manager = EvaluationJobManager()
+    try:
+        submitted = manager.submit(
+            {
+                "agent": "codex",
+                "evaluation_type": "schematic",
+                "evaluation_mode": "reference",
+                "reference_answer": "golden answer",
+            },
+            skill_dir,
+        )
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if manager.get(submitted["job_id"])["status"] == "completed":
+                break
+            time.sleep(0.02)
+
+        job = manager.get(submitted["job_id"])
+        assert job["evaluation_mode"] == "reference"
+        assert captured["evaluation_mode"] == "reference"
+        assert captured["reference_answer"] == "golden answer"
+    finally:
+        manager._executor.shutdown(wait=True)
+
+
 def test_cancel_batch_marks_each_active_job_and_batch_as_cancelling():
     manager = _manager_with_jobs(
         {
