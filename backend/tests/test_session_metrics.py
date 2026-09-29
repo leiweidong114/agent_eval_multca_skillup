@@ -223,3 +223,64 @@ def test_rule_metrics_do_not_report_missing_evidence_as_perfect_success():
     assert result["metrics"]["script_success_rate"] is None
     assert result["metrics"]["skill_completeness"] is None
     assert result["fabrication_status"] == "requires_llm_and_artifact_evidence"
+
+
+def test_metric_job_cancel_stops_before_rule_and_mongodb_write(monkeypatch):
+    import threading
+    import time
+    from datetime import datetime, timedelta, timezone
+
+    from app.metric_job_manager import MetricJobManager
+
+    started = threading.Event()
+    release = threading.Event()
+    writes: list[str] = []
+
+    def load_conversation(*_args, **_kwargs):
+        started.set()
+        assert release.wait(2)
+        return {"root_session_id": "session-1", "timeline": []}
+
+    class FakeStore:
+        def save_job(self, _job):
+            pass
+
+        def save_process_trace(self, _job, session_id):
+            writes.append(f"trace:{session_id}")
+
+        def upsert_metrics(self, *_args, **_kwargs):
+            writes.append("metrics")
+
+    monkeypatch.setattr("app.metric_job_manager.get_conversation", load_conversation)
+    monkeypatch.setattr("app.metric_job_manager.MetricsStore", FakeStore)
+
+    manager = MetricJobManager()
+    now = datetime.now(timezone.utc)
+    job = manager.submit(
+        session_ids=["session-1"],
+        user_id="tester",
+        start_time=now - timedelta(hours=1),
+        end_time=now,
+        use_llm_judge=False,
+    )
+    assert started.wait(2)
+    cancelling = manager.cancel(job["job_id"])
+    assert cancelling is not None
+    assert cancelling["status"] == "cancelling"
+    release.set()
+
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        job = manager.get(job["job_id"])
+        if job and job["status"] == "cancelled":
+            break
+        time.sleep(0.01)
+    try:
+        assert job is not None
+        assert job["status"] == "cancelled"
+        assert "metrics" not in writes
+        assert "trace:session-1" in writes
+        assert any(event["stage"] == "job_cancelled" for event in job["events"])
+    finally:
+        manager._executor.shutdown(wait=True)
+        manager._judge_executor.shutdown(wait=True)
