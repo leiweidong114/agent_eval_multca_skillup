@@ -65,8 +65,8 @@
             <div class="field-help">HTTP 地址和访问令牌在“设置 → JustDo 调用”中配置；该选择只影响 JustDo。</div>
           </el-form-item>
           <el-form-item v-if="includesZCode" label="ZCode 调用方式">
-            <el-radio-group v-model="form.zcodeTransport"><el-radio-button value="auto">自动选择</el-radio-button><el-radio-button value="app-cli">zcode-app-cli</el-radio-button><el-radio-button value="desktop">ZCode 桌面 Agent</el-radio-button></el-radio-group>
-            <div class="field-help">两种方式均使用隔离配置和所选 LiteLLM 模型，不会修改用户的 ZCode 全局配置。</div>
+            <el-radio-group v-model="form.zcodeTransport"><el-radio-button value="auto">自动选择</el-radio-button><el-radio-button value="app-cli">zcode-app-cli</el-radio-button><el-radio-button value="desktop">桌面内置运行时</el-radio-button><el-radio-button value="desktop-ui">桌面可见任务</el-radio-button></el-radio-group>
+            <div class="field-help">三种方式均使用所选 LiteLLM 模型；“桌面可见任务”通过 zcode-task 写入桌面任务列表，运行后恢复用户模型配置。</div>
           </el-form-item>
         </div>
 

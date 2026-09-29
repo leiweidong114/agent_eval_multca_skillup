@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +18,7 @@ from agent_eval.runtime import (
     find_skill_up,
     normalize_agent,
     backend_agent,
+    resolve_project_executable,
     skill_target,
     validate_evaluation_capabilities,
     zcode_agent_command,
@@ -176,12 +178,41 @@ def test_zcode_transport_can_select_app_cli_or_desktop_runtime(tmp_path):
 
     assert zcode_agent_command(tmp_path, transport="app-cli") == str(app_cli.resolve())
     assert zcode_agent_command(tmp_path, transport="desktop") == str(desktop.resolve())
+    bridge = Path(zcode_agent_command(tmp_path, transport="desktop-ui"))
+    assert bridge.name == "bridge.cjs"
+    assert bridge.parent.name == "zcode_desktop_bridge"
     assert zcode_agent_command(tmp_path, transport="auto") == str(app_cli.resolve())
 
 
+def test_zcode_desktop_bridge_waits_for_explicit_terminal_state():
+    bridge = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "agent_eval"
+        / "zcode_desktop_bridge"
+        / "bridge.mjs"
+    ).read_text(encoding="utf-8")
+
+    assert "if (text && terminal)" in bridge
+    assert "stableCount" not in bridge
+
+
 def test_zcode_transport_rejects_unknown_mode(tmp_path):
-    with pytest.raises(ValueError, match="auto, app-cli, or desktop"):
+    with pytest.raises(ValueError, match="auto, app-cli, desktop, or desktop-ui"):
         zcode_agent_command(tmp_path, transport="socket")
+
+
+def test_resolve_project_executable_accepts_repo_relative_path_from_backend_root(tmp_path):
+    backend = tmp_path / "backend"
+    executable = backend / ".runtime" / "windows" / "node" / "node.exe"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"")
+
+    resolved = resolve_project_executable(
+        "backend/.runtime/windows/node/node.exe", backend
+    )
+
+    assert resolved == str(executable.resolve())
 
 
 def test_zcode_desktop_builtin_provider_config_is_discovered(tmp_path):

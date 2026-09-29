@@ -202,11 +202,11 @@ def justdo_agent_command(
 def zcode_agent_command(
     project_root: Path | None = None, *, transport: str = "auto"
 ) -> str:
-    """Resolve either zcode-app-cli or the CLI runtime bundled with ZCode Desktop."""
+    """Resolve zcode-app-cli, the bundled runtime, or the Desktop task bridge."""
     root = project_root or _default_project_root()
     normalized_transport = str(transport or "auto").strip().lower()
-    if normalized_transport not in {"auto", "app-cli", "desktop"}:
-        raise ValueError("zcode_transport must be auto, app-cli, or desktop")
+    if normalized_transport not in {"auto", "app-cli", "desktop", "desktop-ui"}:
+        raise ValueError("zcode_transport must be auto, app-cli, desktop, or desktop-ui")
     environment = effective_environment(root)
     configured_paths = load_agent_paths(root)
 
@@ -284,20 +284,43 @@ def zcode_agent_command(
                 pass
     if normalized_transport == "app-cli":
         return app_cli or AGENT_COMMANDS["zcode"]
+    if normalized_transport == "desktop-ui":
+        bridge = Path(__file__).resolve().parent / "zcode_desktop_bridge" / "bridge.cjs"
+        if not desktop:
+            return environment.get("ZCODE_DESKTOP_CLI_EXECUTABLE", "zcode")
+        return str(bridge)
     if normalized_transport == "desktop":
         return desktop or environment.get("ZCODE_DESKTOP_CLI_EXECUTABLE", "zcode")
     return app_cli or desktop or AGENT_COMMANDS["zcode"]
 
 
+def zcode_desktop_runtime(project_root: Path | None = None) -> str | None:
+    """Resolve only the ZCode Desktop bundled runtime, without falling back."""
+    root = project_root or _default_project_root()
+    command = zcode_agent_command(root, transport="desktop")
+    discovered = shutil.which(str(command or ""))
+    path = Path(discovered).resolve() if discovered else Path(str(command or "")).expanduser().resolve()
+    return str(path) if path.is_file() and path.suffix.lower() in {".js", ".cjs"} else None
+
+
 def resolve_project_executable(value: str, project_root: Path) -> str:
     """Resolve a command or repository-relative executable before changing cwd."""
     command = str(value or "").strip().strip('"') or "node"
+    path = Path(command).expanduser()
+    if path.is_absolute():
+        return str(path.resolve()) if path.is_file() else command
+    # The CLI treats backend/ as its project root, while .env paths are often
+    # written relative to the repository root (for example
+    # backend/.runtime/windows/node/node.exe). Support both conventions before
+    # the Agent changes cwd to its isolated run workspace.
+    for base in (project_root, project_root.parent):
+        candidate = (base / path).resolve()
+        if candidate.is_file():
+            return str(candidate)
     discovered = shutil.which(command)
     if discovered:
         return str(Path(discovered).resolve())
-    path = Path(command).expanduser()
-    candidate = path if path.is_absolute() else project_root / path
-    return str(candidate.resolve()) if candidate.is_file() else command
+    return command
 
 
 def zcode_builtin_provider_config(executable: str) -> Path | None:

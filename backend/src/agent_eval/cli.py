@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from contextlib import nullcontext
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +54,7 @@ from agent_eval.runtime import (
     find_skill_up,
     resolve_project_executable,
     zcode_builtin_provider_config,
+    zcode_desktop_runtime,
 )
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 from agent_eval.failure import describe_evaluation_failure
@@ -124,7 +126,7 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
     parser.add_argument("--llm-judge", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--evaluator", dest="evaluator_id", help="Installed evaluator id")
     parser.add_argument("--justdo-transport", choices=("auto", "cli", "http"), default="auto", help="Choose the JustDo local CLI or configured HTTP bridge")
-    parser.add_argument("--zcode-transport", choices=("auto", "app-cli", "desktop"), default="auto", help="Choose zcode-app-cli or the ZCode Desktop bundled Agent runtime")
+    parser.add_argument("--zcode-transport", choices=("auto", "app-cli", "desktop", "desktop-ui"), default="auto", help="Choose zcode-app-cli, the bundled runtime, or a visible ZCode Desktop task")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -186,7 +188,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--evaluator", dest="evaluator_id", help="Installed evaluator id")
     run.add_argument("--justdo-transport", choices=("auto", "cli", "http"), default="auto", help="Choose the JustDo local CLI or configured HTTP bridge")
-    run.add_argument("--zcode-transport", choices=("auto", "app-cli", "desktop"), default="auto", help="Choose zcode-app-cli or the ZCode Desktop bundled Agent runtime")
+    run.add_argument("--zcode-transport", choices=("auto", "app-cli", "desktop", "desktop-ui"), default="auto", help="Choose zcode-app-cli, the bundled runtime, or a visible ZCode Desktop task")
 
     commands.add_parser("doctor", help="Check the local skill-up and Multica runtime")
     gateway_check = commands.add_parser("check-litellm", help="Check API authentication and optional real inference")
@@ -244,7 +246,7 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--profile", help=argparse.SUPPRESS)
     check.add_argument("--model", help="LiteLLM model id; defaults to LITELLM_MODEL or gateway default")
     check.add_argument("--agent-executable")
-    check.add_argument("--zcode-transport", choices=("auto", "app-cli", "desktop"), default="auto")
+    check.add_argument("--zcode-transport", choices=("auto", "app-cli", "desktop", "desktop-ui"), default="auto")
     check.add_argument("--timeout", type=int, default=120)
     check.add_argument(
         "--max-turns",
@@ -460,12 +462,27 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 "executable": detected, "protocol_probe": protocol_probe,
                 "failure": failure, "error": str(exc),
             }
+    selected_zcode_transport = getattr(args, "zcode_transport", "auto")
+    desktop_ui_probe = runtime_agent == "zcode" and selected_zcode_transport == "desktop-ui"
+    if desktop_ui_probe:
+        # The ZCode window intentionally keeps the opened workspace alive after
+        # the probe. Use a persistent diagnostic directory instead of asking
+        # TemporaryDirectory to remove a path owned by the desktop process.
+        persistent_probe = (
+            Path(tempfile.gettempdir())
+            / "agent-eval-zcode-desktop-ui"
+            / uuid.uuid4().hex
+        )
+        persistent_probe.mkdir(parents=True, exist_ok=True)
+        temp_context = nullcontext(str(persistent_probe))
+    else:
+        temp_context = tempfile.TemporaryDirectory(
+            prefix="agent-connectivity-", ignore_cleanup_errors=True
+        )
     # Some Windows Agent CLIs keep their workspace directory handle open for
     # a short time after exit. Do not let best-effort temp cleanup replace the
     # real connectivity result with a recursive PermissionError traceback.
-    with tempfile.TemporaryDirectory(
-        prefix="agent-connectivity-", ignore_cleanup_errors=True
-    ) as temp:
+    with temp_context as temp:
         root = Path(temp)
         if profile.api_base and runtime_agent == "claude":
             # Keep user-level Claude settings (especially env overrides and
@@ -502,7 +519,21 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 )
             env["ZCODE_DATA_BASE_DIR"] = str(zcode_data)
             env["ZCODE_PERSONAL_PROVIDER_CONFIG_FILE"] = str(zcode_config_paths[0])
-            zcode_builtin = zcode_builtin_provider_config(detected)
+            desktop_runtime = (
+                zcode_desktop_runtime(PROJECT_ROOT)
+                if selected_zcode_transport == "desktop-ui"
+                else None
+            )
+            if selected_zcode_transport == "desktop-ui":
+                if desktop_runtime is None:
+                    return {
+                        "status": "not_installed",
+                        "agent": args.agent,
+                        "model": profile.model,
+                        "error": "ZCode Desktop bundled runtime was not found",
+                    }
+                env["AGENT_EVAL_ZCODE_DESKTOP_RUNTIME"] = desktop_runtime
+            zcode_builtin = zcode_builtin_provider_config(desktop_runtime or detected)
             if zcode_builtin is not None:
                 env["ZCODE_BUILTIN_PROVIDER_CONFIG_FILE"] = str(zcode_builtin)
             env["ZCODE_NODE"] = resolve_project_executable(

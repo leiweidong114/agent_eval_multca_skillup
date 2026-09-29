@@ -961,10 +961,12 @@ curl.exe "$API/runs/$RUN_ID"
 
 ## ZCode：独立 CLI 与桌面 Agent runtime
 
-评测系统使用同一个 `zcode` Agent 名称兼容两种安装形态：
+评测系统使用同一个 `zcode` Agent 名称兼容两种安装形态和三种调用方式：
 
 - `app-cli`：独立安装的社区版 `zcode-app-cli` 命令（命令名为 `zcode`）。
 - `desktop`：ZCode Desktop 安装目录内随附的 `zcode.cjs` Agent runtime，由 Node.js 启动。
+- `desktop-ui`：通过桌面版内部的 `zcode-task` MessagePort RPC 创建任务；任务写入
+  ZCode Desktop 的真实任务索引，并自动打开对应工作区，因此可在桌面界面查看运行记录。
 - `auto`：默认模式，优先独立 CLI，未发现时尝试桌面 runtime。
 
 独立 CLI 安装与确认（需要 Node.js/npm）：
@@ -1015,6 +1017,22 @@ agent-eval check-agent `
   --timeout 120 `
   --database-verify
 ```
+
+创建可在 ZCode Desktop 中查看的任务：
+
+```powershell
+agent-eval check-agent `
+  --agent zcode `
+  --zcode-transport desktop-ui `
+  --model deepseek `
+  --prompt "请只回复：ZCODE_DESKTOP_UI_OK" `
+  --timeout 180 `
+  --database-verify
+```
+
+`desktop-ui` 会在运行期间通过 ZCode 的 Provider Settings RPC 临时注册所选模型，结束后
+恢复原有 `provider_config.json`；评测任务及消息历史仍保留在桌面任务索引中。该通道依赖
+当前已安装的 ZCode Desktop 内部协议，升级 ZCode 后应先运行一次 `check-agent` 回归测试。
 
 执行 Skill 评测时同样可选择调用方式：
 

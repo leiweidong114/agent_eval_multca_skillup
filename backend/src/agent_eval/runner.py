@@ -63,6 +63,7 @@ from agent_eval.runtime import (
     normalize_agent,
     resolve_project_executable,
     zcode_builtin_provider_config,
+    zcode_desktop_runtime,
     skill_target,
     validate_evaluation_capabilities,
 )
@@ -737,7 +738,18 @@ def run_evaluation(
             )
         env["ZCODE_DATA_BASE_DIR"] = str(zcode_data)
         env["ZCODE_PERSONAL_PROVIDER_CONFIG_FILE"] = str(zcode_config_paths[0])
-        zcode_builtin = zcode_builtin_provider_config(agent_executable)
+        desktop_runtime = (
+            zcode_desktop_runtime(project_root)
+            if zcode_transport == "desktop-ui"
+            else None
+        )
+        if zcode_transport == "desktop-ui":
+            if desktop_runtime is None:
+                raise RuntimeError("ZCode Desktop bundled runtime was not found")
+            env["AGENT_EVAL_ZCODE_DESKTOP_RUNTIME"] = desktop_runtime
+        zcode_builtin = zcode_builtin_provider_config(
+            desktop_runtime or agent_executable
+        )
         if zcode_builtin is not None:
             env["ZCODE_BUILTIN_PROVIDER_CONFIG_FILE"] = str(zcode_builtin)
         env["ZCODE_NODE"] = resolve_project_executable(
