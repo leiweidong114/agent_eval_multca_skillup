@@ -239,6 +239,7 @@ class HistoricalAnalysisJobManager:
                 conversation, employee_no=job["user_id"],
                 progress_callback=None, model_override=assigned_model,
             )
+            result = {**result, "first_user_prompt": prompt}
         else:
             callback = self._judge_callback(job, session_id)
             result = judge_session_metrics(
@@ -259,11 +260,23 @@ class HistoricalAnalysisJobManager:
             outcome="success" if succeeded else "failed", output=result, model=assigned_model,
         )
         process = self._session_process(job, session_id, result)
-        MetricsStore().save_analysis_result(
+        store = MetricsStore()
+        saved_record = store.save_analysis_result(
             task_kind=job["task_kind"], session_id=session_id,
             result=result, process_trace=process, user_id=job["user_id"],
         )
-        self._event(job, session_id, "result_persisted", "结果和独立过程已写入 MongoDB", outcome="success")
+        persistence = store.verify_analysis_result_persisted(
+            task_kind=job["task_kind"],
+            session_id=session_id,
+            expected_uuid=str(saved_record["uuid"]),
+        )
+        if not persistence["verified"]:
+            raise RuntimeError(str(persistence.get("reason") or "MongoDB 回读验证失败"))
+        result["mongo_persistence"] = persistence
+        self._event(
+            job, session_id, "result_persisted", "结果已写入 MongoDB 并回读验证成功",
+            outcome="success", output=persistence,
+        )
         if not succeeded:
             raise RuntimeError(str(result.get("error") or result.get("reason") or "Judge 返回不可用"))
         return result
