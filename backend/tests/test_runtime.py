@@ -19,6 +19,7 @@ from agent_eval.runtime import (
     backend_agent,
     skill_target,
     validate_evaluation_capabilities,
+    zcode_agent_command,
 )
 
 
@@ -122,6 +123,7 @@ def test_skill_target_matches_agent_native_discovery():
     assert skill_target("mcode", "demo") == ".minimax/skills/demo"
     assert skill_target("qwenpaw", "demo") == "skill_pool/demo"
     assert skill_target("omp", "demo") == ".omp/skills/demo"
+    assert skill_target("zcode", "demo") == ".zcode/skills/demo"
 
 
 def test_every_supported_agent_has_an_explicit_evaluation_capability():
@@ -142,20 +144,43 @@ def test_every_supported_agent_has_an_explicit_evaluation_capability():
             )
 
 
-def test_model_adapter_registry_has_exactly_the_21_supported_agents():
+def test_model_adapter_registry_has_exactly_the_22_supported_agents():
     supported_by_capability = {
         agent
         for agent in SUPPORTED_AGENTS
         if agent_capabilities(agent)["specified_model_and_skill_evaluation"]
     }
 
-    assert len(AGENT_MODEL_ADAPTERS) == 21
+    assert len(AGENT_MODEL_ADAPTERS) == 22
     assert set(AGENT_MODEL_ADAPTERS) == supported_by_capability
     assert set(EXCLUDED_AGENT_ADAPTERS) == set(SUPPORTED_AGENTS) - supported_by_capability
     assert all(
         agent_capabilities(agent)["model_adapter"]["evaluation_supported"]
         for agent in AGENT_MODEL_ADAPTERS
     )
+
+
+def test_zcode_transport_can_select_app_cli_or_desktop_runtime(tmp_path):
+    app_cli = tmp_path / ("zcode-app-cli.cmd" if os.name == "nt" else "zcode-app-cli")
+    desktop = tmp_path / "zcode.cjs"
+    app_cli.write_text("@echo off\n" if os.name == "nt" else "#!/bin/sh\n", encoding="utf-8")
+    desktop.write_text("console.log('zcode desktop runtime')\n", encoding="utf-8")
+    if os.name != "nt":
+        app_cli.chmod(0o755)
+    (tmp_path / ".env").write_text(
+        f"ZCODE_APP_CLI_EXECUTABLE={app_cli.as_posix()}\n"
+        f"ZCODE_DESKTOP_CLI_EXECUTABLE={desktop.as_posix()}\n",
+        encoding="utf-8",
+    )
+
+    assert zcode_agent_command(tmp_path, transport="app-cli") == str(app_cli.resolve())
+    assert zcode_agent_command(tmp_path, transport="desktop") == str(desktop.resolve())
+    assert zcode_agent_command(tmp_path, transport="auto") == str(app_cli.resolve())
+
+
+def test_zcode_transport_rejects_unknown_mode(tmp_path):
+    with pytest.raises(ValueError, match="auto, app-cli, or desktop"):
+        zcode_agent_command(tmp_path, transport="socket")
 
 
 def test_six_primary_agents_advertise_explicit_subagent_transports():

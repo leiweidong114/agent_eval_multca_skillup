@@ -64,6 +64,10 @@
             <el-radio-group v-model="form.justdoTransport"><el-radio-button value="cli">CLI（本机进程）</el-radio-button><el-radio-button value="http">HTTP（本机或远程桥接）</el-radio-button></el-radio-group>
             <div class="field-help">HTTP 地址和访问令牌在“设置 → JustDo 调用”中配置；该选择只影响 JustDo。</div>
           </el-form-item>
+          <el-form-item v-if="includesZCode" label="ZCode 调用方式">
+            <el-radio-group v-model="form.zcodeTransport"><el-radio-button value="auto">自动选择</el-radio-button><el-radio-button value="app-cli">zcode-app-cli</el-radio-button><el-radio-button value="desktop">ZCode 桌面 Agent</el-radio-button></el-radio-group>
+            <div class="field-help">两种方式均使用隔离配置和所选 LiteLLM 模型，不会修改用户的 ZCode 全局配置。</div>
+          </el-form-item>
         </div>
 
         <template v-if="form.type === 'skill'">
@@ -192,7 +196,7 @@ const types = [
   { id: 'skill', name: 'Skill 评测', description: '单 Skill 或多 Skill 联合任务评测', icon: markRaw(MagicStick) },
 ]
 const normalizeType = (value) => ['schematic', 'question', 'skill'].includes(value) ? value : ''
-const form = reactive({ type: normalizeType(route.query.type), schematicEvaluationMode: 'open', referenceTaskId: '', schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', inputFiles: [], cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 3600, justdoTransport: 'cli' })
+const form = reactive({ type: normalizeType(route.query.type), schematicEvaluationMode: 'open', referenceTaskId: '', schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', inputFiles: [], cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 3600, justdoTransport: 'cli', zcodeTransport: 'auto' })
 const agents = ref([])
 const models = ref([])
 const skills = ref([])
@@ -244,6 +248,7 @@ const batchTargets = computed(() => {
   return form.agents.flatMap(agent => selectedModels.value.map(model => ({ agent, model: model.id, profile: model.profile })))
 })
 const includesJustDo=computed(()=>form.batchMode?form.agents.includes('justdo'):form.agent==='justdo')
+const includesZCode=computed(()=>form.batchMode?form.agents.includes('zcode'):form.agent==='zcode')
 
 function configuredTimeout(type=form.type,taskType=form.schematicTaskType){const metadata=schematicTaskTypes.value.find(item=>item.id===taskType);const full=type==='schematic'&&metadata?.output_contract==='schematic_project';return Number(full?runtimeSettings.value.full_schematic_timeout_seconds:runtimeSettings.value.task_timeout_seconds)||(full?48*3600:3600)}
 function timeoutLabel(seconds){const hours=Number(seconds||0)/3600;return Number.isInteger(hours)?`${hours} 小时`:`${Number(seconds||0)} 秒`}
@@ -344,7 +349,7 @@ async function submitAgentRun() {
   const inputFiles=[]
   for(const file of form.inputFiles){inputFiles.push(await uploadEvaluationInput(file,file.webkitRelativePath))}
   const referenceTask=form.type==='schematic'&&form.schematicEvaluationMode==='reference'?currentReferenceTask.value:null
-  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluation_mode: referenceTask?'reference':'open', reference_answer: referenceTask?.reference_answer||null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, input_files: inputFiles.map(item=>({upload_id:item.upload_id,filename:item.filename,relative_path:item.relative_path})), must_contain: referenceTask?.must_contain||form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
+  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluation_mode: referenceTask?'reference':'open', reference_answer: referenceTask?.reference_answer||null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, input_files: inputFiles.map(item=>({upload_id:item.upload_id,filename:item.filename,relative_path:item.relative_path})), must_contain: referenceTask?.must_contain||form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport, zcode_transport: form.zcodeTransport }
   if (form.batchMode) {
     const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })
     resultId.value = response.batch_id; resultRouteType.value = 'batch'; job.value = response; pollBatch(response.batch_id)

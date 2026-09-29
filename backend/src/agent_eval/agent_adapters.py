@@ -41,6 +41,7 @@ _SKILL_ROOTS = {
     "qwen": ".qwen/skills",
     "reasonix": ".reasonix/skills",
     "traecli": ".traecli/skills",
+    "zcode": ".zcode/skills",
 }
 
 
@@ -104,6 +105,11 @@ AGENT_MODEL_ADAPTERS: dict[str, AgentModelAdapter] = {
     "qwen": _adapter("qwen"),
     "reasonix": _adapter("reasonix", selection="acp_session_model"),
     "traecli": _adapter("traecli", selection="acp_session_model"),
+    "zcode": _adapter(
+        "zcode", selection="isolated_provider_config",
+        injection="zcode_headless_runtime", protocol="openai_compatible",
+        note="Supports zcode-app-cli and the ZCode Desktop bundled Agent runtime",
+    ),
 }
 
 

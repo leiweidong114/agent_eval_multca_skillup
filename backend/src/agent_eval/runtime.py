@@ -13,7 +13,7 @@ SUPPORTED_AGENTS = (
     "antigravity", "claude", "codebuddy", "codex", "copilot", "cursor",
     "deveco", "dim", "dsh", "grok", "hermes", "kimi", "kiro", "mcode",
     "justdo", "omp", "openclaw", "opencode", "pi", "qoder", "qoderclicn", "qwen",
-    "qwenpaw", "reasonix", "traecli", "zeroclaw",
+    "qwenpaw", "reasonix", "traecli", "zcode", "zeroclaw",
 )
 
 AGENT_ALIASES = {
@@ -48,6 +48,7 @@ AGENT_COMMANDS = {
     "qwenpaw": "qwenpaw",
     "reasonix": "reasonix",
     "traecli": "traecli",
+    "zcode": "zcode",
     "zeroclaw": "zeroclaw",
 }
 
@@ -77,6 +78,7 @@ SKILL_ROOTS = {
     "qwenpaw": "skill_pool",
     "reasonix": ".reasonix/skills",
     "traecli": ".traecli/skills",
+    "zcode": ".zcode/skills",
 }
 
 # Limitations of the pinned Multica v0.4.36 backends. Keeping these explicit
@@ -134,6 +136,8 @@ def save_agent_path(
         if len(value) > 4096 or any(char in value for char in "\r\n\0"):
             raise ValueError("Invalid Agent executable path")
         detected = shutil.which(value)
+        if detected is None and normalized == "zcode" and Path(value).is_file():
+            detected = str(Path(value).resolve())
         if detected is None:
             raise ValueError(f"Agent executable was not found or is not executable: {value}")
         paths[normalized] = str(Path(detected).resolve())
@@ -195,12 +199,66 @@ def justdo_agent_command(
     return AGENT_COMMANDS["justdo"]
 
 
+def zcode_agent_command(
+    project_root: Path | None = None, *, transport: str = "auto"
+) -> str:
+    """Resolve either zcode-app-cli or the CLI runtime bundled with ZCode Desktop."""
+    root = project_root or _default_project_root()
+    normalized_transport = str(transport or "auto").strip().lower()
+    if normalized_transport not in {"auto", "app-cli", "desktop"}:
+        raise ValueError("zcode_transport must be auto, app-cli, or desktop")
+    environment = effective_environment(root)
+    configured_paths = load_agent_paths(root)
+
+    def existing(value: str | None) -> str | None:
+        candidate = str(value or "").strip().strip('"')
+        if not candidate:
+            return None
+        discovered = shutil.which(candidate)
+        if discovered:
+            return str(Path(discovered).resolve())
+        path = Path(candidate).expanduser()
+        return str(path.resolve()) if path.is_file() else None
+
+    app_cli = (
+        existing(environment.get("ZCODE_APP_CLI_EXECUTABLE"))
+        or existing(configured_paths.get("zcode"))
+        or existing("zcode")
+        or existing("zcode-app-cli")
+    )
+    desktop = existing(environment.get("ZCODE_DESKTOP_CLI_EXECUTABLE"))
+    if desktop is None and os.name == "nt":
+        roots = [
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "ZCode",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "ZCode",
+            Path(os.environ.get("ProgramFiles", "")) / "ZCode",
+        ]
+        for install_root in roots:
+            for relative in (
+                Path("resources/glm/zcode.cjs"),
+                Path("resources/app/resources/glm/zcode.cjs"),
+            ):
+                candidate = install_root / relative
+                if candidate.is_file():
+                    desktop = str(candidate.resolve())
+                    break
+            if desktop:
+                break
+    if normalized_transport == "app-cli":
+        return app_cli or AGENT_COMMANDS["zcode"]
+    if normalized_transport == "desktop":
+        return desktop or environment.get("ZCODE_DESKTOP_CLI_EXECUTABLE", "zcode")
+    return app_cli or desktop or AGENT_COMMANDS["zcode"]
+
+
 def default_agent_command(agent: str, project_root: Path | None = None) -> str:
     normalized = normalize_agent(agent)
     root = project_root or _default_project_root()
     configured_paths = load_agent_paths(project_root)
     if normalized == "justdo":
         return justdo_agent_command(root, transport="auto")
+    if normalized == "zcode":
+        return zcode_agent_command(root, transport="auto")
     if normalized in configured_paths and shutil.which(configured_paths[normalized]):
         return configured_paths[normalized]
     return AGENT_COMMANDS.get(normalized, normalized)

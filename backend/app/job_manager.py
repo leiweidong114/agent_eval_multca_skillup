@@ -314,6 +314,7 @@ class EvaluationJobManager:
                 evaluator_id=request.get("evaluator_id"),
                 schematic_task_type=request.get("schematic_task_type"),
                 justdo_transport=request.get("justdo_transport", "auto"),
+                zcode_transport=request.get("zcode_transport", "auto"),
             )
             status = "completed" if result.get("status", "completed") == "completed" else "failed"
             failure = result.get("failure") if status == "failed" else None

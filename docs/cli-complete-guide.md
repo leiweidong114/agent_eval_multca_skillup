@@ -2,6 +2,10 @@
 
 本文档覆盖当前 `agent-eval` 的全部命令，重点支持：模型、Agent、Skill 和结果查看，多 Agent 同 Prompt、多 Agent 同任务评测，以及原理图生成四 Skill pipeline 一键评测。
 
+> ZCode 适配说明：系统同时支持独立安装的 `zcode-app-cli` 和 ZCode Desktop 随附的
+> Agent CLI runtime。两者在评测系统中统一使用 Agent 名称 `zcode`，通过
+> `--zcode-transport` 或新建评测页面中的“ZCode 调用方式”选择。
+
 > 如果项目目录复制到另一台 Windows 电脑后出现
 > `ModuleNotFoundError: No module named 'agent_eval'`，说明内置虚拟环境尚未注册新目录，
 > 或 editable install 仍指向旧电脑的绝对路径。在项目根目录离线重新注册即可：
@@ -954,6 +958,69 @@ curl.exe "$API/runs/$RUN_ID"
 
 轮询任务时，直到响应中的 `status` 变为 `completed`、`failed`、`cancelled` 或
 `interrupted` 再读取运行报告。`cancel` 是协作式取消，正在退出的 Agent 进程可能需要短暂时间。
+
+## ZCode：独立 CLI 与桌面 Agent runtime
+
+评测系统使用同一个 `zcode` Agent 名称兼容两种安装形态：
+
+- `app-cli`：独立的 `zcode-app-cli`/官方 ZCode CLI 命令。
+- `desktop`：ZCode Desktop 安装目录内随附的 `zcode.cjs` Agent runtime，由 Node.js 启动。
+- `auto`：默认模式，优先独立 CLI，未发现时尝试桌面 runtime。
+
+可以在根目录 `.env` 中写入本机路径；路径属于机器配置，不应提交密钥或用户专用路径：
+
+```dotenv
+ZCODE_APP_CLI_EXECUTABLE=D:/tools/zcode/zcode.exe
+ZCODE_DESKTOP_CLI_EXECUTABLE=C:/Users/你的用户名/AppData/Local/Programs/ZCode/resources/glm/zcode.cjs
+ZCODE_NODE=D:/tools/node/node.exe
+```
+
+检查自动发现结果：
+
+```powershell
+agent-eval agents --all
+```
+
+使用独立 CLI、指定 LiteLLM 模型并返回内容：
+
+```powershell
+agent-eval check-agent `
+  --agent zcode `
+  --zcode-transport app-cli `
+  --model glm-4.5-air `
+  --prompt "你是谁" `
+  --timeout 120 `
+  --database-verify
+```
+
+使用 ZCode Desktop 随附的 Agent runtime：
+
+```powershell
+agent-eval check-agent `
+  --agent zcode `
+  --zcode-transport desktop `
+  --model glm-4.5-air `
+  --prompt "你是谁" `
+  --timeout 120 `
+  --database-verify
+```
+
+执行 Skill 评测时同样可选择调用方式：
+
+```powershell
+agent-eval run `
+  --agent zcode `
+  --zcode-transport auto `
+  --model glm-4.5-air `
+  --skill schematic-pipeline `
+  --case default
+```
+
+系统会为每次运行建立隔离的 ZCode 配置和临时插件目录，把选定 Skill 注入插件的
+`skills/` 目录，并把所选模型映射到 LiteLLM OpenAI-compatible 网关。真实 Trace Key、
+`x-cookie`、`x-user-account` 和 `User-Agent` 由本地兼容代理注入，不写入 ZCode 配置文件。
+ZCode 的 JSON/stream-json 输出会被转换为统一的模型回复、Token、工具调用、Session ID
+和产物记录，供评测结果页展示与评分。
 
 ### 19.4 多 Agent/模型批量评测
 

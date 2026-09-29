@@ -1,14 +1,56 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/multica-ai/multica/server/pkg/agent"
 )
+
+func TestRunZCodeParsesDesktopRuntimeStream(t *testing.T) {
+	node, err := execLookPathForTest("node")
+	if err != nil {
+		t.Skip("Node.js is required for the bundled ZCode Desktop runtime")
+	}
+	workspace := t.TempDir()
+	runtimePath := filepath.Join(workspace, "fake-zcode.cjs")
+	script := `
+if (process.argv.includes("--help")) {
+  console.log("--output-format stream-json");
+  process.exit(0);
+}
+console.log(JSON.stringify({type:"part.delta", field:"text", delta:"ZCODE_OK"}));
+console.log(JSON.stringify({type:"turn.completed", sessionId:"zcode-session", usage:{inputTokens:3, outputTokens:2}}));
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ZCODE_NODE", node)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result := runZCode(ctx, runtimePath, "desktop", "hi", workspace, "glm-4.5-air", nil)
+
+	if result.ExitCode != 0 || result.FinalMessage != "ZCODE_OK" {
+		t.Fatalf("unexpected ZCode result: %+v", result)
+	}
+	if result.SessionID != "zcode-session" || result.InputTokens != 3 || result.OutputTokens != 2 {
+		t.Fatalf("ZCode telemetry was not parsed: %+v", result)
+	}
+	if result.Engine != "zcode-desktop" || len(result.Transcript) != 2 {
+		t.Fatalf("ZCode transcript was not normalized: %+v", result)
+	}
+}
+
+func execLookPathForTest(command string) (string, error) {
+	return exec.LookPath(command)
+}
 
 func TestCaseWorkspaceKeepsControlIsolatedAndDoesNotModifySource(t *testing.T) {
 	root := t.TempDir()

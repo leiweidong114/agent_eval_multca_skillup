@@ -41,12 +41,14 @@ from agent_eval.model_config import (
     resolve_model_profile,
     write_codebuddy_profile_config,
     write_openclaw_profile_config,
+    write_zcode_profile_config,
 )
 from agent_eval.runtime import (
     SUPPORTED_AGENTS,
     agent_capabilities,
     backend_agent,
     default_agent_command,
+    zcode_agent_command,
     find_multica_runtime,
     find_skill_up,
 )
@@ -120,6 +122,7 @@ def _add_multi_eval_arguments(parser: argparse.ArgumentParser, *, pipeline: bool
     parser.add_argument("--llm-judge", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--evaluator", dest="evaluator_id", help="Installed evaluator id")
     parser.add_argument("--justdo-transport", choices=("auto", "cli", "http"), default="auto", help="Choose the JustDo local CLI or configured HTTP bridge")
+    parser.add_argument("--zcode-transport", choices=("auto", "app-cli", "desktop"), default="auto", help="Choose zcode-app-cli or the ZCode Desktop bundled Agent runtime")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -181,6 +184,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--evaluator", dest="evaluator_id", help="Installed evaluator id")
     run.add_argument("--justdo-transport", choices=("auto", "cli", "http"), default="auto", help="Choose the JustDo local CLI or configured HTTP bridge")
+    run.add_argument("--zcode-transport", choices=("auto", "app-cli", "desktop"), default="auto", help="Choose zcode-app-cli or the ZCode Desktop bundled Agent runtime")
 
     commands.add_parser("doctor", help="Check the local skill-up and Multica runtime")
     gateway_check = commands.add_parser("check-litellm", help="Check API authentication and optional real inference")
@@ -238,6 +242,7 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--profile", help=argparse.SUPPRESS)
     check.add_argument("--model", help="LiteLLM model id; defaults to LITELLM_MODEL or gateway default")
     check.add_argument("--agent-executable")
+    check.add_argument("--zcode-transport", choices=("auto", "app-cli", "desktop"), default="auto")
     check.add_argument("--timeout", type=int, default=120)
     check.add_argument(
         "--max-turns",
@@ -323,8 +328,16 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
         model_override=args.model,
         agent=runtime_agent,
     )
-    executable = args.agent_executable or default_agent_command(args.agent)
+    executable = args.agent_executable or (
+        zcode_agent_command(
+            PROJECT_ROOT, transport=getattr(args, "zcode_transport", "auto")
+        )
+        if str(args.agent).strip().lower() == "zcode"
+        else default_agent_command(args.agent)
+    )
     detected = shutil.which(executable)
+    if detected is None and Path(executable).is_file():
+        detected = str(Path(executable).resolve())
     if detected is None:
         return {
             "status": "not_installed", "agent": args.agent,
@@ -460,6 +473,40 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             codebuddy_config = root / "codebuddy-config"
             write_codebuddy_profile_config(codebuddy_config / "models.json", profile)
             env["CODEBUDDY_CONFIG_DIR"] = str(codebuddy_config)
+        zcode_config_paths: list[Path] = []
+        zcode_plugin: Path | None = None
+        if profile.api_base and runtime_agent == "zcode":
+            zcode_data = root / "zcode-data"
+            zcode_plugin = root / "zcode-evaluation-plugin"
+            (zcode_plugin / "skills").mkdir(parents=True, exist_ok=True)
+            manifest_dir = zcode_plugin / ".zcode-plugin"
+            manifest_dir.mkdir(parents=True, exist_ok=True)
+            (manifest_dir / "plugin.json").write_text(
+                json.dumps(
+                    {
+                        "name": "agent-eval-connectivity",
+                        "version": "1.0.0",
+                        "skills": "skills",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            zcode_config_paths = [
+                zcode_data / "cli" / "config.json",
+                zcode_data / ".zcode" / "cli" / "config.json",
+            ]
+            for zcode_config in zcode_config_paths:
+                write_zcode_profile_config(
+                    zcode_config, profile, plugin_dir=zcode_plugin
+                )
+            env["ZCODE_DATA_BASE_DIR"] = str(zcode_data)
+            if not str(env.get("ZCODE_NODE") or "").strip():
+                env["ZCODE_NODE"] = str(env.get("NODE_EXECUTABLE") or "node")
+            env["AGENT_EVAL_ZCODE_TRANSPORT"] = getattr(
+                args, "zcode_transport", "auto"
+            )
         input_path, output_path = root / "input.json", root / "output.json"
         probe_id = f"connectivity-{uuid.uuid4().hex}"
         probe_prompt = args.prompt
@@ -494,7 +541,7 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
             command.extend(["--extra-arg", value])
         resilience_proxy = None
         if profile.api_base and runtime_agent in {
-            "claude", "codex", "codebuddy", "openclaw", "opencode"
+            "claude", "codex", "codebuddy", "openclaw", "opencode", "zcode"
         }:
             resilience_proxy = CodeBuddyCompatibilityProxy(
                 profile.api_base,
@@ -540,6 +587,14 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                         if item.startswith("model_providers.litellm.base_url=") else item
                         for item in command
                     ]
+                elif runtime_agent == "zcode" and zcode_plugin is not None:
+                    for zcode_config in zcode_config_paths:
+                        write_zcode_profile_config(
+                            zcode_config,
+                            profile,
+                            plugin_dir=zcode_plugin,
+                            api_base_override=resilience_proxy.openai_base_url,
+                        )
         started_at = datetime.now(timezone.utc).replace(tzinfo=None)
         try:
             try:
@@ -851,8 +906,21 @@ def _unique_agents(values: list[str], workers: int) -> list[str]:
 def _probe_local_agent(executable: str, *, timeout: float = 20.0) -> dict[str, object]:
     """Check that a discovered CLI can actually start, not merely exist on PATH."""
     try:
+        command = [executable, "--version"]
+        if Path(executable).suffix.lower() in {".js", ".cjs"}:
+            node = (
+                resolve_config_secret(PROJECT_ROOT, "ZCODE_NODE")
+                or resolve_config_secret(PROJECT_ROOT, "NODE_EXECUTABLE")
+                or "node"
+            )
+            node_path = Path(node)
+            if not node_path.is_absolute():
+                project_candidate = PROJECT_ROOT.parent / node_path
+                if project_candidate.is_file():
+                    node = str(project_candidate.resolve())
+            command = [node, executable, "--version"]
         process = subprocess.run(
-            [executable, "--version"],
+            command,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -887,6 +955,7 @@ def _prompt_batch(args: argparse.Namespace) -> dict[str, object]:
                 timeout=args.timeout,
                 database_verify=args.database_verify,
                 prompt=args.prompt,
+                zcode_transport="auto",
             )
         )
 
@@ -971,6 +1040,7 @@ def _evaluation_batch(
                 evaluator_id=getattr(args, "evaluator_id", None),
                 schematic_task_type=schematic_task_type,
                 justdo_transport=getattr(args, "justdo_transport", "auto"),
+                zcode_transport=getattr(args, "zcode_transport", "auto"),
             )
             scores = result.get("scores") or {}
             scoring = result.get("scoring") or {}
@@ -1042,6 +1112,8 @@ def main() -> None:
         for agent in SUPPORTED_AGENTS:
             command = default_agent_command(agent)
             detected = shutil.which(command)
+            if detected is None and Path(command).is_file():
+                detected = str(Path(command).resolve())
             if detected is None and not args.all:
                 continue
             availability = (
@@ -1217,6 +1289,7 @@ def main() -> None:
         run_llm_judge_enabled=args.llm_judge,
         evaluator_id=args.evaluator_id,
         justdo_transport=args.justdo_transport,
+        zcode_transport=args.zcode_transport,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     raise SystemExit(

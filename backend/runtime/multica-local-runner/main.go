@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -20,6 +21,208 @@ import (
 
 	"github.com/multica-ai/multica/server/pkg/agent"
 )
+
+func mapValue(value map[string]any, keys ...string) any {
+	for _, key := range keys {
+		if item, ok := value[key]; ok {
+			return item
+		}
+	}
+	for _, container := range []string{"data", "payload", "params", "result", "message", "event", "usage"} {
+		if nested, ok := value[container].(map[string]any); ok {
+			if item := mapValue(nested, keys...); item != nil {
+				return item
+			}
+		}
+	}
+	return nil
+}
+
+func stringValue(value map[string]any, keys ...string) string {
+	item := mapValue(value, keys...)
+	if text, ok := item.(string); ok {
+		return text
+	}
+	return ""
+}
+
+func int64Value(value map[string]any, keys ...string) int64 {
+	item := mapValue(value, keys...)
+	switch number := item.(type) {
+	case float64:
+		return int64(number)
+	case int64:
+		return number
+	case json.Number:
+		parsed, _ := number.Int64()
+		return parsed
+	}
+	return 0
+}
+
+func zcodeCommand(executable, transport string) (string, []string, error) {
+	if strings.HasSuffix(strings.ToLower(executable), ".js") || strings.HasSuffix(strings.ToLower(executable), ".cjs") {
+		node := strings.TrimSpace(os.Getenv("ZCODE_NODE"))
+		if node == "" {
+			node = "node"
+		}
+		resolved, err := exec.LookPath(node)
+		if err != nil {
+			return "", nil, fmt.Errorf("ZCode Desktop runtime requires Node.js: %w", err)
+		}
+		return resolved, []string{executable}, nil
+	}
+	resolved, err := exec.LookPath(executable)
+	if err != nil {
+		return "", nil, fmt.Errorf("ZCode executable %q was not found: %w", executable, err)
+	}
+	_ = transport
+	return resolved, nil, nil
+}
+
+func zcodeSupportsOutputFormat(command string, prefix []string) bool {
+	probeArgs := append(append([]string{}, prefix...), "--help")
+	probe := exec.Command(command, probeArgs...)
+	output, err := probe.CombinedOutput()
+	return err == nil && bytes.Contains(output, []byte("--output-format"))
+}
+
+func runZCode(
+	ctx context.Context,
+	executable, transport, prompt, workspace, model string,
+	extraArgs []string,
+) sessionResult {
+	started := time.Now()
+	command, prefix, err := zcodeCommand(executable, transport)
+	if err != nil {
+		return sessionResult{ExitCode: 1, Stderr: err.Error()}
+	}
+	args := append([]string{}, prefix...)
+	if zcodeSupportsOutputFormat(command, prefix) {
+		args = append(args,
+			"--prompt", prompt,
+			"--cwd", workspace,
+			"--mode", "yolo",
+			"--output-format", "stream-json",
+			"--no-color",
+		)
+	} else {
+		// Compatibility with zcode-app-cli releases that expose the older
+		// short prompt/JSON flags while using the same ZCode Agent runtime.
+		args = append(args, "-p", prompt, "--cwd", workspace, "--yolo", "--json")
+	}
+	args = append(args, extraArgs...)
+	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Dir = workspace
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	duration := time.Since(started).Milliseconds()
+	exitCode := 0
+	if err != nil {
+		exitCode = 1
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitCode = exitError.ExitCode()
+		}
+	}
+
+	transcript := []transcriptMessage{{Role: "user", Content: prompt}}
+	var finalText, sessionID strings.Builder
+	var inputTokens, outputTokens int64
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var event map[string]any
+		if json.Unmarshal([]byte(line), &event) != nil {
+			continue
+		}
+		eventType := strings.ToLower(stringValue(event, "type", "event", "method"))
+		field := strings.ToLower(stringValue(event, "field"))
+		delta := stringValue(event, "delta")
+		if delta != "" && (strings.Contains(eventType, "part.delta") || field == "text") {
+			finalText.WriteString(delta)
+		}
+		if strings.Contains(eventType, "tool") {
+			name := stringValue(event, "toolName", "tool_name", "name")
+			callID := stringValue(event, "toolCallId", "tool_call_id", "callId", "id")
+			status := stringValue(event, "status", "state")
+			if name != "" {
+				transcript = append(transcript, transcriptMessage{
+					Role: "tool_call", Turn: 1,
+					ToolCall: &toolCallInfo{ID: callID, Name: name},
+				})
+			}
+			if status == "result" || status == "completed" || status == "error" || status == "failed" {
+				transcript = append(transcript, transcriptMessage{
+					Role: "tool_result", Turn: 1,
+					ToolResult: &toolResultInfo{
+						CallID: callID, Status: status,
+						Content: mapValue(event, "output", "result", "error"),
+					},
+				})
+			}
+		}
+		if value := stringValue(event, "sessionId", "session_id"); value != "" {
+			sessionID.Reset()
+			sessionID.WriteString(value)
+		}
+		if value := int64Value(event, "inputTokens", "input_tokens", "prompt_tokens"); value > 0 {
+			inputTokens = value
+		}
+		if value := int64Value(event, "outputTokens", "output_tokens", "completion_tokens"); value > 0 {
+			outputTokens = value
+		}
+		if strings.Contains(eventType, "turn.completed") {
+			if text := stringValue(event, "finalMessage", "final_message", "text", "output"); text != "" {
+				finalText.Reset()
+				finalText.WriteString(text)
+			}
+		}
+	}
+	// --json emits one object rather than NDJSON on older builds.
+	if finalText.Len() == 0 {
+		var result map[string]any
+		if json.Unmarshal(stdout.Bytes(), &result) == nil {
+			finalText.WriteString(stringValue(
+				result, "finalMessage", "final_message", "text", "output", "response",
+			))
+			if sessionID.Len() == 0 {
+				sessionID.WriteString(stringValue(result, "sessionId", "session_id"))
+			}
+			inputTokens = int64Value(result, "inputTokens", "input_tokens", "prompt_tokens")
+			outputTokens = int64Value(result, "outputTokens", "output_tokens", "completion_tokens")
+		}
+	}
+	final := strings.TrimSpace(finalText.String())
+	if final == "" && exitCode == 0 {
+		exitCode = 1
+		if stderr.Len() > 0 {
+			stderr.WriteString("\n")
+		}
+		stderr.WriteString("ZCode returned no final assistant output")
+	}
+	if final != "" {
+		transcript = append(transcript, transcriptMessage{Role: "assistant", Content: final, Turn: 1})
+	}
+	return sessionResult{
+		Engine:       "zcode-" + transport,
+		Model:        model,
+		SessionID:    sessionID.String(),
+		ExitCode:     exitCode,
+		DurationMs:   duration,
+		FinalMessage: final,
+		Turns:        1,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		Transcript:   transcript,
+		Artifacts:    collectArtifacts(workspace),
+		Stderr:       strings.TrimSpace(stderr.String()),
+	}
+}
 
 type stringList []string
 
@@ -366,14 +569,29 @@ func main() {
 		fail(err.Error())
 		return
 	}
-	resolvedExecutable, err := exec.LookPath(executable)
-	if err != nil {
-		fail(fmt.Sprintf("Agent executable %q was not found: %v", executable, err))
-		return
-	}
 	provider := normalizeAgent(agentName)
 	if err := prepareCaseWorkspace(workspace, provider); err != nil {
 		fail(fmt.Sprintf("prepare isolated case workspace: %v", err))
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
+	defer cancel()
+	if provider == "zcode" {
+		transport := strings.TrimSpace(os.Getenv("AGENT_EVAL_ZCODE_TRANSPORT"))
+		if transport == "" || transport == "auto" {
+			transport = "app-cli"
+		}
+		result := runZCode(
+			ctx, executable, transport, exactPrompt(input.Messages), workspace, model, []string(extraArgs),
+		)
+		if err := writeResult(outputPath, result); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		return
+	}
+	resolvedExecutable, err := exec.LookPath(executable)
+	if err != nil {
+		fail(fmt.Sprintf("Agent executable %q was not found: %v", executable, err))
 		return
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -387,8 +605,6 @@ func main() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
-	defer cancel()
 	// SystemPrompt is deliberately empty. No Multica runtime brief, identity,
 	// issue workflow, login instruction, or workspace context is injected.
 	session, err := backend.Execute(ctx, exactPrompt(input.Messages), agent.ExecOptions{

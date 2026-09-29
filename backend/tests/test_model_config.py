@@ -16,6 +16,7 @@ from agent_eval.model_config import (
     save_model_profile,
     write_codebuddy_profile_config,
     write_openclaw_profile_config,
+    write_zcode_profile_config,
 )
 
 
@@ -101,6 +102,35 @@ def test_resolves_default_litellm_profile_and_agent_environment(tmp_path):
         "-c",
         'web_search="disabled"',
     )
+
+
+def test_writes_isolated_zcode_profile_without_persisting_gateway_key(tmp_path):
+    _write_config(tmp_path)
+    profile = resolve_model_profile(
+        tmp_path,
+        environ={"TEST_LITELLM_KEY": "real-run-scoped-secret"},
+        agent="zcode",
+    )
+    config_path = tmp_path / "zcode-data" / "cli" / "config.json"
+    plugin_dir = tmp_path / "zcode-plugin"
+
+    write_zcode_profile_config(
+        config_path,
+        profile,
+        plugin_dir=plugin_dir,
+        api_base_override="http://127.0.0.1:43123/v1",
+    )
+
+    saved = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["model"]["main"] == "agent-eval-litellm/MiniMax-M3"
+    assert saved["provider"]["agent-eval-litellm"]["kind"] == "openai-compatible"
+    assert saved["provider"]["agent-eval-litellm"]["options"] == {
+        "apiKey": "agent-eval-loopback",
+        "apiKeyRequired": True,
+        "baseURL": "http://127.0.0.1:43123/v1",
+    }
+    assert saved["plugins"]["dirs"] == [str(plugin_dir)]
+    assert "real-run-scoped-secret" not in config_path.read_text(encoding="utf-8")
 
 
 def test_unified_litellm_gateway_needs_no_profile_and_enables_reasoning(tmp_path):
@@ -511,7 +541,8 @@ def test_custom_profile_crud_is_dotenv_atomic_and_never_exposes_key(tmp_path):
         make_default=True,
     )
 
-    assert saved["compatible_agents"] and len(saved["compatible_agents"]) == 21
+    assert saved["compatible_agents"] and len(saved["compatible_agents"]) == 22
+    assert "zcode" in saved["compatible_agents"]
     assert saved["supports_all_evaluation_agents"] is True
     assert saved["api_key_configured"] is True
     assert "top-secret" not in repr(saved)

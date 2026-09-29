@@ -70,6 +70,8 @@ class ResolvedModelProfile:
             return f"custom-local:{self.model}"
         if agent == "opencode" and self.api_base:
             return f"litellm/{self.gateway_model_for_agent(agent)}"
+        if agent == "zcode" and self.api_base:
+            return f"agent-eval-litellm/{self.gateway_model_for_agent(agent)}"
         return self.model
 
     def gateway_model_for_agent(self, agent: str) -> str:
@@ -1260,6 +1262,50 @@ def write_codebuddy_profile_config(
                 "supportsReasoning": True,
             }
         ]
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def write_zcode_profile_config(
+    path: Path,
+    profile: ResolvedModelProfile,
+    *,
+    plugin_dir: Path,
+    api_base_override: str | None = None,
+) -> None:
+    """Write a run-isolated ZCode CLI config without persisting the real gateway key."""
+    openai_base, _ = _normalized_base_url(api_base_override or profile.api_base)
+    gateway_model = profile.gateway_model_for_agent("zcode")
+    model_ref = f"agent-eval-litellm/{gateway_model}"
+    config = {
+        "model": {"main": model_ref, "lite": model_ref},
+        "provider": {
+            "agent-eval-litellm": {
+                "kind": "openai-compatible",
+                "name": "Agent Eval LiteLLM",
+                "enabled": True,
+                "source": "custom",
+                "options": {
+                    # The local compatibility proxy owns the run-scoped key and
+                    # required identity headers. Never write the real key here.
+                    "apiKey": "agent-eval-loopback",
+                    "apiKeyRequired": True,
+                    "baseURL": openai_base,
+                },
+                "models": {
+                    gateway_model: {
+                        "name": gateway_model,
+                        "limit": {
+                            "context": profile.context_window,
+                            "output": profile.max_output_tokens,
+                        },
+                        "modalities": {"input": ["text"], "output": ["text"]},
+                    }
+                },
+            }
+        },
+        "plugins": {"enabled": True, "dirs": [str(plugin_dir)]},
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")

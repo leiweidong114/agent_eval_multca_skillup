@@ -34,6 +34,7 @@ from agent_eval.model_config import (
     resolve_model_profile,
     write_openclaw_profile_config,
     write_codebuddy_profile_config,
+    write_zcode_profile_config,
 )
 from agent_eval.skill_quality import evaluate_skill_quality
 from agent_eval.litellm_trace import TraceKeyError, create_trace_key, delete_trace_key
@@ -56,6 +57,7 @@ from agent_eval.runtime import (
     backend_agent,
     default_agent_command,
     justdo_agent_command,
+    zcode_agent_command,
     find_multica_runtime,
     find_skill_up,
     normalize_agent,
@@ -488,6 +490,7 @@ def run_evaluation(
     evaluator_id: str | None = None,
     schematic_task_type: str | None = None,
     justdo_transport: str = "auto",
+    zcode_transport: str = "auto",
     evaluation_mode: str = "open",
     reference_answer: str | None = None,
 ) -> dict[str, Any]:
@@ -553,7 +556,11 @@ def run_evaluation(
     agent_executable = executable or (
         justdo_agent_command(project_root, transport=justdo_transport)
         if requested_agent == "justdo"
-        else default_agent_command(requested_agent, project_root)
+        else (
+            zcode_agent_command(project_root, transport=zcode_transport)
+            if requested_agent == "zcode"
+            else default_agent_command(requested_agent, project_root)
+        )
     )
     timestamp = datetime.now().strftime("%Y%m%d")
     operation_id = _identity(task_id or run_id or uuid.uuid4().hex, field="task_id")
@@ -697,6 +704,41 @@ def run_evaluation(
         codebuddy_config = result_root / "runtime" / "codebuddy-config"
         write_codebuddy_profile_config(codebuddy_config / "models.json", resolved_profile)
         env["CODEBUDDY_CONFIG_DIR"] = str(codebuddy_config)
+    zcode_config_paths: list[Path] = []
+    zcode_plugin: Path | None = None
+    if resolved_profile.api_base and agent == "zcode":
+        zcode_data = result_root / "runtime" / "zcode-data"
+        zcode_plugin = result_root / "runtime" / "zcode-evaluation-plugin"
+        _copy_skill(
+            staged_skill,
+            zcode_plugin / "skills" / _slug(source_skill.name),
+        )
+        manifest_dir = zcode_plugin / ".zcode-plugin"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        (manifest_dir / "plugin.json").write_text(
+            json.dumps(
+                {
+                    "name": "agent-eval-skills",
+                    "version": "1.0.0",
+                    "description": "Run-isolated Skills installed by agent-eval",
+                    "skills": "skills",
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        zcode_config_paths = [
+            zcode_data / "cli" / "config.json",
+            zcode_data / ".zcode" / "cli" / "config.json",
+        ]
+        for zcode_config in zcode_config_paths:
+            write_zcode_profile_config(
+                zcode_config, resolved_profile, plugin_dir=zcode_plugin
+            )
+        env["ZCODE_DATA_BASE_DIR"] = str(zcode_data)
+        if not str(env.get("ZCODE_NODE") or "").strip():
+            env["ZCODE_NODE"] = str(env.get("NODE_EXECUTABLE") or "node")
     if resolved_profile.api_base and agent == "openclaw":
         openclaw_config = result_root / "runtime" / "openclaw.json"
         openclaw_workspace = result_root / "runtime" / "openclaw-workspace"
@@ -721,6 +763,8 @@ def run_evaluation(
     env["AGENT_EVAL_SUBAGENT_MODEL"] = provider_model
     if requested_agent == "justdo":
         env["AGENT_EVAL_JUSTDO_TRANSPORT"] = justdo_transport
+    if requested_agent == "zcode":
+        env["AGENT_EVAL_ZCODE_TRANSPORT"] = zcode_transport
 
     progress("validating", 15, "Validating Skill-Up configuration")
     validation = _execute_process(
@@ -747,6 +791,7 @@ def run_evaluation(
             "agent": requested_agent,
             "agent_backend": agent,
             "justdo_transport": justdo_transport if requested_agent == "justdo" else None,
+            "zcode_transport": zcode_transport if requested_agent == "zcode" else None,
             "agent_capabilities": capabilities,
             "model": model,
             "model_profile": resolved_profile.name,
@@ -896,7 +941,7 @@ def run_evaluation(
     resilience_proxy = None
     gateway_resilience: dict[str, Any] = {"status": "not_used"}
     if resolved_profile.api_base and agent in {
-        "claude", "codex", "codebuddy", "openclaw", "opencode"
+        "claude", "codex", "codebuddy", "openclaw", "opencode", "zcode"
     }:
         resilience_proxy = CodeBuddyCompatibilityProxy(
             resolved_profile.api_base,
@@ -953,6 +998,14 @@ def run_evaluation(
             # that provider at the same resilience proxy so JustDo receives
             # retries and the evaluator can retain the real upstream failure.
             env["AGENT_EVAL_PROVIDER_BASE_URL"] = resilience_proxy.openai_base_url
+        elif agent == "zcode" and zcode_plugin is not None:
+            for zcode_config in zcode_config_paths:
+                write_zcode_profile_config(
+                    zcode_config,
+                    resolved_profile,
+                    plugin_dir=zcode_plugin,
+                    api_base_override=resilience_proxy.openai_base_url,
+                )
     run_lock = agent_run_lock(project_root, agent, cancel_event=cancel_event)
     if run_lock is not None:
         progress("waiting_agent_lock", 24, "Waiting for exclusive OpenClaw/JustDo runtime")
@@ -1193,6 +1246,7 @@ def run_evaluation(
         "agent": requested_agent,
         "agent_backend": agent,
         "justdo_transport": justdo_transport if requested_agent == "justdo" else None,
+        "zcode_transport": zcode_transport if requested_agent == "zcode" else None,
         "agent_capabilities": capabilities,
         "model": model,
         "model_profile": resolved_profile.name,

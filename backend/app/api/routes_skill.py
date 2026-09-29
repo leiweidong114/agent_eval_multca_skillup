@@ -187,11 +187,12 @@ def list_agents() -> list[dict[str, Any]]:
     configured_paths = load_agent_paths(BACKEND_ROOT)
     for agent in SUPPORTED_AGENTS:
         command = default_agent_command(agent, BACKEND_ROOT)
+        detected = shutil.which(command) or (str(Path(command).resolve()) if Path(command).is_file() else None)
         result.append(
             {
                 "agent": agent,
                 "default_command": command,
-                "detected_executable": shutil.which(command),
+                "detected_executable": detected,
                 "configured_path": configured_paths.get(agent),
                 "capabilities": agent_capabilities(agent),
                 "evaluation_contract": describe_agent_contract(agent),
@@ -218,7 +219,7 @@ def put_agent_path(agent_name: str, request: AgentPathRequest) -> dict[str, obje
         "agent": agent_name,
         "configured_path": configured.get(agent_name),
         "default_command": command,
-        "detected_executable": shutil.which(command),
+        "detected_executable": shutil.which(command) or (str(Path(command).resolve()) if Path(command).is_file() else None),
     }
 
 
@@ -292,7 +293,7 @@ def test_agent(agent_name: str) -> dict[str, object]:
     if agent_name not in SUPPORTED_AGENTS:
         raise HTTPException(status_code=404, detail=f"Unsupported Agent: {agent_name}")
     command = default_agent_command(agent_name, BACKEND_ROOT)
-    executable = shutil.which(command)
+    executable = shutil.which(command) or (str(Path(command).resolve()) if Path(command).is_file() else None)
     if not executable:
         return {"ok": False, "agent": agent_name, "message": "未在 PATH 中发现可执行文件"}
     settings = load_runtime_settings(BACKEND_ROOT)
