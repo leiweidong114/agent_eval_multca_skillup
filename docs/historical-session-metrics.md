@@ -176,23 +176,31 @@ Java 服务源码在同级 `原理图_java/`；新环境需要部署支持查询
 “查看指标”的弹窗底部也提供同一入口。过程记录同时保存失败会话的错误事件。
 为控制单条 MongoDB 文档大小，每个过长事件会截断详情，并在记录中标明是否截断。
 
-自动任务配置保持不变：
+自动任务在每个整点执行。比如 14:00 只扫描 `[13:00, 14:00)` 新增的非评测会话，
+分别提交“任务分类”和“指标计算”两个后台任务。两个任务互相隔离：分类提交或执行失败不会
+阻止指标计算，单个会话失败也不会阻止同批次其他会话。任务会继续在后端运行，切换前端
+页面不会中断，并可在“原理图生成总览 → 处理过程”查看。
+
+自动任务配置：
 
 ```dotenv
 SESSION_METRICS_AUTO_ENABLED=true
-SESSION_METRICS_AUTO_INTERVAL_SECONDS=3600
-SESSION_METRICS_AUTO_INITIAL_DELAY_SECONDS=60
-SESSION_METRICS_AUTO_MAX_SESSIONS=100
+# 0 表示处理这一小时发现的全部会话；正整数表示安全上限
+SESSION_METRICS_AUTO_MAX_SESSIONS=0
 SESSION_METRICS_AUTO_USE_LLM_JUDGE=true
 SESSION_METRICS_CLASSIFICATION_JUDGE_ENABLED=false
 SESSION_METRICS_CONVERSATION_JUDGE_ENABLED=false
 SESSION_METRICS_AUTO_USER_ID=system
 ```
 
-任务分类 Judge 和会话 Judge 当前默认关闭；规则分类、规则指标、MongoDB 质量报告提取与
-质量分析 Judge 保持运行。前端的“使用质量分析 Judge”只控制质量分析 Judge。
-需要恢复两项会话 Judge 时，将上述两个开关分别设为 `true` 并重启后端；
-它们仅影响新提交的计算任务。
+整点自动分类是独立的“任务分类”任务，总会使用设置页配置的 Judge 模型，不受
+`SESSION_METRICS_CLASSIFICATION_JUDGE_ENABLED` 影响。后两个开关只控制“指标计算”任务
+内部是否再次执行分类 Judge 和会话 Judge；默认关闭可避免重复调用。规则指标、MongoDB
+质量报告提取与质量分析 Judge 保持运行。
+
+`GET /api/session-metrics/health` 的 `scheduler` 字段会返回是否启用、下次整点时间、
+上次运行窗口、提交结果和错误。也可调用 `POST /api/session-metrics/scheduler/run` 手动处理
+上一个完整小时，用于部署后验证；手动调用不会处理当前尚未结束的小时。
 
 ## 5. 后端接口
 

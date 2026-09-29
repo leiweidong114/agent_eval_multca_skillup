@@ -45,7 +45,7 @@ def health(request: Request) -> dict[str, Any]:
         "store": metrics_store_health(),
         "cache": response_cache_health(),
         "schematic_data_api": schematic_data_health(),
-        "scheduler": {"enabled": metric_scheduler.enabled},
+        "scheduler": metric_scheduler.status(),
     }
 
 
@@ -215,8 +215,7 @@ def run_scheduler_now(request: Request) -> dict[str, Any]:
     """Run the same changed-session discovery used by the hourly scheduler."""
     employee_from_request(request)
     try:
-        result = metric_scheduler.run_once()
-        return result or {"status": "idle", "message": "最近24小时没有需要重新计算的会话"}
+        return metric_scheduler.run_once()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

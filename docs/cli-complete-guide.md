@@ -1894,6 +1894,11 @@ curl.exe -b cookies.txt "http://127.0.0.1:8000/api/session-metrics/health"
 curl.exe -b cookies.txt -X POST "http://127.0.0.1:8000/api/session-metrics/scheduler/run"
 ```
 
+后端启用 `SESSION_METRICS_AUTO_ENABLED=true` 后，会在每个整点自动处理上一个完整小时
+新增的非评测会话。例如 14:00 处理 `[13:00, 14:00)`：分别发起任务分类和原理图指标
+计算，并显示在“原理图生成总览 → 处理过程”。第二条命令可手动触发同一逻辑；健康接口
+的 `scheduler.next_run_at`、`last_result` 和 `last_error` 可用于确认调度是否正常。
+
 外部接口的服务器地址位于被 Git 忽略的 `.env`，不要把内网地址或鉴权信息提交仓库。
 
 ## 30. 本机或局域网远程调用 JustDo

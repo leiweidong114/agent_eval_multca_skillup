@@ -1138,8 +1138,9 @@ def search_conversations(
     end_time: datetime | None = None,
     allowed_root_session_ids: set[str] | None = None,
     excluded_root_session_ids: set[str] | None = None,
+    unbounded_scan: bool = False,
 ) -> dict[str, Any]:
-    """Return root conversations in a bounded window; default to the latest 24 hours."""
+    """Return root conversations in a time window, optionally without the browsing scan cap."""
     if offset < 0:
         raise ValueError("offset must be non-negative")
     if source not in {"all", "evaluation", "non_evaluation"}:
@@ -1278,7 +1279,7 @@ def search_conversations(
     # Unfiltered browsing remains bounded as a safety guard.  An exact
     # employee query is already selective and must not silently drop older
     # matching calls, so it has no arbitrary 10k/50k raw-row cap.
-    scan_limit = None if end_user else min(50000, max(10000, (offset + max(1, limit)) * 100))
+    scan_limit = None if (end_user or unbounded_scan) else min(50000, max(10000, (offset + max(1, limit)) * 100))
     limit_clause = "" if scan_limit is None else "limit %s"
     query = f'''select request_id, call_type, "user" as user_id, end_user,
         "startTime" as start_time, "endTime" as end_time, model, model_group,
