@@ -36,6 +36,16 @@ def test_classification_jobs_use_configured_parallelism_and_round_robin_models(m
     class FakeStore:
         def save_analysis_result(self, **kwargs):
             saved.append(kwargs)
+            return {"uuid": f"saved-{kwargs['session_id']}"}
+
+        def verify_analysis_result_persisted(self, **kwargs):
+            return {
+                "verified": True,
+                "session_id": kwargs["session_id"],
+                "expected_uuid": kwargs["expected_uuid"],
+                "check_type": "agent_eval_session_metrics",
+                "session_type": "分类结果",
+            }
 
     monkeypatch.setattr("app.historical_analysis_jobs.classify_session_task", classify)
     monkeypatch.setattr("app.historical_analysis_jobs.first_user_prompt", lambda _conversation: "first prompt")
@@ -75,6 +85,7 @@ def test_classification_jobs_use_configured_parallelism_and_round_robin_models(m
         for event in item["process_trace"]["events"]
     )
     assert all(item["task_kind"] == "classification" for item in saved)
+    assert all(item["result"]["first_user_prompt"] == "first prompt" for item in saved)
     assert all(
         any(event["stage"] == "first_prompt_selected" for event in item["process_trace"]["events"])
         for item in saved

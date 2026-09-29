@@ -1,7 +1,13 @@
 import json
 from datetime import datetime, timezone
 
-from app.metrics_store import MetricsStore, SESSION_METRICS_CHECK_TYPE, SESSION_PROCESS_CHECK_TYPE
+from app.metrics_store import (
+    MetricsStore,
+    SESSION_METRICS_CHECK_TYPE,
+    SESSION_PROCESS_CHECK_TYPE,
+    TASK_CLASSIFICATION_CHECK_TYPE,
+    TASK_CLASSIFICATION_SESSION_TYPE,
+)
 
 
 class FakeClient:
@@ -99,6 +105,51 @@ def test_write_read_verification_rejects_missing_uuid():
 
     assert verification["verified"] is False
     assert "没有找到本次 UUID" in verification["reason"]
+
+
+def test_classification_is_saved_under_session_metrics_with_classification_session_type():
+    client = FakeClient()
+    store = MetricsStore.__new__(MetricsStore)
+    store._client = client
+
+    record = store.save_analysis_result(
+        task_kind="classification",
+        session_id="session-classification",
+        result={
+            "status": "completed",
+            "task_type": "block_to_schematic",
+            "task_category": "schematic_generation",
+            "first_user_prompt": "请从框图生成原理图",
+        },
+        process_trace={"events": [{"stage": "first_prompt_selected"}]},
+        user_id="tester",
+    )
+    verification = store.verify_analysis_result_persisted(
+        task_kind="classification",
+        session_id="session-classification",
+        expected_uuid=record["uuid"],
+    )
+    process = store.get_analysis_process("session-classification", "classification")
+
+    assert record["sessionId"] == "session-classification"
+    assert record["checkType"] == TASK_CLASSIFICATION_CHECK_TYPE == "agent_eval_session_metrics"
+    assert record["sessionType"] == TASK_CLASSIFICATION_SESSION_TYPE == "分类结果"
+    assert verification["verified"] is True
+    assert process["prompt"] == "请从框图生成原理图"
+    assert process["classification_result"]["task_type"] == "block_to_schematic"
+    assert process["mongo_persisted"] is True
+    assert store.statuses(["session-classification"])["session-classification"]["metrics_status"] == "not_calculated"
+
+    metric = store.build_metrics_record({
+        "session_id": "session-classification",
+        "status": "completed",
+        "task_type": "block_to_schematic",
+    })
+    store.upsert_metrics({"session_id": "session-classification"}, record=metric)
+    same_session = client.find_records("HDschematicRationalityCollection", ["session-classification"])
+    assert len(same_session) == 2
+    assert any(item.get("sessionType") == "分类结果" for item in same_session)
+    assert store.statuses(["session-classification"])["session-classification"]["metrics_status"] == "completed"
 
 
 def test_completed_process_trace_round_trip_and_rationality_exclusion():
