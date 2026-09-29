@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from maeval.webapp.api import create_app
 from maeval.webapp.engine import KIND_TO_ADAPTER
 from agent_eval.model_config import ResolvedModelProfile
-from maeval.webapp.benchmarks import seed_catalog
+from maeval.webapp.benchmarks import HARDWARE_SCHEMATIC_ITEMS, seed_catalog
 from maeval.webapp.db import Database
 from scripts.import_model_eval_benchmarks import import_installed_official_benchmarks
 
@@ -22,6 +22,9 @@ def test_trusted_local_model_eval_supports_benchmark_workflow(tmp_path: Path) ->
         catalog = client.get("/api/benchmarks")
         assert catalog.status_code == 200
         assert any(item["id"] == "repo-repair" for item in catalog.json())
+        hardware = next(item for item in catalog.json() if item["id"] == "hardware-schematic-knowledge-zh")
+        assert hardware["status"] == "installed"
+        assert hardware["item_count"] >= 10
 
         imported = client.post(
             "/api/benchmarks/import",
@@ -74,9 +77,12 @@ def test_public_benchmark_migration_excludes_platform_data(tmp_path: Path) -> No
     result = import_installed_official_benchmarks(source_path, target_dir)
     target = Database(target_dir / "maeval.db")
 
-    assert result["benchmark_count"] == 1
-    assert result["item_count"] == 1
+    assert result["benchmark_count"] == 2
+    assert result["item_count"] == 1 + len(HARDWARE_SCHEMATIC_ITEMS)
     assert target.row("SELECT item_count FROM benchmarks WHERE id='gsm8k'")["item_count"] == 1
+    assert target.row(
+        "SELECT item_count FROM benchmarks WHERE id='hardware-schematic-knowledge-zh'"
+    )["item_count"] == len(HARDWARE_SCHEMATIC_ITEMS)
     assert target.row("SELECT COUNT(*) n FROM providers")["n"] == 0
     assert target.row("SELECT COUNT(*) n FROM experiments")["n"] == 0
 

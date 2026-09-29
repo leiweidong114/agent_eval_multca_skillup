@@ -27,6 +27,14 @@
         <div class="panel-title"><span>评测配置</span><el-tag effect="plain">{{ currentType.name }}</el-tag></div>
       </template>
       <el-form label-position="top" :model="form" class="prism-form">
+        <section v-if="form.type === 'schematic'" class="schematic-mode-picker">
+          <span class="mode-title">先选择原理图评测方式</span>
+          <el-radio-group v-model="form.schematicEvaluationMode" @change="onSchematicModeChange">
+            <el-radio-button value="reference">有标准答案评测</el-radio-button>
+            <el-radio-button value="open">无标准答案评测</el-radio-button>
+          </el-radio-group>
+          <p>{{form.schematicEvaluationMode==='reference'?'从设置中维护的固定任务选择，按标准答案、确定性验收点和 Judge 证据评分。':'自定义任务类型、Prompt 与输入文件夹，沿用当前开放式原理图评测流程。'}}</p>
+        </section>
         <div class="form-grid common-fields">
           <el-form-item label="任务名称">
             <el-input v-model="form.name" placeholder="用于在结果中心快速识别" />
@@ -82,6 +90,20 @@
 
         <template v-else-if="form.type === 'schematic'">
           <el-divider content-position="left">原理图任务</el-divider>
+          <template v-if="form.schematicEvaluationMode === 'reference'">
+            <el-form-item label="标准答案任务">
+              <el-select v-model="form.referenceTaskId" filterable placeholder="选择设置中配置的固定任务" @change="onReferenceTaskChange">
+                <el-option v-for="task in schematicReferenceTasks" :key="task.id" :value="task.id" :label="task.name"/>
+              </el-select>
+            </el-form-item>
+            <div v-if="currentReferenceTask" class="reference-task-preview">
+              <article><span>任务 Prompt</span><p>{{currentReferenceTask.prompt}}</p></article>
+              <article><span>标准答案</span><p>{{currentReferenceTask.reference_answer}}</p></article>
+              <article><span>确定性验收点</span><div><el-tag v-for="item in currentReferenceTask.must_contain" :key="item" effect="plain">{{item}}</el-tag><small v-if="!currentReferenceTask.must_contain?.length">未配置，将仅由 Judge 对照标准答案评分</small></div></article>
+            </div>
+            <el-alert type="success" :closable="false" show-icon title="任务 Prompt 与标准答案在设置中维护；此处只能选择，不能临时改写。"/>
+          </template>
+          <template v-else>
           <el-form-item label="任务类型">
             <el-select v-model="form.schematicTaskType" @change="onSchematicTaskChange">
               <el-option v-for="task in schematicTaskTypes" :key="task.id" :value="task.id" :label="`${task.name}（${contractLabel(task.input_contract)} → ${contractLabel(task.output_contract)}）`"/>
@@ -98,6 +120,7 @@
               <el-tag v-for="(file,index) in form.inputFiles" :key="`${file.webkitRelativePath}-${file.size}-${index}`" closable @close="removeEvaluationInput(index)">{{file.webkitRelativePath}} · {{fileSize(file.size)}}</el-tag>
             </div>
           </el-form-item>
+          </template>
           <el-alert type="info" :closable="false" show-icon :title="`本次使用评测插件：${schematicEvaluator||'未配置'}`" />
           <div class="pipeline-skills"><span>本次 Skill 顺序</span><el-tag v-for="(skill,index) in schematicSkills" :key="skill" effect="plain">{{index+1}}. {{skill}}</el-tag><el-button link type="primary" @click="router.push('/settings')">修改设置</el-button></div>
         </template>
@@ -169,7 +192,7 @@ const types = [
   { id: 'skill', name: 'Skill 评测', description: '单 Skill 或多 Skill 联合任务评测', icon: markRaw(MagicStick) },
 ]
 const normalizeType = (value) => ['schematic', 'question', 'skill'].includes(value) ? value : ''
-const form = reactive({ type: normalizeType(route.query.type), schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', inputFiles: [], cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 3600, justdoTransport: 'cli' })
+const form = reactive({ type: normalizeType(route.query.type), schematicEvaluationMode: 'open', referenceTaskId: '', schematicTaskType: 'block_to_schematic', name: '', batchMode: false, agent: '', modelKey: '', agents: [], modelKeys: [], skills: [], prompt: '', inputFiles: [], cases: [], mustContain: [], mustNotContain: [], benchmarkId: '', sampleLimit: 20, repeats: 1, concurrency: 1, iterations: 1, timeout: 3600, justdoTransport: 'cli' })
 const agents = ref([])
 const models = ref([])
 const skills = ref([])
@@ -184,6 +207,8 @@ const defaultSchematicTaskTypes = [
 const schematicTaskTypes = ref(defaultSchematicTaskTypes)
 const cases = ref([])
 const currentSchematicTask = computed(() => schematicTaskTypes.value.find(item => item.id === form.schematicTaskType))
+const schematicReferenceTasks = computed(() => runtimeSettings.value.schematic_reference_tasks || [])
+const currentReferenceTask = computed(() => schematicReferenceTasks.value.find(item => item.id === form.referenceTaskId))
 const currentSchematicProfile = computed(() => runtimeSettings.value.schematic_task_profiles?.[form.schematicTaskType] || {})
 const schematicSkills = computed(() => currentSchematicProfile.value.skills || runtimeSettings.value.schematic_skills || ['schematic-pipeline','signal-interface-generation','schematic-layout-codegen','schematic-web-apply'])
 const schematicEvaluator = computed(() => currentSchematicProfile.value.evaluator_id || 'schematic-default')
@@ -242,6 +267,24 @@ function removeEvaluationInput(index){form.inputFiles.splice(index,1)}
 const fileSize=size=>Number(size)>=1024*1024?`${(Number(size)/1024/1024).toFixed(1)} MB`:`${Math.max(1,Math.round(Number(size)/1024))} KB`
 const contractLabel=value=>({block_diagram:'框图',signal_interface_v1:'信号接口列表',schematic_project:'原理图工程'}[value]||value)
 function onSchematicTaskChange(){form.name=currentSchematicTask.value?.name?`${currentSchematicTask.value.name}评测`:'原理图生成评测';form.prompt=schematicPresetPrompt.value;form.timeout=configuredTimeout('schematic',form.schematicTaskType)}
+function onSchematicModeChange(){
+  form.inputFiles=[]
+  if(form.schematicEvaluationMode==='reference'){
+    if(!schematicReferenceTasks.value.some(item=>item.id===form.referenceTaskId))form.referenceTaskId=schematicReferenceTasks.value[0]?.id||''
+    onReferenceTaskChange()
+  }else{
+    form.referenceTaskId=''
+    onSchematicTaskChange()
+  }
+}
+function onReferenceTaskChange(){
+  const task=currentReferenceTask.value
+  if(!task)return
+  form.schematicTaskType=task.schematic_task_type||'block_to_schematic'
+  form.name=`${task.name}评测`
+  form.prompt=task.prompt
+  form.timeout=configuredTimeout('schematic',form.schematicTaskType)
+}
 function onBenchmarkChange() {
   if (selectedBenchmark.value) form.sampleLimit = Math.min(20, selectedBenchmark.value.item_count)
   if (selectedBenchmark.value?.task_type === 'repository_agent') form.agent = 'codex'
@@ -279,6 +322,7 @@ function validateForm() {
   if (!form.batchMode && !selectedModel.value) return '请选择运行模型'
   if (form.type === 'skill' && !form.skills.length) return '请至少选择一个 Skill'
   if (form.type === 'skill' && !form.prompt.trim() && !form.cases.length) return '请填写 Prompt 或选择 Skill 自带用例'
+  if (form.type === 'schematic' && form.schematicEvaluationMode === 'reference' && !currentReferenceTask.value) return '请选择标准答案任务'
   if (form.type === 'schematic' && !form.prompt.trim()) return '请填写原理图需求 Prompt'
   if (form.type === 'question' && !form.benchmarkId) return '请选择题库'
   if (form.type === 'question' && selectedBenchmark.value?.task_type === 'repository_agent' && form.agent !== 'codex') return '仓库修复题库需要选择 Codex Agent'
@@ -299,7 +343,8 @@ async function submitAgentRun() {
   const selectedSkills = form.type === 'schematic' ? schematicSkills.value : form.skills
   const inputFiles=[]
   for(const file of form.inputFiles){inputFiles.push(await uploadEvaluationInput(file,file.webkitRelativePath))}
-  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, input_files: inputFiles.map(item=>({upload_id:item.upload_id,filename:item.filename,relative_path:item.relative_path})), must_contain: form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
+  const referenceTask=form.type==='schematic'&&form.schematicEvaluationMode==='reference'?currentReferenceTask.value:null
+  const base = { evaluation_type: form.type, schematic_task_type: form.type === 'schematic' ? form.schematicTaskType : null, evaluation_mode: referenceTask?'reference':'open', reference_answer: referenceTask?.reference_answer||null, evaluator_id: form.type === 'schematic' ? schematicEvaluator.value : null, user_id: 'local', task_name: form.name, skill: selectedSkills[0], skills: selectedSkills, case: form.cases, prompt: form.prompt.trim() || null, input_files: inputFiles.map(item=>({upload_id:item.upload_id,filename:item.filename,relative_path:item.relative_path})), must_contain: referenceTask?.must_contain||form.mustContain, must_not_contain: form.mustNotContain, parallelism: form.concurrency, iterations: form.iterations, timeout_seconds: form.timeout, max_turns: form.type === 'schematic' ? 60 : 12, collect_database_trace: true, require_model_verification: true, llm_judge: true, justdo_transport: form.justdoTransport }
   if (form.batchMode) {
     const response = await createBatchRun({ name: form.name, targets: batchTargets.value, base_request: base })
     resultId.value = response.batch_id; resultRouteType.value = 'batch'; job.value = response; pollBatch(response.batch_id)
@@ -365,6 +410,7 @@ onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <style scoped>
+.schematic-mode-picker{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding:16px 18px;border:1px solid #cfe3d9;border-radius:11px;background:#f4faf7}.schematic-mode-picker .mode-title{font-weight:700}.schematic-mode-picker p{flex-basis:100%;margin:0;color:var(--muted);font-size:12px}.reference-task-preview{display:grid;gap:10px;margin-bottom:14px}.reference-task-preview article{padding:14px 16px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}.reference-task-preview span{font-size:11px;font-weight:700;color:var(--muted)}.reference-task-preview p{margin:7px 0 0;white-space:pre-wrap;line-height:1.65}.reference-task-preview article>div{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.reference-task-preview small{color:var(--muted)}
 .prompt-example{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;margin-top:7px;color:var(--muted);font-size:11px}.pipeline-skills{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}.pipeline-skills>span{font-size:12px;color:var(--muted);margin-right:4px}.input-file-picker{width:100%;padding:10px;border:1px dashed var(--line);border-radius:8px;background:var(--surface-2)}.input-file-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .steps{width:440px;background:transparent}.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.type-card{position:relative;display:grid;grid-template-columns:42px 1fr;grid-template-rows:auto auto;text-align:left;gap:3px 12px;padding:16px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);cursor:pointer}.type-card strong{font-size:15px}.type-card small{color:var(--muted);line-height:1.5}.type-icon{grid-row:1/3;width:40px;height:40px;display:grid;place-items:center;border-radius:8px;background:var(--brand-soft);color:var(--brand);font-size:19px}.check{position:absolute;right:10px;top:10px;color:var(--accent);opacity:0}.active .check{opacity:1}.panel-title,.progress-head,.submit-row{display:flex;justify-content:space-between;align-items:center}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 13px}.common-fields>:first-child{grid-column:1/-1}.prism-form :deep(.el-form-item){margin-bottom:17px}.prism-form :deep(.el-form-item__label){padding-bottom:6px;color:var(--muted);font-size:11px}.field-help{font-size:11px;color:var(--muted);margin-top:6px}.option-meta{float:right;color:var(--muted);margin-left:20px;font-size:11px}.status-option{display:flex;align-items:center;gap:8px;width:100%}.status-option small{margin-left:auto;color:var(--muted)}.availability-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.availability-dot.available{background:#22a06b;box-shadow:0 0 0 3px rgba(34,160,107,.13)}.availability-dot.unavailable{background:#dc4c4c;box-shadow:0 0 0 3px rgba(220,76,76,.12)}.combination-note{grid-column:1/-1;margin-bottom:16px}.runtime-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.submit-row{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}.selection-summary{display:flex;gap:10px;align-items:center}.selection-summary span{font-size:12px;color:var(--muted);padding-left:10px;border-left:1px solid var(--line)}.progress-head h3{margin:4px 0}.progress-head p{margin:0 0 18px;color:var(--muted)}.result-actions{margin-top:18px}@media(max-width:900px){.steps{display:none}.type-grid,.form-grid,.runtime-grid{grid-template-columns:1fr}.common-fields>:first-child{grid-column:auto}.submit-row{align-items:flex-end}.selection-summary{flex-direction:column;align-items:flex-start}.type-grid{gap:8px}}
 </style>

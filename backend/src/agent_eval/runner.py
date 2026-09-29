@@ -488,6 +488,8 @@ def run_evaluation(
     evaluator_id: str | None = None,
     schematic_task_type: str | None = None,
     justdo_transport: str = "auto",
+    evaluation_mode: str = "open",
+    reference_answer: str | None = None,
 ) -> dict[str, Any]:
     run_started_at = datetime.now(timezone.utc)
 
@@ -569,6 +571,18 @@ def run_evaluation(
         raise FileExistsError(f"Task output already exists: {canonical_task_id}")
     staged_skill = result_root / "staging" / "skill"
     _copy_skill(source_skill, staged_skill)
+    if reference_answer:
+        (staged_skill.parent / "reference-answer.json").write_text(
+            json.dumps(
+                {
+                    "evaluation_mode": evaluation_mode,
+                    "reference_answer": reference_answer,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
     skill_staging = _prepare_staged_skill(
         staged_skill,
         source_skill=source_skill,
@@ -747,6 +761,8 @@ def run_evaluation(
                 "evaluator_version": str(evaluator.version),
                 "api_version": evaluator.api_version,
                 "schematic_task_type": schematic_task_type,
+                "evaluation_mode": evaluation_mode,
+                "reference_answer": reference_answer,
             },
             "input_files": input_manifest,
             "result_dir": str(result_root),
@@ -1106,6 +1122,8 @@ def run_evaluation(
             selected_skills=tuple(selected_skills),
             skill_md=(source_skill / "SKILL.md").read_text(encoding="utf-8")[:30000],
             schematic_task_type=schematic_task_type,
+            evaluation_mode=evaluation_mode,
+            reference_answer=reference_answer,
         ),
         evidence=EvaluationEvidence(
             deterministic_scores=scores,
@@ -1190,6 +1208,8 @@ def run_evaluation(
             "evaluator_version": str(evaluator.version),
             "api_version": evaluator.api_version,
             "schematic_task_type": schematic_task_type,
+            "evaluation_mode": evaluation_mode,
+            "reference_answer": reference_answer,
         },
         "input_files": input_manifest,
         "result_dir": str(result_root),

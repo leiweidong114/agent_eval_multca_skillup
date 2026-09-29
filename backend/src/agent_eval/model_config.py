@@ -18,7 +18,10 @@ import httpx
 from agent_eval.agent_adapters import AGENT_MODEL_ADAPTERS, model_adapter
 from agent_eval.env_config import effective_environment, load_root_env, update_root_env
 from agent_eval.failure import describe_evaluation_failure
-from agent_eval.schematic_tasks import normalize_schematic_task_profiles
+from agent_eval.schematic_tasks import (
+    normalize_schematic_reference_tasks,
+    normalize_schematic_task_profiles,
+)
 
 
 PROFILE_PROTOCOLS = frozenset(
@@ -173,6 +176,14 @@ def load_runtime_settings(project_root: Path) -> dict[str, Any]:
         legacy_skills=legacy_skills,
         legacy_evaluator=str(environment.get("DEFAULT_SCHEMATIC_EVALUATOR") or "").strip() or None,
     )
+    raw_reference_tasks = str(environment.get("SCHEMATIC_REFERENCE_TASKS_JSON") or "").strip()
+    try:
+        configured_reference_tasks = json.loads(raw_reference_tasks) if raw_reference_tasks else None
+    except ValueError:
+        configured_reference_tasks = None
+    settings["schematic_reference_tasks"] = normalize_schematic_reference_tasks(
+        configured_reference_tasks
+    )
     return settings
 
 
@@ -244,6 +255,12 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
         raise ValueError("Invalid schematic_skills")
     settings["schematic_skills"] = schematic_skills
     settings["schematic_task_profiles"] = profiles
+    reference_tasks = normalize_schematic_reference_tasks(
+        values.get("schematic_reference_tasks")
+    )
+    if not reference_tasks:
+        raise ValueError("schematic_reference_tasks must contain at least one valid task")
+    settings["schematic_reference_tasks"] = reference_tasks
     update_root_env(project_root, {
         "LITELLM_JUDGE_MODEL": settings["judge_model"],
         "LITELLM_JUDGE_MODELS_JSON": json.dumps(judge_models, ensure_ascii=False),
@@ -257,6 +274,9 @@ def save_runtime_settings(project_root: Path, values: Mapping[str, object]) -> d
         "DEFAULT_SCHEMATIC_EVALUATOR": profiles["block_to_schematic"]["evaluator_id"],
         "SCHEMATIC_TASK_PROFILES_JSON": json.dumps(
             profiles, ensure_ascii=False, separators=(",", ":")
+        ),
+        "SCHEMATIC_REFERENCE_TASKS_JSON": json.dumps(
+            reference_tasks, ensure_ascii=False, separators=(",", ":")
         ),
     })
     return settings

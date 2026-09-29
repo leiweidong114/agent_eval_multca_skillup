@@ -113,7 +113,33 @@ CATALOG: dict[str, dict[str, Any]] = {
         "official": False,
         "scorer_version": "pytest-v1",
     },
+    "hardware-schematic-knowledge-zh": {
+        "name": "硬件原理图知识（中文）",
+        "description": "覆盖电源、接口保护、模拟/数字电路连接、器件选型与原理图审查的中文硬件题库。",
+        "source_url": "local://benchmarks/hardware-schematic-knowledge-zh",
+        "license": "Project built-in",
+        "version": "1.0.0",
+        "source_revision": "built-in-v1",
+        "task_type": "hardware_schematic_mcq",
+        "language": "zh-CN",
+        "scorer_version": "choice-v1",
+    },
 }
+
+HARDWARE_SCHEMATIC_ITEMS = [
+    ("power-decoupling", "电源与去耦", "MCU 每个 VDD 引脚附近最常见且合理的去耦连接是哪一种？\nA. 100nF 电容紧靠 VDD 与 GND\nB. 100Ω 电阻串联 VDD\nC. VDD 悬空\nD. 仅在板边放一个电容\n\n只回答选项字母。", "A"),
+    ("ldo-capacitor", "电源与去耦", "使用 LDO 时，输入和输出电容的首要依据是什么？\nA. 外壳颜色\nB. 数据手册规定的容量、ESR 和布局要求\nC. PCB 层数\nD. MCU 主频\n\n只回答选项字母。", "B"),
+    ("led-current-limit", "基础连接", "GPIO 驱动普通 LED 时通常必须串联什么器件？\nA. 晶振\nB. 保险丝\nC. 限流电阻\nD. 共模电感\n\n只回答选项字母。", "C"),
+    ("i2c-pullup", "数字接口", "I²C 的 SDA 和 SCL 线上通常需要什么？\nA. 对电源的上拉电阻\nB. 对地的下拉电阻\nC. 串联电解电容\nD. 终端变压器\n\n只回答选项字母。", "A"),
+    ("usb-differential", "高速接口", "USB D+ 与 D- 在原理图和 PCB 中应作为什么信号处理？\nA. 两路无关 GPIO\nB. 差分对\nC. 模拟电源\nD. 开漏总线\n\n只回答选项字母。", "B"),
+    ("rs485-termination", "通信接口", "长距离 RS-485 总线的终端电阻通常连接在哪里？\nA. A 与 B 之间、总线物理末端\nB. VCC 与 GND 之间\nC. MCU TX 与 RX 之间\nD. 晶振两端\n\n只回答选项字母。", "A"),
+    ("can-protection", "通信接口", "CANH/CANL 接口靠近连接器的位置常放置哪类保护器件？\nA. TVS 二极管\nB. 运算放大器\nC. 线性稳压器\nD. 光敏电阻\n\n只回答选项字母。", "A"),
+    ("crystal-layout", "时钟与复位", "MCU 外部晶振及负载电容在 PCB 上应如何放置？\nA. 尽量远离 MCU\nB. 靠近晶振引脚且回路短\nC. 放在电源入口\nD. 与开关节点并行走线\n\n只回答选项字母。", "B"),
+    ("reset-pull", "时钟与复位", "低有效复位引脚的典型默认连接是？\nA. 上拉到电源，并可由按键拉低\nB. 永久接地\nC. 串联电感后悬空\nD. 接到时钟输出\n\n只回答选项字母。", "A"),
+    ("mosfet-gate", "功率电路", "为避免 MOSFET 栅极在控制器未上电时漂浮，常增加什么？\nA. 栅源下拉或上拉电阻\nB. 栅漏大电容\nC. 漏源短路\nD. 栅极保险丝\n\n只回答选项字母。", "A"),
+    ("flyback-diode", "功率电路", "低边 MOSFET 驱动继电器线圈时，线圈两端通常并联什么？\nA. 反向续流二极管\nB. 正向 LED\nC. 晶振\nD. 采样电阻\n\n只回答选项字母。", "A"),
+    ("erc-unconnected", "原理图审查", "ERC 报告某输入引脚悬空时，最合适的处理是？\nA. 不分析直接忽略全部 ERC\nB. 核对设计意图，连接、上拉/下拉或用明确的 No Connect 标记\nC. 删除该器件\nD. 将所有悬空脚短接\n\n只回答选项字母。", "B"),
+]
 
 
 def seed_catalog(db: Database) -> None:
@@ -189,6 +215,45 @@ def seed_catalog(db: Database) -> None:
                 1,
                 IMPORTER_VERSION,
                 json.dumps({"built_in": True}),
+                utcnow(),
+            ),
+        )
+        hardware_id = "hardware-schematic-knowledge-zh"
+        for item_key, category, item_prompt, expected in HARDWARE_SCHEMATIC_ITEMS:
+            conn.execute(
+                """INSERT INTO benchmark_items
+                (benchmark_id,item_key,category,prompt,expected_json,scorer_type,metadata_json,access_level)
+                VALUES(?,?,?,?,?,'multiple_choice','{}','shared')
+                ON CONFLICT(benchmark_id,item_key) DO UPDATE SET
+                category=excluded.category,prompt=excluded.prompt,
+                expected_json=excluded.expected_json,scorer_type=excluded.scorer_type,
+                metadata_json=excluded.metadata_json,access_level=excluded.access_level""",
+                (hardware_id, item_key, category, item_prompt, json.dumps(expected)),
+            )
+        hardware_snapshot = [
+            {"key": key, "category": category, "prompt": item_prompt, "expected": expected}
+            for key, category, item_prompt, expected in HARDWARE_SCHEMATIC_ITEMS
+        ]
+        hardware_digest = hashlib.sha256(
+            json.dumps(hardware_snapshot, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        conn.execute(
+            """UPDATE benchmarks SET status='installed',item_count=?,content_sha256=?,
+            installed_at=COALESCE(installed_at,?) WHERE id=?""",
+            (len(HARDWARE_SCHEMATIC_ITEMS), hardware_digest, utcnow(), hardware_id),
+        )
+        conn.execute(
+            """INSERT OR IGNORE INTO benchmark_versions(
+            benchmark_id,version,source_revision,content_sha256,item_count,importer_version,
+            metadata_json,installed_at) VALUES(?,?,?,?,?,?,?,?)""",
+            (
+                hardware_id,
+                CATALOG[hardware_id]["version"],
+                CATALOG[hardware_id]["source_revision"],
+                hardware_digest,
+                len(HARDWARE_SCHEMATIC_ITEMS),
+                IMPORTER_VERSION,
+                json.dumps({"built_in": True}, ensure_ascii=False),
                 utcnow(),
             ),
         )
@@ -322,7 +387,9 @@ def _huggingface_rows(
 
 
 def install_benchmark(db: Database, benchmark_id: str, limit: int | None = None) -> int:
-    if benchmark_id not in CATALOG or benchmark_id == "repo-repair":
+    if benchmark_id not in CATALOG or benchmark_id in {
+        "repo-repair", "hardware-schematic-knowledge-zh"
+    }:
         raise ValueError(f"unknown or built-in benchmark: {benchmark_id}")
     if benchmark_id == "gsm8k":
         raw = _download(

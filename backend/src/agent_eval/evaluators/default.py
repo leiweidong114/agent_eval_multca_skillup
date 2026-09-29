@@ -48,6 +48,8 @@ class DefaultEvaluator:
                 "skills": list(context.selected_skills),
                 "evaluation_type": context.evaluation_type,
                 "schematic_task_type": context.schematic_task_type,
+                "evaluation_mode": context.evaluation_mode,
+                "reference_answer": context.reference_answer,
             },
             "deterministic_scores": evidence.deterministic_scores,
             "process_metrics": evidence.process_metrics,

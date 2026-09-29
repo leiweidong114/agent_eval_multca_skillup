@@ -7,12 +7,12 @@
     <el-menu :default-active="activeMenu" router class="navigation">
       <el-menu-item index="/"><el-icon><House /></el-icon><span>首页</span></el-menu-item>
       <el-menu-item index="/evaluations/new"><el-icon><Plus /></el-icon><span>新建评测</span></el-menu-item>
-      <el-menu-item index="/schematic-overview"><el-icon><Connection /></el-icon><span>原理图生成总览</span></el-menu-item>
-      <el-menu-item index="/benchmarks"><el-icon><Collection /></el-icon><span>题库管理</span></el-menu-item>
-      <el-menu-item index="/skills"><el-icon><MagicStick /></el-icon><span>Skill 管理</span></el-menu-item>
       <el-menu-item index="/results"><el-icon><Clock /></el-icon><span>评测结果</span></el-menu-item>
-      <el-menu-item index="/judge-interactions"><el-icon><ChatLineRound /></el-icon><span>Judge 交互记录</span></el-menu-item>
-      <el-menu-item index="/runtimes"><el-icon><Cpu /></el-icon><span>模型与 Agent</span></el-menu-item>
+      <el-menu-item index="/schematic-overview"><el-icon><Connection /></el-icon><span>原理图生成总览</span></el-menu-item>
+      <el-menu-item index="/judge-interactions"><el-icon><ChatLineRound /></el-icon><span>Judge LLM 交互记录</span></el-menu-item>
+      <el-menu-item index="/skills"><el-icon><MagicStick /></el-icon><span>Skill管理</span></el-menu-item>
+      <el-menu-item index="/benchmarks"><el-icon><Collection /></el-icon><span>题库管理</span></el-menu-item>
+      <el-menu-item index="/runtimes"><el-icon><Cpu /></el-icon><span>模型与Agent管理</span></el-menu-item>
       <el-menu-item index="/settings"><el-icon><Setting /></el-icon><span>设置</span></el-menu-item>
     </el-menu>
     <div class="side-foot"><span class="dot ok"></span><div><b>{{ identity.employee_no }}</b><small>已登录 · 声明身份</small></div><el-button link @click="signOut">退出</el-button></div>

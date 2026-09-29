@@ -19,6 +19,8 @@ class EvaluationContext:
     selected_skills: tuple[str, ...]
     skill_md: str
     schematic_task_type: str | None = None
+    evaluation_mode: str = "open"
+    reference_answer: str | None = None
 
 
 @dataclass(frozen=True)

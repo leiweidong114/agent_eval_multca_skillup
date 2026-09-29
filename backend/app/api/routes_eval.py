@@ -148,6 +148,8 @@ class RunRequest(BaseModel):
         description="Fail the evaluation unless PostgreSQL proves the requested model was called",
     )
     llm_judge: bool = Field(default=True)
+    evaluation_mode: str = Field(default="open", pattern=r"^(open|reference)$")
+    reference_answer: str | None = Field(default=None, max_length=100_000)
 
     @model_validator(mode="after")
     def normalize_skills(self) -> "RunRequest":
@@ -156,6 +158,8 @@ class RunRequest(BaseModel):
         self.benchmark = False
         if self.evaluation_type == "schematic":
             self.schematic_task_type = self.schematic_task_type or DEFAULT_SCHEMATIC_TASK_TYPE
+            if self.evaluation_mode == "reference" and not str(self.reference_answer or "").strip():
+                raise ValueError("reference_answer is required for reference schematic evaluation")
         elif self.schematic_task_type is not None:
             raise ValueError("schematic_task_type is only valid for schematic evaluations")
         selected = list(dict.fromkeys(self.skills or ([self.skill] if self.skill else [])))
@@ -263,6 +267,8 @@ def _run(*, request: RunRequest, validate_only: bool) -> dict[str, object]:
         evaluator_id=request.evaluator_id,
         schematic_task_type=request.schematic_task_type,
         justdo_transport=request.justdo_transport,
+        evaluation_mode=request.evaluation_mode,
+        reference_answer=request.reference_answer,
     )
     return result
 

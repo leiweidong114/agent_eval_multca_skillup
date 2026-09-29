@@ -18,7 +18,7 @@ class SchematicDefaultEvaluator:
     """Public default plugin shared by all supported schematic task types."""
 
     id = "schematic-default"
-    version = "3"
+    version = "4"
     api_version = EVALUATOR_API_VERSION
     evaluation_types = ("schematic",)
     schematic_task_types = (
@@ -59,6 +59,8 @@ class SchematicDefaultEvaluator:
                 "skills": list(context.selected_skills),
                 "evaluation_type": context.evaluation_type,
                 "schematic_task_type": context.schematic_task_type,
+                "evaluation_mode": context.evaluation_mode,
+                "reference_answer": context.reference_answer,
             },
             "deterministic_scores": evidence.deterministic_scores,
             "process_metrics": evidence.process_metrics,

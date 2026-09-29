@@ -21,6 +21,7 @@ def test_legacy_schematic_settings_migrate_to_block_to_schematic(tmp_path):
     assert profile["evaluator_id"] == "legacy-evaluator"
     assert "STM32F103C8T6" in profile["preset_prompt"]
     assert set(settings["schematic_task_profiles"]) == set(SCHEMATIC_TASK_TYPES)
+    assert len(settings["schematic_reference_tasks"]) >= 3
 
 
 def test_web_settings_persist_all_three_schematic_task_profiles(tmp_path):
@@ -51,6 +52,26 @@ def test_web_settings_persist_all_three_schematic_task_profiles(tmp_path):
     assert loaded["schematic_task_profiles"] == profiles
     assert loaded["task_timeout_seconds"] == 7_200
     assert loaded["full_schematic_timeout_seconds"] == 72 * 3_600
+
+
+def test_reference_schematic_tasks_round_trip(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    tasks = [{
+        "id": "golden-power",
+        "name": "标准电源任务",
+        "schematic_task_type": "block_to_schematic",
+        "prompt": "生成 12V 转 5V 电源原理图",
+        "reference_answer": "应包含输入保护、稳压、滤波和测试点",
+        "must_contain": ["12V", "5V", "测试点"],
+    }]
+    saved = save_runtime_settings(backend, {
+        "judge_model": "judge",
+        "agent_test_model": "agent",
+        "schematic_reference_tasks": tasks,
+    })
+    assert saved["schematic_reference_tasks"] == tasks
+    assert load_runtime_settings(backend)["schematic_reference_tasks"] == tasks
 
 
 def test_schematic_profile_skill_count_has_no_artificial_upper_limit(tmp_path):

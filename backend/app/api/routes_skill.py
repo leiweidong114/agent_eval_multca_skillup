@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 import httpx
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from agent_eval.database import database_health
 from agent_eval.env_config import effective_environment, load_root_env, update_root_env
@@ -46,7 +46,11 @@ from agent_eval.scoring import load_scoring_config
 from agent_eval.cli_catalog import SCHEMATIC_PIPELINE_SKILLS
 from agent_eval.skill_sources import list_external_skills
 from agent_eval.evaluators import resolve_evaluator
-from agent_eval.schematic_tasks import normalize_schematic_task_profiles
+from agent_eval.schematic_tasks import (
+    SCHEMATIC_TASK_TYPES,
+    normalize_schematic_reference_tasks,
+    normalize_schematic_task_profiles,
+)
 from app.config import BACKEND_ROOT, SKILLS_ROOT
 from app.auth import employee_from_request
 from app.skill_registry import (
@@ -110,6 +114,21 @@ class SchematicTaskProfileRequest(BaseModel):
     preset_prompt: str = Field(default="", max_length=100_000)
 
 
+class SchematicReferenceTaskRequest(BaseModel):
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
+    name: str = Field(min_length=1, max_length=200)
+    schematic_task_type: str
+    prompt: str = Field(min_length=1, max_length=100_000)
+    reference_answer: str = Field(min_length=1, max_length=100_000)
+    must_contain: list[str] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_task_type(self) -> "SchematicReferenceTaskRequest":
+        if self.schematic_task_type not in SCHEMATIC_TASK_TYPES:
+            raise ValueError("Unsupported schematic_task_type")
+        return self
+
+
 class RuntimeSettingsRequest(BaseModel):
     judge_model: str = Field(min_length=1, max_length=300)
     judge_models: list[str] = Field(default_factory=list, max_length=32)
@@ -124,6 +143,7 @@ class RuntimeSettingsRequest(BaseModel):
         min_length=1,
     )
     schematic_task_profiles: dict[str, SchematicTaskProfileRequest] = Field(default_factory=dict)
+    schematic_reference_tasks: list[SchematicReferenceTaskRequest] = Field(default_factory=list)
 
 
 class ModelProfileRequest(BaseModel):
@@ -443,6 +463,7 @@ def get_runtime_settings() -> dict[str, object]:
         "judge_parallelism": configured.get("judge_parallelism") or 2,
         "schematic_skills": configured.get("schematic_skills") or list(SCHEMATIC_PIPELINE_SKILLS),
         "schematic_task_profiles": configured.get("schematic_task_profiles") or {},
+        "schematic_reference_tasks": configured.get("schematic_reference_tasks") or [],
     }
 
 
@@ -494,6 +515,9 @@ def put_runtime_settings(request: RuntimeSettingsRequest) -> dict[str, object]:
                 schematic_task_type=task_type,
             )
         payload["schematic_task_profiles"] = profiles
+        payload["schematic_reference_tasks"] = normalize_schematic_reference_tasks(
+            payload.get("schematic_reference_tasks")
+        )
         return save_runtime_settings(BACKEND_ROOT, payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
