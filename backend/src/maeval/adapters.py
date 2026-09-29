@@ -148,6 +148,7 @@ class DirectHttpAdapter(Adapter):
             data=body,
             method="POST",
             headers={
+                **candidate.request_headers,
                 "Content-Type": "application/json",
                 "X-Api-Key": api_key,
                 "anthropic-version": "2023-06-01",
@@ -291,6 +292,7 @@ class OpenAiHttpAdapter(Adapter):
             data=body,
             method="POST",
             headers={
+                **candidate.request_headers,
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}",
             },

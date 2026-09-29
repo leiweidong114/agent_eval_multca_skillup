@@ -84,6 +84,7 @@ def test_provider_connection(
         timeout_seconds=int(settings.get("timeout_seconds", 60)),
         max_tokens=32,
         switch_model=bool(settings.get("switch_model", False)),
+        request_headers={str(key): str(value) for key, value in (settings.get("request_headers") or {}).items()},
     )
     task = Task(
         id="connection",

@@ -89,6 +89,14 @@ def test_public_benchmark_migration_excludes_platform_data(tmp_path: Path) -> No
 
 def test_unified_ui_can_create_server_managed_litellm_provider(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
+        "maeval.webapp.api.gateway_request_headers",
+        lambda *_args, **_kwargs: {
+            "User-Agent": "agent-eval/test",
+            "x-cookie": "test-cookie",
+            "x-user-account": "tester",
+        },
+    )
+    monkeypatch.setattr(
         "maeval.webapp.api.resolve_model_profile",
         lambda *args, **kwargs: ResolvedModelProfile(
             name="test-profile",
@@ -115,4 +123,22 @@ def test_unified_ui_can_create_server_managed_litellm_provider(tmp_path: Path, m
         assert response.status_code == 200
         assert response.json()["kind"] == "codex_cli_direct"
         assert response.json()["model"] == "gateway/model-a"
+        assert response.json()["settings"]["request_headers"] == {
+            "User-Agent": "agent-eval/test",
+            "x-cookie": "test-cookie",
+            "x-user-account": "tester",
+        }
         assert KIND_TO_ADAPTER[response.json()["kind"]] == "codex_cli_direct"
+
+        reused = client.post(
+            "/api/providers/auto",
+            json={
+                "agent": "codex",
+                "model": "gateway/model-a",
+                "profile": "test-profile",
+                "task_kind": "direct",
+            },
+        )
+        assert reused.status_code == 200
+        assert reused.json()["id"] == response.json()["id"]
+        assert reused.json()["settings"]["request_headers"]["x-user-account"] == "tester"

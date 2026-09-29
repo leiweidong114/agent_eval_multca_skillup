@@ -66,6 +66,14 @@ def test_classification_jobs_use_configured_parallelism_and_round_robin_models(m
         "s1": "judge-a", "s2": "judge-b", "s3": "judge-a", "s4": "judge-b",
     }
     assert len(saved) == 4
+    assert len(manager.list()) == 1
+    assert manager.list()[0]["job_id"] == job["job_id"]
+    assert all(item.get("duration_ms") is not None for item in job["per_session"].values())
+    assert not any(
+        event.get("stage") == "judge_request_progress"
+        for item in saved
+        for event in item["process_trace"]["events"]
+    )
     assert all(item["task_kind"] == "classification" for item in saved)
     assert all(
         any(event["stage"] == "first_prompt_selected" for event in item["process_trace"]["events"])

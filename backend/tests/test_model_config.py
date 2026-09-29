@@ -111,7 +111,7 @@ def test_writes_isolated_zcode_profile_without_persisting_gateway_key(tmp_path):
         environ={"TEST_LITELLM_KEY": "real-run-scoped-secret"},
         agent="zcode",
     )
-    config_path = tmp_path / "zcode-data" / "cli" / "config.json"
+    config_path = tmp_path / "zcode-data" / "provider_config.json"
     plugin_dir = tmp_path / "zcode-plugin"
 
     write_zcode_profile_config(
@@ -122,14 +122,22 @@ def test_writes_isolated_zcode_profile_without_persisting_gateway_key(tmp_path):
     )
 
     saved = json.loads(config_path.read_text(encoding="utf-8"))
-    assert saved["model"]["main"] == "agent-eval-litellm/MiniMax-M3"
-    assert saved["provider"]["agent-eval-litellm"]["kind"] == "openai-compatible"
-    assert saved["provider"]["agent-eval-litellm"]["options"] == {
-        "apiKey": "agent-eval-loopback",
-        "apiKeyRequired": True,
-        "baseURL": "http://127.0.0.1:43123/v1",
+    assert saved["schemaVersion"] == 1
+    config = saved["config"]
+    provider = config["providerConfigRules"]["providerRules"][0]
+    assert provider["providerId"] == "agent-eval-litellm"
+    assert provider["config"]["access"]["apiKey"] == "agent-eval-loopback"
+    assert provider["config"]["api"] == {
+        "type": "openai-chat-completions",
+        "baseUrl": "http://127.0.0.1:43123/v1",
+        "headers": {},
     }
-    assert saved["plugins"]["dirs"] == [str(plugin_dir)]
+    assert provider["config"]["personalModelIds"] == ["MiniMax-M3"]
+    assert config["defaultModelSelection"] == {
+        "providerId": "agent-eval-litellm",
+        "modelId": "MiniMax-M3",
+        "options": {"reasoningLevel": "high"},
+    }
     assert "real-run-scoped-secret" not in config_path.read_text(encoding="utf-8")
 
 

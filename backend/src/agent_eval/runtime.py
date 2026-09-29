@@ -244,11 +244,72 @@ def zcode_agent_command(
                     break
             if desktop:
                 break
+        if desktop is None:
+            try:
+                import winreg
+
+                registry_roots = (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE)
+                uninstall_paths = (
+                    r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
+                    r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+                )
+                for hive in registry_roots:
+                    for uninstall_path in uninstall_paths:
+                        try:
+                            with winreg.OpenKey(hive, uninstall_path) as uninstall_key:
+                                for index in range(winreg.QueryInfoKey(uninstall_key)[0]):
+                                    with winreg.OpenKey(uninstall_key, winreg.EnumKey(uninstall_key, index)) as item:
+                                        try:
+                                            display_name = str(winreg.QueryValueEx(item, "DisplayName")[0])
+                                        except OSError:
+                                            continue
+                                        if display_name.casefold().split()[0] != "zcode":
+                                            continue
+                                        try:
+                                            icon = str(winreg.QueryValueEx(item, "DisplayIcon")[0]).strip('"')
+                                        except OSError:
+                                            icon = ""
+                                        install_root = Path(icon).parent if icon else None
+                                        candidate = install_root / "resources" / "glm" / "zcode.cjs" if install_root else None
+                                        if candidate and candidate.is_file():
+                                            desktop = str(candidate.resolve())
+                                            break
+                        except OSError:
+                            continue
+                        if desktop:
+                            break
+                    if desktop:
+                        break
+            except (ImportError, OSError, IndexError):
+                pass
     if normalized_transport == "app-cli":
         return app_cli or AGENT_COMMANDS["zcode"]
     if normalized_transport == "desktop":
         return desktop or environment.get("ZCODE_DESKTOP_CLI_EXECUTABLE", "zcode")
     return app_cli or desktop or AGENT_COMMANDS["zcode"]
+
+
+def resolve_project_executable(value: str, project_root: Path) -> str:
+    """Resolve a command or repository-relative executable before changing cwd."""
+    command = str(value or "").strip().strip('"') or "node"
+    discovered = shutil.which(command)
+    if discovered:
+        return str(Path(discovered).resolve())
+    path = Path(command).expanduser()
+    candidate = path if path.is_absolute() else project_root / path
+    return str(candidate.resolve()) if candidate.is_file() else command
+
+
+def zcode_builtin_provider_config(executable: str) -> Path | None:
+    """Locate the provider catalog beside a ZCode Desktop bundled runtime."""
+    runtime_path = Path(str(executable or "")).expanduser()
+    if runtime_path.suffix.lower() not in {".js", ".cjs"}:
+        return None
+    candidates = [
+        runtime_path.parent / "provider" / "zcode-builtin.json",
+        runtime_path.parent.parent / "config" / "provider" / "zcode-builtin.json",
+    ]
+    return next((item.resolve() for item in candidates if item.is_file()), None)
 
 
 def default_agent_command(agent: str, project_root: Path | None = None) -> str:

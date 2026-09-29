@@ -130,7 +130,15 @@ class HistoricalAnalysisJobManager:
                         job["per_session"][session_id]["status"] = "failed"
                         job["per_session"][session_id]["error"] = str(exc)
                     self._event(job, session_id, "session_failed", "该会话任务执行失败", outcome="failed", detail=str(exc))
+                finished_at = datetime.now(timezone.utc)
                 with self._lock:
+                    session = job["per_session"][session_id]
+                    session["finished_at"] = finished_at
+                    started_at = session.get("started_at")
+                    session["duration_ms"] = max(
+                        0,
+                        int((finished_at - started_at).total_seconds() * 1000),
+                    ) if isinstance(started_at, datetime) else None
                     job["progress"] = round((job["completed"] + job["failed"]) / max(1, job["total"]) * 100)
         with self._lock:
             job["status"] = "completed" if not job["failed"] else "completed_with_errors"
@@ -166,7 +174,6 @@ class HistoricalAnalysisJobManager:
         )
         if job["task_kind"] == "metrics":
             return self._run_metrics(job, session_id, assigned_model)
-        callback = self._judge_callback(job, session_id)
         if job["task_kind"] == "classification":
             prompt = first_user_prompt(conversation)
             self._event(
@@ -177,9 +184,10 @@ class HistoricalAnalysisJobManager:
             )
             result = classify_session_task(
                 conversation, employee_no=job["user_id"],
-                progress_callback=callback, model_override=assigned_model,
+                progress_callback=None, model_override=assigned_model,
             )
         else:
+            callback = self._judge_callback(job, session_id)
             result = judge_session_metrics(
                 conversation, employee_no=job["user_id"],
                 progress_callback=lambda stage, index, total, message: self._event(
@@ -261,6 +269,15 @@ class HistoricalAnalysisJobManager:
         with self._lock:
             job = self._jobs.get(job_id)
             return self._public(job) if job else None
+
+    def list(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        with self._lock:
+            jobs = sorted(
+                self._jobs.values(),
+                key=lambda item: item.get("created_at") or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True,
+            )
+            return [self._public(job) for job in jobs[: max(1, min(200, limit))]]
 
     @staticmethod
     def _public(job: dict[str, Any]) -> dict[str, Any]:

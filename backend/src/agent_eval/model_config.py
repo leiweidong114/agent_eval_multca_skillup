@@ -1274,38 +1274,70 @@ def write_zcode_profile_config(
     plugin_dir: Path,
     api_base_override: str | None = None,
 ) -> None:
-    """Write a run-isolated ZCode CLI config without persisting the real gateway key."""
+    """Write the current ZCode v2 personal-provider schema for one isolated run."""
     openai_base, _ = _normalized_base_url(api_base_override or profile.api_base)
     gateway_model = profile.gateway_model_for_agent("zcode")
-    model_ref = f"agent-eval-litellm/{gateway_model}"
     config = {
-        "model": {"main": model_ref, "lite": model_ref},
-        "provider": {
-            "agent-eval-litellm": {
-                "kind": "openai-compatible",
-                "name": "Agent Eval LiteLLM",
-                "enabled": True,
-                "source": "custom",
-                "options": {
-                    # The local compatibility proxy owns the run-scoped key and
-                    # required identity headers. Never write the real key here.
-                    "apiKey": "agent-eval-loopback",
-                    "apiKeyRequired": True,
-                    "baseURL": openai_base,
-                },
-                "models": {
-                    gateway_model: {
-                        "name": gateway_model,
-                        "limit": {
-                            "context": profile.context_window,
-                            "output": profile.max_output_tokens,
+        "schemaVersion": 1,
+        "config": {
+            "providerConfigRules": {
+                "providerRules": [{
+                    "providerId": "agent-eval-litellm",
+                    "providerName": "Agent Eval LiteLLM",
+                    "enabled": True,
+                    "config": {
+                        "group": "standard-personal",
+                        # The local compatibility proxy owns the run-scoped key
+                        # and identity headers. Never persist the real key here.
+                        "access": {"type": "api-key", "apiKey": "agent-eval-loopback"},
+                        "api": {
+                            "type": "openai-chat-completions",
+                            "baseUrl": openai_base,
+                            "headers": {},
                         },
-                        "modalities": {"input": ["text"], "output": ["text"]},
-                    }
-                },
-            }
+                        "personalModelIds": [gateway_model],
+                        "modelOrder": [gateway_model],
+                        "visibility": "visible",
+                    },
+                }]
+            },
+            "modelConfigRules": {
+                "providerModelRules": [],
+                "manualProviderModelRules": [{
+                    "providerId": "agent-eval-litellm",
+                    "modelId": gateway_model,
+                    "config": {
+                        "enabled": True,
+                        "properties": {
+                            "contextWindow": max(1024, int(profile.context_window or 131072)),
+                            "inputFormat": {
+                                "supportsImage": False,
+                                "supportsVideo": False,
+                                "supportsPdf": False,
+                            },
+                            "supportsJsonSchemaOutput": False,
+                            "supportsNativeWebSearch": False,
+                            "supportsMidConversationSystem": False,
+                        },
+                        "optionSpecs": {
+                            "maxOutputTokens": {
+                                "max": max(256, int(profile.max_output_tokens or 8192)),
+                            },
+                            "reasoningLevel": {
+                                "values": ["disabled", "low", "medium", "high"],
+                                "map": 'reasoningLevel == "disabled" ? {} : {"reasoning_effort": reasoningLevel}',
+                            },
+                        },
+                    },
+                }],
+            },
+            "providerOrder": ["agent-eval-litellm"],
+            "defaultModelSelection": {
+                "providerId": "agent-eval-litellm",
+                "modelId": gateway_model,
+                "options": {"reasoningLevel": "high"},
+            },
         },
-        "plugins": {"enabled": True, "dirs": [str(plugin_dir)]},
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")

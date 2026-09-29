@@ -20,6 +20,7 @@ from agent_eval.runtime import (
     skill_target,
     validate_evaluation_capabilities,
     zcode_agent_command,
+    zcode_builtin_provider_config,
 )
 
 
@@ -181,6 +182,17 @@ def test_zcode_transport_can_select_app_cli_or_desktop_runtime(tmp_path):
 def test_zcode_transport_rejects_unknown_mode(tmp_path):
     with pytest.raises(ValueError, match="auto, app-cli, or desktop"):
         zcode_agent_command(tmp_path, transport="socket")
+
+
+def test_zcode_desktop_builtin_provider_config_is_discovered(tmp_path):
+    runtime = tmp_path / "resources" / "glm" / "zcode.cjs"
+    catalog = tmp_path / "resources" / "config" / "provider" / "zcode-builtin.json"
+    runtime.parent.mkdir(parents=True)
+    catalog.parent.mkdir(parents=True)
+    runtime.write_text("", encoding="utf-8")
+    catalog.write_text("{}", encoding="utf-8")
+
+    assert zcode_builtin_provider_config(str(runtime)) == catalog.resolve()
 
 
 def test_six_primary_agents_advertise_explicit_subagent_transports():

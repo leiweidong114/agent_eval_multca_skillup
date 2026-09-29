@@ -20,6 +20,7 @@ class Candidate:
     switch_model: bool = False
     extra_args: tuple[str, ...] = ()
     command: tuple[str, ...] = ()
+    request_headers: dict[str, str] = field(default_factory=dict, repr=False, compare=False)
 
 
 @dataclass(frozen=True)

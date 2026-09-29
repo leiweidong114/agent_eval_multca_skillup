@@ -963,9 +963,20 @@ curl.exe "$API/runs/$RUN_ID"
 
 评测系统使用同一个 `zcode` Agent 名称兼容两种安装形态：
 
-- `app-cli`：独立的 `zcode-app-cli`/官方 ZCode CLI 命令。
+- `app-cli`：独立安装的社区版 `zcode-app-cli` 命令（命令名为 `zcode`）。
 - `desktop`：ZCode Desktop 安装目录内随附的 `zcode.cjs` Agent runtime，由 Node.js 启动。
 - `auto`：默认模式，优先独立 CLI，未发现时尝试桌面 runtime。
+
+独立 CLI 安装与确认（需要 Node.js/npm）：
+
+```powershell
+npm install -g zcode-app-cli@latest
+zcode --version
+zcode doctor
+```
+
+`zcode-app-cli` 安装后的命令名是 `zcode`。它与桌面版共用 ZCode Agent runtime，
+但评测时使用运行级隔离 Provider 配置，不会改写用户日常使用的默认模型。
 
 可以在根目录 `.env` 中写入本机路径；路径属于机器配置，不应提交密钥或用户专用路径：
 
@@ -1008,12 +1019,15 @@ agent-eval check-agent `
 执行 Skill 评测时同样可选择调用方式：
 
 ```powershell
-agent-eval run `
+agent-eval pipeline-eval `
   --agent zcode `
   --zcode-transport auto `
   --model glm-4.5-air `
-  --skill schematic-pipeline `
-  --case default
+  --case "backend/skills/schematic-pipeline/evals/cases/smart-street-light-e2e.yaml" `
+  --timeout 1800 `
+  --database-trace `
+  --require-model-verification `
+  --llm-judge
 ```
 
 系统会为每次运行建立隔离的 ZCode 配置和临时插件目录，把选定 Skill 注入插件的

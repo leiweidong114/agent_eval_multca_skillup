@@ -61,6 +61,8 @@ from agent_eval.runtime import (
     find_multica_runtime,
     find_skill_up,
     normalize_agent,
+    resolve_project_executable,
+    zcode_builtin_provider_config,
     skill_target,
     validate_evaluation_capabilities,
 )
@@ -728,17 +730,20 @@ def run_evaluation(
             ),
             encoding="utf-8",
         )
-        zcode_config_paths = [
-            zcode_data / "cli" / "config.json",
-            zcode_data / ".zcode" / "cli" / "config.json",
-        ]
+        zcode_config_paths = [zcode_data / "provider_config.json"]
         for zcode_config in zcode_config_paths:
             write_zcode_profile_config(
                 zcode_config, resolved_profile, plugin_dir=zcode_plugin
             )
         env["ZCODE_DATA_BASE_DIR"] = str(zcode_data)
-        if not str(env.get("ZCODE_NODE") or "").strip():
-            env["ZCODE_NODE"] = str(env.get("NODE_EXECUTABLE") or "node")
+        env["ZCODE_PERSONAL_PROVIDER_CONFIG_FILE"] = str(zcode_config_paths[0])
+        zcode_builtin = zcode_builtin_provider_config(agent_executable)
+        if zcode_builtin is not None:
+            env["ZCODE_BUILTIN_PROVIDER_CONFIG_FILE"] = str(zcode_builtin)
+        env["ZCODE_NODE"] = resolve_project_executable(
+            str(env.get("ZCODE_NODE") or env.get("NODE_EXECUTABLE") or "node"),
+            project_root,
+        )
     if resolved_profile.api_base and agent == "openclaw":
         openclaw_config = result_root / "runtime" / "openclaw.json"
         openclaw_workspace = result_root / "runtime" / "openclaw-workspace"
@@ -949,7 +954,10 @@ def run_evaluation(
             forced_model=gateway_model,
             strip_tools_after_result=False,
             translate_protocols=agent in {"claude", "codex"},
-            upstream_headers=request_headers,
+            upstream_headers={
+                "Authorization": f"Bearer {env.get('LITELLM_API_KEY', '')}",
+                **request_headers,
+            },
             request_metadata={
                 "agent_eval_user_id": user_id,
                 "agent_eval_task_id": canonical_task_id,

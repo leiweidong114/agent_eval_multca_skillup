@@ -109,7 +109,9 @@ func runZCode(
 	} else {
 		// Compatibility with zcode-app-cli releases that expose the older
 		// short prompt/JSON flags while using the same ZCode Agent runtime.
-		args = append(args, "-p", prompt, "--cwd", workspace, "--yolo", "--json")
+		// Permission selection is still the current `--mode yolo` form; the
+		// removed standalone `--yolo` flag makes current app-cli builds exit 1.
+		args = append(args, "-p", prompt, "--cwd", workspace, "--mode", "yolo", "--json")
 	}
 	args = append(args, extraArgs...)
 	cmd := exec.CommandContext(ctx, command, args...)

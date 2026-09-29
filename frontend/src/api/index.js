@@ -78,6 +78,7 @@ export const fetchSchematicInteractionDetail = (requestId) => data(http.get(`/sc
 export const fetchMetricHealth = () => data(http.get('/session-metrics/health'))
 export const fetchMetricSessions = (params = {}) => data(http.get('/session-metrics/sessions', { params }))
 export const createMetricJob = (payload) => data(http.post('/session-metrics/jobs', payload))
+export const fetchMetricJobs = (limit = 50) => data(http.get('/session-metrics/jobs', { params: { limit } }))
 export const fetchMetricJob = (jobId) => data(http.get(`/session-metrics/jobs/${encodeURIComponent(jobId)}`))
 export const fetchMetricDetail = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}`))
 export const fetchMetricProcess = (sessionId, taskKind = 'metrics') => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}/process`, { params: { task_kind: taskKind } }))

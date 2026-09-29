@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -50,6 +51,36 @@ console.log(JSON.stringify({type:"turn.completed", sessionId:"zcode-session", us
 
 func execLookPathForTest(command string) (string, error) {
 	return exec.LookPath(command)
+}
+
+func TestRunZCodeUsesCurrentPermissionFlagForAppCLI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture is exercised on non-Windows release builds")
+	}
+	workspace := t.TempDir()
+	cliPath := filepath.Join(workspace, "zcode")
+	script := `#!/bin/sh
+if [ "$1" = "--help" ]; then
+  echo "--json"
+  exit 0
+fi
+case " $* " in
+  *" --mode yolo "*) ;;
+  *) echo "missing --mode yolo" >&2; exit 2 ;;
+esac
+echo '{"response":"ZCODE_APP_OK","sessionId":"app-session"}'
+`
+	if err := os.WriteFile(cliPath, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result := runZCode(ctx, cliPath, "app-cli", "hi", workspace, "glm-4.5-air", nil)
+
+	if result.ExitCode != 0 || result.FinalMessage != "ZCODE_APP_OK" {
+		t.Fatalf("unexpected app-cli result: %+v", result)
+	}
 }
 
 func TestCaseWorkspaceKeepsControlIsolatedAndDoesNotModifySource(t *testing.T) {

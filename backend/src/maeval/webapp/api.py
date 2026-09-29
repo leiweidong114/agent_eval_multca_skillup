@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from maeval.adapters import _run_process, get_adapter, resolve_executable
 from maeval.models import Candidate, ScorerSpec, Task
-from agent_eval.model_config import resolve_model_profile
+from agent_eval.model_config import gateway_request_headers, resolve_model_profile
 from agent_eval.env_config import apply_root_env
 
 apply_root_env(Path(__file__).resolve().parents[3])
@@ -670,8 +670,22 @@ def create_app(
             AND COALESCE(base_url,'')=? ORDER BY id DESC LIMIT 1""",
             (user["id"], kind, provider_model, openai_base),
         )
+        request_headers = gateway_request_headers(
+            root, resolved, str(user.get("username") or user.get("id") or "local")
+        )
         if existing:
-            return public_provider(existing)
+            existing_settings = json.loads(existing.get("settings_json") or "{}")
+            existing_settings["request_headers"] = request_headers
+            db.execute(
+                "UPDATE providers SET api_key_cipher=?,settings_json=?,updated_at=? WHERE id=?",
+                (
+                    secrets.encrypt(resolved.environment["LITELLM_API_KEY"]),
+                    json.dumps(existing_settings),
+                    utcnow(),
+                    existing["id"],
+                ),
+            )
+            return public_provider(db.row("SELECT * FROM providers WHERE id=?", (existing["id"],)))
         now = utcnow()
         provider_id = db.execute(
             """INSERT INTO providers(
@@ -691,6 +705,7 @@ def create_app(
                         "auto_managed": True,
                         "requested_model": resolved.model,
                         "profile": resolved.name,
+                        "request_headers": request_headers,
                     }
                 ),
                 user["id"],

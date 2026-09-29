@@ -372,6 +372,7 @@ class EvaluationManager:
             switch_model=bool(settings.get("switch_model", False)),
             extra_args=tuple(settings.get("extra_args", [])),
             command=tuple(settings.get("command", [])),
+            request_headers={str(key): str(value) for key, value in (settings.get("request_headers") or {}).items()},
         )
         task_kind = metadata.get("kind", "direct")
         if candidate.adapter.endswith("_agent") != (task_kind == "repo"):
@@ -556,6 +557,7 @@ class EvaluationManager:
             switch_model=bool(settings.get("switch_model", False)),
             extra_args=tuple(settings.get("extra_args", [])),
             command=tuple(settings.get("command", [])),
+            request_headers={str(key): str(value) for key, value in (settings.get("request_headers") or {}).items()},
         )
         task_kind = metadata.get("kind", "direct")
         workdir = None

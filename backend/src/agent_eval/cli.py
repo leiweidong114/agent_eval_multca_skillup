@@ -51,6 +51,8 @@ from agent_eval.runtime import (
     zcode_agent_command,
     find_multica_runtime,
     find_skill_up,
+    resolve_project_executable,
+    zcode_builtin_provider_config,
 )
 from agent_eval.litellm_trace import create_trace_key, delete_trace_key
 from agent_eval.failure import describe_evaluation_failure
@@ -493,17 +495,20 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 ),
                 encoding="utf-8",
             )
-            zcode_config_paths = [
-                zcode_data / "cli" / "config.json",
-                zcode_data / ".zcode" / "cli" / "config.json",
-            ]
+            zcode_config_paths = [zcode_data / "provider_config.json"]
             for zcode_config in zcode_config_paths:
                 write_zcode_profile_config(
                     zcode_config, profile, plugin_dir=zcode_plugin
                 )
             env["ZCODE_DATA_BASE_DIR"] = str(zcode_data)
-            if not str(env.get("ZCODE_NODE") or "").strip():
-                env["ZCODE_NODE"] = str(env.get("NODE_EXECUTABLE") or "node")
+            env["ZCODE_PERSONAL_PROVIDER_CONFIG_FILE"] = str(zcode_config_paths[0])
+            zcode_builtin = zcode_builtin_provider_config(detected)
+            if zcode_builtin is not None:
+                env["ZCODE_BUILTIN_PROVIDER_CONFIG_FILE"] = str(zcode_builtin)
+            env["ZCODE_NODE"] = resolve_project_executable(
+                str(env.get("ZCODE_NODE") or env.get("NODE_EXECUTABLE") or "node"),
+                PROJECT_ROOT,
+            )
             env["AGENT_EVAL_ZCODE_TRANSPORT"] = getattr(
                 args, "zcode_transport", "auto"
             )
@@ -549,7 +554,10 @@ def _check_agent(args: argparse.Namespace) -> dict[str, object]:
                 forced_model=profile.gateway_model_for_agent(runtime_agent),
                 strip_tools_after_result=False,
                 translate_protocols=runtime_agent in {"claude", "codex"},
-                upstream_headers=internal_headers,
+                upstream_headers={
+                    "Authorization": f"Bearer {env.get('LITELLM_API_KEY', '')}",
+                    **internal_headers,
+                },
                 request_metadata={
                     "agent_eval_user_id": user_id,
                     "agent_eval_agent": args.agent,

@@ -194,6 +194,13 @@ def calculate(request: Request, payload: CalculateMetricsRequest) -> dict[str, A
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@router.get("/jobs")
+def jobs(request: Request, limit: int = Query(50, ge=1, le=200)) -> dict[str, Any]:
+    employee_from_request(request)
+    items = historical_analysis_jobs.list(limit=limit)
+    return {"items": items, "total": len(items)}
+
+
 @router.get("/jobs/{job_id}")
 def job(request: Request, job_id: str) -> dict[str, Any]:
     employee_from_request(request)
