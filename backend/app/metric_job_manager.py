@@ -834,6 +834,39 @@ class MetricJobManager:
                     )
                 try:
                     self._raise_if_cancelled(job)
+                    try:
+                        previous_aggregate = store.get_quality_aggregate()
+                    except Exception as previous_exc:
+                        previous_aggregate = {
+                            "status": "unavailable",
+                            "error": str(previous_exc),
+                        }
+                    with self._lock:
+                        self._append_event(
+                            job,
+                            "quality_aggregate_refresh_started",
+                            "正在使用本会话指标刷新全局累计质量指标",
+                            session_id=session_id,
+                            outcome="running",
+                            input={
+                                "session_id": session_id,
+                                "session_contribution": metric_record.get("agentEvalMetrics") or {},
+                                "previous_aggregate": {
+                                    "rates": (previous_aggregate or {}).get("rates"),
+                                    "updated_at": (previous_aggregate or {}).get("updated_at"),
+                                    "source_session_count": (previous_aggregate or {}).get("source_session_count"),
+                                    "quality_session_count": (previous_aggregate or {}).get("quality_session_count"),
+                                    "error": (previous_aggregate or {}).get("error"),
+                                },
+                            },
+                            interface={
+                                "collection": "HDschematicRationalityCollection",
+                                "session_id": "汇总结果",
+                                "operation": "query_all_metrics_delete_old_insert_new_read_back",
+                                "status": "calling",
+                            },
+                        )
+                        self._save(job, store)
                     aggregate = store.refresh_quality_aggregate()
                     with self._lock:
                         self._append_event(job, "quality_aggregate_updated",
@@ -841,10 +874,21 @@ class MetricJobManager:
                                            session_id=session_id, outcome="success",
                                            output={"rates": aggregate.get("rates"),
                                                    "source_session_count": aggregate.get("source_session_count"),
+                                                   "quality_session_count": aggregate.get("quality_session_count"),
+                                                   "metric_session_counts": aggregate.get("metric_session_counts"),
+                                                   "aggregation_methods": aggregate.get("methods"),
+                                                   "aggregation_counts": aggregate.get("counts"),
+                                                   "rate_only_session_counts": aggregate.get("rate_only_session_counts"),
                                                    "updated_at": aggregate.get("updated_at"),
                                                    "mongo_record_id": aggregate.get("mongo_record_id"),
                                                    "aggregate_record_count": aggregate.get("aggregate_record_count"),
-                                                   "java_interface_calls": aggregate.get("write_diagnostics")})
+                                                   "java_interface_calls": aggregate.get("write_diagnostics")},
+                                           interface={
+                                               "collection": "HDschematicRationalityCollection",
+                                               "session_id": "汇总结果",
+                                               "status": "success",
+                                               "calls": aggregate.get("write_diagnostics"),
+                                           })
                         self._save(job, store)
                 except MetricJobCancelled:
                     raise
@@ -852,7 +896,18 @@ class MetricJobManager:
                     with self._lock:
                         self._append_event(job, "quality_aggregate_update_failed",
                                            "单会话指标已保存，但全局累计指标刷新失败",
-                                           session_id=session_id, outcome="warning", detail=str(exc))
+                                           session_id=session_id, outcome="warning", detail=str(exc),
+                                           output={
+                                               "session_contribution": metric_record.get("agentEvalMetrics") or {},
+                                               "error": str(exc),
+                                           },
+                                           interface={
+                                               "collection": "HDschematicRationalityCollection",
+                                               "session_id": "汇总结果",
+                                               "status": "failed",
+                                               "calls": store.write_diagnostics(),
+                                               "error": str(exc),
+                                           })
                         self._save(job, store)
             except MetricJobCancelled:
                 judge_active.clear()
