@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import threading
 from datetime import datetime, timedelta, timezone
 
 from app.historical_analysis_jobs import HistoricalAnalysisJobManager
@@ -90,3 +91,64 @@ def test_classification_jobs_use_configured_parallelism_and_round_robin_models(m
         any(event["stage"] == "first_prompt_selected" for event in item["process_trace"]["events"])
         for item in saved
     )
+
+
+def test_cancel_classification_job_stops_queued_sessions_and_does_not_persist_result(monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+    saved: list[dict] = []
+
+    monkeypatch.setattr(
+        "app.historical_analysis_jobs.load_runtime_settings",
+        lambda _root: {"judge_models": ["judge-a"], "judge_parallelism": 1},
+    )
+    monkeypatch.setattr(
+        "app.historical_analysis_jobs.get_conversation",
+        lambda _root, *, root_session_id, **_kwargs: {
+            "root_session_id": root_session_id,
+            "timeline": [],
+            "interaction_count": 1,
+        },
+    )
+
+    def classify(*_args, **_kwargs):
+        started.set()
+        assert release.wait(2)
+        return {"status": "completed", "task_type": "other"}
+
+    class FakeStore:
+        def save_analysis_result(self, **kwargs):
+            saved.append(kwargs)
+
+    monkeypatch.setattr("app.historical_analysis_jobs.classify_session_task", classify)
+    monkeypatch.setattr("app.historical_analysis_jobs.first_user_prompt", lambda _conversation: "prompt")
+    monkeypatch.setattr("app.historical_analysis_jobs.MetricsStore", FakeStore)
+
+    manager = HistoricalAnalysisJobManager()
+    now = datetime.now(timezone.utc)
+    job = manager.submit(
+        task_kind="classification",
+        session_ids=["s1", "s2"],
+        user_id="tester",
+        start_time=now - timedelta(hours=1),
+        end_time=now,
+        use_llm_judge=True,
+    )
+    assert started.wait(2)
+    cancelling = manager.cancel(job["job_id"])
+    assert cancelling is not None
+    assert cancelling["status"] == "cancelling"
+    release.set()
+
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        job = manager.get(job["job_id"])
+        if job and job["status"] == "cancelled":
+            break
+        time.sleep(0.01)
+
+    assert job is not None
+    assert job["status"] == "cancelled"
+    assert job["cancelled"] == 2
+    assert {item["status"] for item in job["per_session"].values()} == {"cancelled"}
+    assert saved == []

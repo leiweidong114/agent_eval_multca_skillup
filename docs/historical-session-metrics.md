@@ -202,6 +202,11 @@ SESSION_METRICS_AUTO_USER_ID=system
 上次运行窗口、提交结果和错误。也可调用 `POST /api/session-metrics/scheduler/run` 手动处理
 上一个完整小时，用于部署后验证；手动调用不会处理当前尚未结束的小时。
 
+“处理过程”中的排队中、运行中任务支持取消。取消是协作式的：尚未开始的会话立即停止，
+当前数据库或 Judge HTTP 请求完成后在下一检查点停止，已经完成并持久化的会话结果保留。
+接口为 `POST /api/session-metrics/jobs/{job_id}/cancel`，返回 `cancelling` 后可继续轮询任务，
+直到状态变为 `cancelled`。
+
 ## 5. 后端接口
 
 以下示例假设后端为 `http://127.0.0.1:8000`，`cookies.txt` 已保存登录 Cookie。

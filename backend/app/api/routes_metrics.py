@@ -210,6 +210,16 @@ def job(request: Request, job_id: str) -> dict[str, Any]:
     return result
 
 
+@router.post("/jobs/{job_id}/cancel", status_code=202)
+def cancel_job(request: Request, job_id: str) -> dict[str, Any]:
+    """Cooperatively cancel classification, metrics, or conversation-Judge work."""
+    employee_from_request(request)
+    result = historical_analysis_jobs.cancel(job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="历史会话分析任务不存在或后端已重启")
+    return result
+
+
 @router.post("/scheduler/run", status_code=202)
 def run_scheduler_now(request: Request) -> dict[str, Any]:
     """Run the same changed-session discovery used by the hourly scheduler."""

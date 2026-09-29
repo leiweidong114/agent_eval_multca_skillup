@@ -4,7 +4,7 @@ import copy
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -18,7 +18,11 @@ from app.session_task_classifier import classify_session_task, first_user_prompt
 
 
 TASK_KINDS = {"classification", "metrics", "conversation_judge"}
-TERMINAL_STATUSES = {"completed", "completed_with_errors", "failed"}
+TERMINAL_STATUSES = {"completed", "completed_with_errors", "failed", "cancelled"}
+
+
+class HistoricalAnalysisCancelled(RuntimeError):
+    """Raised at cooperative cancellation checkpoints."""
 
 
 class HistoricalAnalysisJobManager:
@@ -27,6 +31,7 @@ class HistoricalAnalysisJobManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
+        self._cancel: dict[str, threading.Event] = {}
         self._dispatcher = ThreadPoolExecutor(max_workers=8, thread_name_prefix="historical-analysis")
 
     def submit(
@@ -57,6 +62,7 @@ class HistoricalAnalysisJobManager:
             "total": len(session_ids),
             "completed": 0,
             "failed": 0,
+            "cancelled": 0,
             "progress": 0,
             "session_ids": list(session_ids),
             "user_id": user_id,
@@ -83,8 +89,29 @@ class HistoricalAnalysisJobManager:
         }
         with self._lock:
             self._jobs[job["job_id"]] = job
+            self._cancel[job["job_id"]] = threading.Event()
         self._dispatcher.submit(self._run, job["job_id"])
         return self._public(job)
+
+    def cancel(self, job_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            if job.get("status") in TERMINAL_STATUSES:
+                return self._public(job)
+            self._cancel[job_id].set()
+            job["status"] = "cancelling"
+            job["phase"] = "cancelling"
+            for session in job["per_session"].values():
+                if session.get("status") == "queued":
+                    session["status"] = "cancelling"
+            self._event(job, None, "job_cancelling", "已请求取消任务；正在结束当前请求", outcome="running")
+            return self._public(job)
+
+    def _raise_if_cancelled(self, job: dict[str, Any]) -> None:
+        if self._cancel[job["job_id"]].is_set():
+            raise HistoricalAnalysisCancelled("任务已取消")
 
     def _event(self, job: dict[str, Any], session_id: str | None, stage: str, message: str, **details: Any) -> None:
         with self._lock:
@@ -107,6 +134,16 @@ class HistoricalAnalysisJobManager:
     def _run(self, job_id: str) -> None:
         with self._lock:
             job = self._jobs[job_id]
+            if self._cancel[job_id].is_set():
+                job["status"] = "cancelled"
+                job["phase"] = "cancelled"
+                job["cancelled"] = job["total"]
+                job["progress"] = 100
+                for session in job["per_session"].values():
+                    session["status"] = "cancelled"
+                job["finished_at"] = datetime.now(timezone.utc)
+                self._event(job, None, "job_cancelled", "历史会话任务已取消", outcome="cancelled")
+                return
             job["status"] = "running"
             job["phase"] = "parallel_processing"
         self._event(job, None, "job_started", "历史会话任务已开始并行执行", outcome="running")
@@ -123,6 +160,11 @@ class HistoricalAnalysisJobManager:
                         job["completed"] += 1
                         job["results"][session_id] = result
                         job["per_session"][session_id]["status"] = "completed"
+                except (HistoricalAnalysisCancelled, CancelledError):
+                    with self._lock:
+                        job["cancelled"] += 1
+                        job["per_session"][session_id]["status"] = "cancelled"
+                    self._event(job, session_id, "session_cancelled", "该会话任务已取消", outcome="cancelled")
                 except Exception as exc:
                     with self._lock:
                         job["failed"] += 1
@@ -139,15 +181,25 @@ class HistoricalAnalysisJobManager:
                         0,
                         int((finished_at - started_at).total_seconds() * 1000),
                     ) if isinstance(started_at, datetime) else None
-                    job["progress"] = round((job["completed"] + job["failed"]) / max(1, job["total"]) * 100)
+                    job["progress"] = round((job["completed"] + job["failed"] + job["cancelled"]) / max(1, job["total"]) * 100)
+                if self._cancel[job_id].is_set():
+                    for pending in futures:
+                        pending.cancel()
         with self._lock:
-            job["status"] = "completed" if not job["failed"] else "completed_with_errors"
-            job["phase"] = "completed"
+            cancelled = self._cancel[job_id].is_set()
+            job["status"] = "cancelled" if cancelled else ("completed" if not job["failed"] else "completed_with_errors")
+            job["phase"] = "cancelled" if cancelled else "completed"
             job["progress"] = 100
             job["finished_at"] = datetime.now(timezone.utc)
-        self._event(job, None, "job_completed", "历史会话任务执行结束", outcome=job["status"])
+        self._event(
+            job, None,
+            "job_cancelled" if cancelled else "job_completed",
+            "历史会话任务已取消" if cancelled else "历史会话任务执行结束",
+            outcome=job["status"],
+        )
 
     def _run_session(self, job: dict[str, Any], session_id: str) -> dict[str, Any]:
+        self._raise_if_cancelled(job)
         assigned_model = job["per_session"][session_id].get("assigned_model")
         with self._lock:
             job["per_session"][session_id]["status"] = "running"
@@ -163,6 +215,7 @@ class HistoricalAnalysisJobManager:
         )
         if conversation is None:
             raise ValueError("会话不存在于所选时间范围")
+        self._raise_if_cancelled(job)
         self._event(
             job, session_id, "session_loaded", "会话读取成功", outcome="success",
             output={
@@ -198,6 +251,7 @@ class HistoricalAnalysisJobManager:
                 request_progress_callback=callback,
                 model_override=assigned_model,
             )
+        self._raise_if_cancelled(job)
         succeeded = result.get("status") in {"completed", "not_applicable"}
         self._event(
             job, session_id,
@@ -228,6 +282,7 @@ class HistoricalAnalysisJobManager:
         return result
 
     def _run_metrics(self, job: dict[str, Any], session_id: str, assigned_model: str | None) -> dict[str, Any]:
+        self._raise_if_cancelled(job)
         self._event(job, session_id, "metrics_started", "规则指标与质量指标计算已启动", outcome="running", model=assigned_model)
         child = metric_job_manager.submit(
             session_ids=[session_id], user_id=job["user_id"],
@@ -236,8 +291,13 @@ class HistoricalAnalysisJobManager:
             externally_limited=True,
         )
         child_job_id = child["job_id"]
+        with self._lock:
+            job["per_session"][session_id]["child_job_id"] = child_job_id
         seen = 0
         while True:
+            if self._cancel[job["job_id"]].is_set():
+                metric_job_manager.cancel(child_job_id)
+                raise HistoricalAnalysisCancelled("任务已取消")
             current = metric_job_manager.get(child_job_id)
             if current is None:
                 raise RuntimeError("内部指标任务丢失")

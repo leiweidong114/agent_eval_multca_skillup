@@ -80,10 +80,15 @@ def _metric_record_for_audit(record: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
+class MetricJobCancelled(RuntimeError):
+    """Raised at cooperative cancellation checkpoints."""
+
+
 class MetricJobManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
+        self._cancel: dict[str, threading.Event] = {}
         self._executor = ThreadPoolExecutor(max_workers=32, thread_name_prefix="session-metrics")
         # One background session Judge per manager, with at most two concurrent
         # outbound Judge calls including classification/rationality.
@@ -143,9 +148,31 @@ class MetricJobManager:
         }
         with self._lock:
             self._jobs[job["job_id"]] = job
+            self._cancel[job["job_id"]] = threading.Event()
         store.save_job(job)
         self._executor.submit(self._run, job["job_id"], store)
         return self._public(job)
+
+    def cancel(self, job_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            if job.get("status") in {"completed", "completed_with_errors", "failed", "cancelled"}:
+                return self._public(job)
+            self._cancel[job_id].set()
+            job["status"] = "cancelling"
+            job["phase"] = "cancelling"
+            self._append_event(job, "job_cancelling", "已请求取消指标任务；正在结束当前请求", outcome="running")
+            try:
+                self._save(job, MetricsStore())
+            except Exception:
+                job["updated_at"] = datetime.now(timezone.utc)
+            return self._public(job)
+
+    def _raise_if_cancelled(self, job: dict[str, Any]) -> None:
+        if self._cancel.setdefault(job["job_id"], threading.Event()).is_set():
+            raise MetricJobCancelled("指标任务已取消")
 
     @staticmethod
     def _append_event(job: dict[str, Any], stage: str, message: str, **details: Any) -> None:
@@ -168,11 +195,22 @@ class MetricJobManager:
     def _run(self, job_id: str, store: MetricsStore) -> None:
         with self._lock:
             job = self._jobs[job_id]
+            cancel_event = self._cancel.setdefault(job_id, threading.Event())
+            if cancel_event.is_set():
+                job["status"] = "cancelled"
+                job["phase"] = "cancelled"
+                job["progress"] = 100
+                job["finished_at"] = datetime.now(timezone.utc)
+                self._append_event(job, "job_cancelled", "指标计算任务已取消", outcome="cancelled")
+                self._save(job, store)
+                return
             job["status"] = "running"
             job["phase"] = "loading_session"
             self._append_event(job, "job_started", "指标计算 Worker 已启动")
             self._save(job, store)
         for session_index, session_id in enumerate(list(job["session_ids"]), start=1):
+            if cancel_event.is_set():
+                break
             judge_future = None
             judge_active = threading.Event()
             judge_active.set()
@@ -207,6 +245,7 @@ class MetricJobManager:
                 )
                 if conversation is None:
                     raise ValueError("会话不存在于所选时间范围")
+                self._raise_if_cancelled(job)
                 with self._lock:
                     job["phase"] = "rule_metrics"
                     self._append_event(
@@ -230,6 +269,7 @@ class MetricJobManager:
                     )
                     self._save(job, store)
                 result = calculate_rule_metrics(conversation)
+                self._raise_if_cancelled(job)
                 rule_category, rule_subtype = task_hierarchy(str(result.get("task_type") or "other"))
                 result["task_category"] = rule_category
                 result["task_subtype"] = rule_subtype
@@ -301,6 +341,7 @@ class MetricJobManager:
                             employee_no=str(job.get("user_id") or "") or None,
                             model_override=job.get("judge_model"),
                         )
+                    self._raise_if_cancelled(job)
                     classification = result["task_classification"]
                     with self._lock:
                         classification_status = str(classification.get("status") or "unknown")
@@ -361,6 +402,7 @@ class MetricJobManager:
                         session_id,
                         correlation_ids=conversation.get("evaluation_run_ids") or [],
                     )
+                    self._raise_if_cancelled(job)
                     rationality_query_diagnostic = store.latest_rationality_diagnostic()
                     with self._lock:
                         self._append_event(
@@ -388,6 +430,8 @@ class MetricJobManager:
                             },
                         )
                         self._save(job, store)
+                except MetricJobCancelled:
+                    raise
                 except Exception as exc:
                     rationality_query_error = exc
                     rationality_record = None
@@ -487,6 +531,8 @@ class MetricJobManager:
                                 outcome="success",
                                 output=_rationality_analysis_summary(result["schematic_rationality"]),
                             )
+                    except MetricJobCancelled:
+                        raise
                     except Exception as exc:
                         extracted = extract_rationality_metrics(rationality_record)
                         result["schematic_rationality"] = {
@@ -550,6 +596,7 @@ class MetricJobManager:
                     quality_records = store.quality_records(session_id)
                     result["quality_summary"] = summarize_quality_records(session_id, quality_records)
                     if job["use_llm_judge"] and quality_records:
+                        self._raise_if_cancelled(job)
                         with self._lock:
                             self._append_event(job, "schematic_rationality_judge",
                                                "Judge LLM 正在校验四类质量指标",
@@ -563,6 +610,7 @@ class MetricJobManager:
                                     quality_records, result["quality_summary"],
                                     employee_no=str(job.get("user_id") or "") or None,
                                     model_override=job.get("judge_model"))
+                            self._raise_if_cancelled(job)
                             if result.get("schematic_rationality", {}).get("judge_status") == "pending_quality_audit":
                                 result["schematic_rationality"]["judge_status"] = result["quality_summary"]["judge"]["status"]
                             with self._lock:
@@ -572,6 +620,8 @@ class MetricJobManager:
                                                    outcome=result["quality_summary"]["judge"]["status"],
                                                    output=result["quality_summary"]["judge"])
                                 self._save(job, store)
+                        except MetricJobCancelled:
+                            raise
                         except Exception as exc:
                             result["quality_summary"]["judge"] = {"status": "unavailable", "error": str(exc)}
                             if result.get("schematic_rationality", {}).get("judge_status") == "pending_quality_audit":
@@ -590,6 +640,8 @@ class MetricJobManager:
                             ], "quality_summary": result["quality_summary"]},
                         )
                         self._save(job, store)
+                except MetricJobCancelled:
+                    raise
                 except Exception as exc:
                     result["quality_summary"] = {"session_id": session_id, "status": "source_unavailable",
                                                  "error": str(exc), "by_check_type": {}, "rates": {}}
@@ -614,6 +666,7 @@ class MetricJobManager:
                         job["phase"] = "llm_judge"
                         self._save(job, store)
                     result["judge"] = judge_future.result()
+                    self._raise_if_cancelled(job)
                     with self._lock:
                         judge_status = str(result["judge"].get("status") or "unknown")
                         self._append_event(
@@ -695,6 +748,7 @@ class MetricJobManager:
                     self._save(job, store)
                 read_back_verification: dict[str, Any] | None = None
                 try:
+                    self._raise_if_cancelled(job)
                     insert_response = store.upsert_metrics(result, record=metric_record)
                     read_back_verification = store.verify_metric_persisted(
                         session_id,
@@ -704,6 +758,8 @@ class MetricJobManager:
                         raise RuntimeError(
                             str(read_back_verification.get("reason") or "MongoDB 写后回读验证失败")
                         )
+                except MetricJobCancelled:
+                    raise
                 except Exception as exc:
                     with self._lock:
                         self._append_event(
@@ -777,6 +833,7 @@ class MetricJobManager:
                         },
                     )
                 try:
+                    self._raise_if_cancelled(job)
                     aggregate = store.refresh_quality_aggregate()
                     with self._lock:
                         self._append_event(job, "quality_aggregate_updated",
@@ -789,12 +846,23 @@ class MetricJobManager:
                                                    "aggregate_record_count": aggregate.get("aggregate_record_count"),
                                                    "java_interface_calls": aggregate.get("write_diagnostics")})
                         self._save(job, store)
+                except MetricJobCancelled:
+                    raise
                 except Exception as exc:
                     with self._lock:
                         self._append_event(job, "quality_aggregate_update_failed",
                                            "单会话指标已保存，但全局累计指标刷新失败",
                                            session_id=session_id, outcome="warning", detail=str(exc))
                         self._save(job, store)
+            except MetricJobCancelled:
+                judge_active.clear()
+                if judge_future is not None:
+                    judge_future.cancel()
+                with self._lock:
+                    self._append_event(
+                        job, "session_cancelled", "会话指标计算已取消",
+                        session_id=session_id, outcome="cancelled",
+                    )
             except Exception as exc:
                 judge_active.clear()
                 if judge_future is not None:
@@ -826,15 +894,22 @@ class MetricJobManager:
             with self._lock:
                 self._save(job, store)
         with self._lock:
-            job["status"] = (
+            cancelled = cancel_event.is_set()
+            job["status"] = "cancelled" if cancelled else (
                 "completed" if not job["failed"] and not job["process_trace_failures"]
                 else "completed_with_errors"
             )
-            job["phase"] = "completed"
+            job["phase"] = "cancelled" if cancelled else "completed"
             job["progress"] = 100
             job["current_session_id"] = None
             job["finished_at"] = datetime.now(timezone.utc)
-            self._append_event(job, "job_completed", "指标计算任务已结束", completed=job["completed"], failed=job["failed"])
+            self._append_event(
+                job,
+                "job_cancelled" if cancelled else "job_completed",
+                "指标计算任务已取消" if cancelled else "指标计算任务已结束",
+                completed=job["completed"], failed=job["failed"],
+                outcome="cancelled" if cancelled else "completed",
+            )
             self._save(job, store)
 
     def get(self, job_id: str) -> dict[str, Any] | None:

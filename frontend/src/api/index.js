@@ -80,6 +80,7 @@ export const fetchMetricSessions = (params = {}) => data(http.get('/session-metr
 export const createMetricJob = (payload) => data(http.post('/session-metrics/jobs', payload))
 export const fetchMetricJobs = (limit = 50) => data(http.get('/session-metrics/jobs', { params: { limit } }))
 export const fetchMetricJob = (jobId) => data(http.get(`/session-metrics/jobs/${encodeURIComponent(jobId)}`))
+export const cancelMetricJob = (jobId) => data(http.post(`/session-metrics/jobs/${encodeURIComponent(jobId)}/cancel`))
 export const fetchMetricDetail = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}`))
 export const fetchMetricProcess = (sessionId, taskKind = 'metrics') => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}/process`, { params: { task_kind: taskKind } }))
 export const fetchMetricQualityRecords = (sessionId) => data(http.get(`/session-metrics/${encodeURIComponent(sessionId)}/quality-records`))
