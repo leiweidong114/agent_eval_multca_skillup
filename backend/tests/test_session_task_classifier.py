@@ -41,9 +41,11 @@ def test_first_user_prompt_reads_earliest_request() -> None:
 
 
 def test_classifier_normalizes_generation_hierarchy(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "app.session_task_classifier.run_json_judge",
-        lambda **kwargs: {
+    calls: list[dict] = []
+
+    def fake_judge(**kwargs):
+        calls.append(kwargs)
+        return {
             "model": "judge-model",
             "usage": {"total_tokens": 12},
             "result": {
@@ -51,13 +53,18 @@ def test_classifier_normalizes_generation_hierarchy(monkeypatch) -> None:
                 "confidence": 0.94,
                 "reason": "用户提供信号接口列表并要求生成原理图",
             },
-        },
+        }
+
+    monkeypatch.setattr(
+        "app.session_task_classifier.run_json_judge",
+        fake_judge,
     )
     result = classify_session_task(_conversation(), employee_no="100001")
     assert result["status"] == "completed"
     assert result["task_category"] == "schematic_generation"
     assert result["task_subtype"] == "signal_list_to_schematic"
     assert result["confidence"] == 0.94
+    assert calls[0]["max_output_tokens"] == 512
 
 
 def test_classifier_rejects_unknown_type(monkeypatch) -> None:

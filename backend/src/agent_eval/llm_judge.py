@@ -265,6 +265,7 @@ def run_json_judge(
     context_id: str | None = None,
     purpose: str = "session_metric_judge",
     progress_callback: Callable[[str, dict[str, Any]], None] | None = None,
+    max_output_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Call the configured LiteLLM judge and require one JSON object.
 
@@ -310,6 +311,8 @@ def run_json_judge(
             {"role": "user", "content": user_prompt},
         ],
     }
+    if max_output_tokens is not None:
+        body["max_tokens"] = max(64, min(int(max_output_tokens), 32_000))
     headers = {
         "Authorization": f"Bearer {profile.environment['LITELLM_API_KEY']}",
         **gateway_request_headers(project_root, profile, employee_no),

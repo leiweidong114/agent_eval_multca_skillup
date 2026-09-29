@@ -132,6 +132,7 @@ def classify_session_task(
             context_id=str(conversation.get("root_session_id") or "") or None,
             purpose="session_task_classification",
             model_override=model_override,
+            max_output_tokens=512,
             **judge_kwargs,
         )
         result = response.get("result")

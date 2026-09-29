@@ -120,6 +120,8 @@ def test_judge_audits_all_four_types_without_overwriting_rule_rates(monkeypatch)
     assert audited["disagreements"]["信号接口列表检查通过率"] == {"rule": "0.00%", "judge": "100.00%"}
     assert summary["rates"]["信号接口列表检查通过率"] == "0.00%"
     assert all(check_type in calls[0]["user_prompt"] for check_type in quality_summary.QUALITY_TYPES)
+    assert calls[0]["max_output_tokens"] == 2048
+    assert "evidence" not in calls[0]["user_prompt"].split("。", 1)[0]
 
 
 def test_judge_accepts_source_display_rounding(monkeypatch):
